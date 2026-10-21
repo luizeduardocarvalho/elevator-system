@@ -6,7 +6,10 @@ namespace Elevator.Domain.Control;
 /// <param name="SnapshotDelayMs">Delay before a published snapshot reaches the dispatcher (models a stale view).</param>
 /// <param name="StalenessToleranceMs">Reject as stale if our ETA is this much worse than the dispatcher's estimate.</param>
 /// <param name="AgingMs">Requests waiting at least this long since t_call can no longer be rejected as stale.</param>
-public sealed record ElevatorHandlerOptions(long SnapshotDelayMs = 0, long StalenessToleranceMs = 10_000, long AgingMs = 60_000)
+/// <param name="ReportProgress">Tell the dispatcher about every floor reached (<see cref="ProgressReported"/>), for its
+/// watchdog (ADR-013).</param>
+public sealed record ElevatorHandlerOptions(long SnapshotDelayMs = 0, long StalenessToleranceMs = 10_000, long AgingMs = 60_000,
+    bool ReportProgress = false)
 {
     public static ElevatorHandlerOptions Default { get; } = new();
 }
@@ -53,6 +56,11 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
         {
             case ApplyFault fault:
                 ApplyCommand(fault.Command, now, outbox);
+                break;
+            case FaultDeclared declared:
+                Elevator.DeclareFault(declared.SilentForMs);
+                Publish(outbox); // Fault mode visible before the released pickups reach the dispatcher
+                Flush(outbox);
                 break;
             case Assign assign:
                 OnAssign(assign, now, outbox);
@@ -172,6 +180,9 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
             {
                 case DoorsOpened or HallCallAnswered:
                     outbox.Send(Address.Passengers, new ElevatorNotice(e));
+                    break;
+                case FloorReached reached when _options.ReportProgress:
+                    outbox.Send(Address.Dispatcher, new ProgressReported(Elevator.Id, reached.Floor, reached.At), _options.SnapshotDelayMs);
                     break;
                 case AssignmentReleased released: // full-load bypass, raised by the elevator itself
                     outbox.Send(Address.Dispatcher, new AssignmentReleasedMsg(released.RequestId, Elevator.Id, released.Reason));

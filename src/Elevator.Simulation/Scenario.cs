@@ -39,6 +39,12 @@ public sealed record Scenario(
 
     /// <summary>Floor restrictions and VIP service (ADR-012). Default: none.</summary>
     public AccessConfig Access { get; init; } = AccessConfig.None;
+
+    /// <summary>Default watchdog timeout T (ADR-013): 30 s of sim time without progress while having work.</summary>
+    public const long DefaultWatchdogTimeoutMs = 30_000;
+
+    /// <summary>Watchdog timeout in sim ms (YAML <c>watchdog.timeoutS</c>); null = no watchdog.</summary>
+    public long? WatchdogTimeoutMs { get; init; } = DefaultWatchdogTimeoutMs;
 }
 
 /// <summary>Access configuration of a building (ADR-012); YAML <c>access:</c>.</summary>

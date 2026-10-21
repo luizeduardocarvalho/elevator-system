@@ -85,6 +85,12 @@ public static class ScenarioLoader
         var fleet = LoadFleet(dto.Building, floors, timing, capacity, errors);
 
         var access = LoadAccess(dto.Access, floors, elevators, errors);
+        var watchdogMs = Scenario.DefaultWatchdogTimeoutMs;
+        if (dto.Watchdog?.TimeoutS is { } timeoutS)
+        {
+            if (timeoutS <= 0) errors.Add($"watchdog.timeoutS must be > 0 (got {timeoutS})");
+            else watchdogMs = SimTime.FromSeconds(timeoutS).Ms;
+        }
 
         var passengers = new List<PassengerSpec>();
         foreach (var (p, i) in (dto.Passengers ?? []).Select((p, i) => (p, i)))
@@ -168,7 +174,7 @@ public static class ScenarioLoader
             profile,
             latency,
             capacityMode,
-            faults.OrderBy(f => f.At).ToList()) { Fleet = fleet, Access = access }, []);
+            faults.OrderBy(f => f.At).ToList()) { Fleet = fleet, Access = access, WatchdogTimeoutMs = watchdogMs }, []);
     }
 
     /// <summary><c>access:</c> floor restrictions and VIP service (ADR-012).</summary>
@@ -244,6 +250,12 @@ public static class ScenarioLoader
         public TrafficDto? Traffic { get; set; }
         public List<FaultDto>? Faults { get; set; }
         public AccessDto? Access { get; set; }
+        public WatchdogDto? Watchdog { get; set; }
+    }
+
+    private sealed class WatchdogDto
+    {
+        public double? TimeoutS { get; set; }
     }
 
     private sealed class AccessDto
