@@ -30,10 +30,14 @@ public sealed record RuntimeOptions(
     public IReadOnlyList<ElevatorType> EffectiveFleet =>
         Fleet ?? [.. Enumerable.Repeat(ElevatorType.Standard(EffectiveTiming, Capacity), Elevators)];
 
+    /// <summary>Floor restrictions and VIP service (ADR-012).</summary>
+    public AccessConfig Access { get; init; } = AccessConfig.None;
+
     public static RuntimeOptions From(Scenario s, double speed) =>
         new(s.Floors, s.Elevators, s.Capacity, s.BypassThreshold, s.Scheduling, s.Dispatch, Speed: speed, Timing: s.Timing, Latency: s.Latency,
             CapacityMode: s.CapacityMode)
         {
             Fleet = s.Fleet,
+            Access = s.Access,
         };
 }

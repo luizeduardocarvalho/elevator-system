@@ -36,6 +36,18 @@ public sealed record Scenario(
 
     public IReadOnlyList<ElevatorType> EffectiveFleet =>
         Fleet ?? [.. Enumerable.Repeat(ElevatorType.Standard(Timing, Capacity), Elevators)];
+
+    /// <summary>Floor restrictions and VIP service (ADR-012). Default: none.</summary>
+    public AccessConfig Access { get; init; } = AccessConfig.None;
+}
+
+/// <summary>Access configuration of a building (ADR-012); YAML <c>access:</c>.</summary>
+/// <param name="RestrictedFloors">Floor → minimum access level to be picked up there or taken there.</param>
+/// <param name="VipElevators">Elevators dedicated to VIPs (everyone else is denied on them).</param>
+/// <param name="VipPriority">VIP requests are dispatched first among pending requests.</param>
+public sealed record AccessConfig(IReadOnlyDictionary<int, int> RestrictedFloors, IReadOnlyList<int> VipElevators, bool VipPriority)
+{
+    public static AccessConfig None { get; } = new(new Dictionary<int, int>(), [], false);
 }
 
 /// <summary>An explicitly scripted passenger: arrives at <paramref name="At"/> on <paramref name="From"/>, wants <paramref name="To"/>.</summary>

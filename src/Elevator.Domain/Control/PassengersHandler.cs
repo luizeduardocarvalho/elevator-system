@@ -47,6 +47,9 @@ public sealed class PassengersHandler : IHandler
 
     public int Delivered { get; private set; }
 
+    /// <summary>Passengers whose request every elevator's access policies refused (ADR-012); they left.</summary>
+    public int Refused { get; private set; }
+
     public bool Empty => _byId.Count == 0;
 
     public void Handle(Message message, SimTime now, Outbox outbox)
@@ -66,6 +69,11 @@ public sealed class PassengersHandler : IHandler
             case AssignmentReleasedMsg released when _byId.GetValueOrDefault(released.RequestId) is { } waiting
                                                      && waiting.AssignedTo == released.ElevatorId:
                 waiting.AssignedTo = null;
+                break;
+            case RequestRefused refused when _byId.GetValueOrDefault(refused.RequestId) is { RidingOn: null } waiting:
+                _waiting[(waiting.Request.PickupFloor, waiting.Request.Direction)].Remove(waiting);
+                _byId.Remove(refused.RequestId);
+                Refused++;
                 break;
             case ElevatorNotice { Event: DoorsOpened opened }:
                 GetOff(opened, now, outbox);

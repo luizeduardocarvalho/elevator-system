@@ -83,7 +83,7 @@ public sealed class SimEngine
         var rebalance = strategy.Rebalance ? new HysteresisRebalance(scheduling, scenario.Timing) : null;
         Register(new DispatcherHandler(dispatch, scenario.Elevators, scenario.Timing,
             new DispatcherOptions(latency.DispatchMs, RebalanceIntervalMs: rebalance is null ? null : 5_000, OverloadThreshold: OverloadThreshold,
-                EmitDispatchEvaluations: options.EmitDispatchEvaluations),
+                EmitDispatchEvaluations: options.EmitDispatchEvaluations) { Access = Building.CreateAccess(scenario.Access) },
             rebalance, new NearestDispatch()));
         _passengers = new PassengersHandler([.. fleet.Select(t => t.Capacity)]);
         Register(_passengers);
@@ -182,7 +182,7 @@ public sealed class SimEngine
     }
 
     private bool AllDone =>
-        _passengers.Arrived == _expectedPassengers && _passengers.Delivered == _expectedPassengers
+        _passengers.Arrived == _expectedPassengers && _passengers.Delivered + _passengers.Refused == _expectedPassengers
         && _elevators.All(e => e.Elevator.State == ElevatorState.Idle && e.Elevator.NextDeadline is null);
 
     /// <summary>Delivers every message due at or before <paramref name="target"/>; returns the finish time if the run completed.</summary>

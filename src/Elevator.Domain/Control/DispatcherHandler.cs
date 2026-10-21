@@ -12,6 +12,9 @@ public sealed record DispatcherOptions(long DispatchDelayMs = 0, long? Rebalance
     bool EmitDispatchEvaluations = false)
 {
     public static DispatcherOptions Default { get; } = new();
+
+    /// <summary>Access policies applied before the dispatch policy (ADR-012). Default: allow everything.</summary>
+    public AccessPipeline Access { get; init; } = AccessPipeline.AllowAll;
 }
 
 /// <summary>Decides, for an assigned request, whether moving it elsewhere is worth it (optional, ADR-006).</summary>
@@ -31,7 +34,12 @@ public interface IRebalancePolicy
 /// re-dispatched. If every eligible elevator rejected it as stale, the next proposal is forced.</item>
 /// <item>A release (full-load bypass, rebalance) or a re-registration (left behind) puts it back to Pending,
 /// keeping its id and t_call.</item>
-/// <item>Pending requests are retried oldest-first whenever an elevator publishes a new snapshot (aging order).</item>
+/// <item>Pending requests are retried oldest-first whenever an elevator publishes a new snapshot (aging order); with
+/// VIP priority, VIP requests first (ADR-012).</item>
+/// <item>Eligibility comes before cost (ADR-012): the access pipeline is evaluated once per request (its answer depends
+/// only on the elevators' configuration); a denied elevator is never a candidate, and if every elevator is denied the
+/// request is refused (AccessDenied with no elevator) instead of waiting forever. Elevators out of service (any mode
+/// but Normal: draining, maintenance, emergency, fault; ADR-013) are not candidates either.</item>
 /// </list>
 /// The dispatcher sees elevators only through snapshots, which may be stale; the elevator has the final say.
 /// </summary>
@@ -45,11 +53,13 @@ public sealed class DispatcherHandler(
 {
     private enum Status { Pending, Proposed, Assigned }
 
-    private sealed class Tracked(Request request)
+    private sealed class Tracked(Request request, int priority)
     {
         public Request Request { get; } = request;
         public Status Status { get; set; } = Status.Pending;
-        public (long, int) Key => (Request.Timestamp.Ms, Request.Id);
+        public (int, long, int) Key => (priority, Request.Timestamp.Ms, Request.Id);
+        /// <summary>Elevators the access pipeline denies for this request; null until evaluated (needs every snapshot).</summary>
+        public IReadOnlyDictionary<int, AccessDenial>? Denied { get; set; }
         public int? Elevator { get; set; }
         public HashSet<int> Excluded { get; } = [];
         public bool OnlyStaleRejections { get; set; } = true;
@@ -62,7 +72,8 @@ public sealed class DispatcherHandler(
     private readonly SortedDictionary<int, ElevatorSnapshot> _snapshots = [];
     // Indexes so that no message costs O(requests in flight): pending requests oldest-first (aging order), and which
     // requests each elevator is currently excluded from.
-    private readonly SortedSet<(long CalledAtMs, int Id)> _pending = [];
+    private static readonly IReadOnlyDictionary<int, AccessDenial> NoDenials = new Dictionary<int, AccessDenial>();
+    private readonly SortedSet<(int Priority, long CalledAtMs, int Id)> _pending = [];
     private readonly Dictionary<int, HashSet<int>> _excludedFrom = [];
     // Pending-assignment overlay: what this dispatcher has proposed to each elevator that the elevator's latest
     // snapshot does not show yet. Without it, a burst of requests is all evaluated against the same snapshot, the
@@ -145,7 +156,9 @@ public sealed class DispatcherHandler(
             case FindBestQuery query:
                 var best = _snapshots.Count < elevatorCount
                     ? null
-                    : policy.Choose(new DispatchContext(query.Request, [.. _snapshots.Values.Select(WithOverlay)], now, timing, _sequence));
+                    : policy.Choose(new DispatchContext(query.Request,
+                        [.. _snapshots.Values.Where(s => InService(s) && _options.Access.Check(query.Request, s) is null).Select(WithOverlay)],
+                        now, timing, _sequence));
                 outbox.Send(Address.Client, new BestElevatorAnswer(query.QueryId, best?.ElevatorId, best?.Cost ?? double.NaN));
                 break;
         }
@@ -161,7 +174,7 @@ public sealed class DispatcherHandler(
             return;
         }
 
-        var t = new Tracked(request);
+        var t = new Tracked(request, _options.Access.Priority(request));
         _requests.Add(request.Id, t);
         _pending.Add(t.Key);
         outbox.Emit(new RequestSubmitted(now, request.Id, request.PickupFloor, request.DestinationFloor));
@@ -185,13 +198,14 @@ public sealed class DispatcherHandler(
 
     private void RetryPending(SimTime now, Outbox outbox)
     {
-        foreach (var (_, id) in _pending.ToList()) // oldest first: aging order
+        foreach (var (_, _, id) in _pending.ToList()) // oldest first: aging order (VIPs first with VIP priority)
             if (Find(id) is { Status: Status.Pending } t) TryDispatch(t, now, outbox);
     }
 
     private void TryDispatch(Tracked t, SimTime now, Outbox outbox)
     {
         if (_snapshots.Count < elevatorCount) return; // not every elevator has reported yet; retried on next snapshot
+        if (t.Denied is null && !CheckAccess(t, now, outbox)) return; // refused by every elevator
 
         // Overload mode: above the threshold of requests in flight, use the cheap fallback so that decision time stays
         // bounded whatever the burst. Logged on every switch. The threshold sits far above any load in the bench
@@ -207,7 +221,8 @@ public sealed class DispatcherHandler(
         // The overlay serves the precise policy. In overload mode the fallback is meant to be cheap, and keeping the
         // overlay up to date would cost O(proposals ahead of the elevators) per snapshot, so it is skipped.
         Func<ElevatorSnapshot, ElevatorSnapshot> view = overloaded ? (s => s) : WithOverlay;
-        var candidates = _snapshots.Values.Where(s => !t.Excluded.Contains(s.ElevatorId)).Select(view).ToList();
+        // Eligible = allowed by access and in service; candidates = eligible minus those that rejected this request.
+        var candidates = _snapshots.Values.Where(s => !t.Excluded.Contains(s.ElevatorId) && Available(t, s)).Select(view).ToList();
         var explain = _options.EmitDispatchEvaluations;
         var choice = active.Choose(new DispatchContext(t.Request, candidates, now, timing, _sequence) { Explain = explain });
         var forced = false;
@@ -215,13 +230,14 @@ public sealed class DispatcherHandler(
         if (choice is null && t.Excluded.Count > 0 && t.OnlyStaleRejections)
         {
             // Everyone eligible said "stale": stop bouncing and force the best one (ADR-006).
-            choice = active.Choose(new DispatchContext(t.Request, [.. _snapshots.Values.Select(view)], now, timing, _sequence) { Explain = explain });
+            choice = active.Choose(new DispatchContext(t.Request, [.. _snapshots.Values.Where(s => Available(t, s)).Select(view)], now, timing, _sequence)
+                { Explain = explain });
             forced = choice is not null;
         }
 
         if (explain)
             outbox.Emit(new DispatchEvaluated(now, t.Request.Id,
-                choice?.Candidates ?? [.. candidates.OrderBy(s => s.ElevatorId).Select(s => new CandidateCost(s.ElevatorId, null, "ineligible"))],
+                WithUnavailable(t, choice?.Candidates ?? [.. candidates.OrderBy(s => s.ElevatorId).Select(s => new CandidateCost(s.ElevatorId, null, "ineligible"))]),
                 choice?.ElevatorId));
 
         if (choice is null)
@@ -241,6 +257,53 @@ public sealed class DispatcherHandler(
         }
         outbox.Emit(new AssignmentProposed(now, t.Request.Id, choice.ElevatorId, Math.Round(choice.Cost, 3), choice.Eta?.Ms, forced));
         outbox.Send(Address.Elevator(choice.ElevatorId), new Assign(t.Request, choice.Eta, forced), _options.DispatchDelayMs);
+    }
+
+    /// <summary>In service: only Normal-mode elevators take new assignments (ADR-013).</summary>
+    private static bool InService(ElevatorSnapshot s) => s.Mode == ElevatorMode.Normal;
+
+    /// <summary>May <paramref name="s"/> be given <paramref name="t"/>: allowed by the access pipeline and in service.</summary>
+    private static bool Available(Tracked t, ElevatorSnapshot s) => InService(s) && !t.Denied!.ContainsKey(s.ElevatorId);
+
+    /// <summary>
+    /// Evaluates the access pipeline for <paramref name="t"/> against every elevator, once (ADR-012). Each denial is
+    /// logged. If every elevator is denied, the request is refused: logged with no elevator, removed, and the passenger
+    /// and the client are told. Returns false when refused.
+    /// </summary>
+    private bool CheckAccess(Tracked t, SimTime now, Outbox outbox)
+    {
+        var pipeline = _options.Access;
+        Dictionary<int, AccessDenial>? denied = null;
+        if (pipeline.Policies.Count > 0)
+            foreach (var s in _snapshots.Values) // ascending elevator id
+                if (pipeline.Check(t.Request, s) is { } denial)
+                {
+                    (denied ??= [])[s.ElevatorId] = denial;
+                    outbox.Emit(new AccessDenied(now, t.Request.Id, s.ElevatorId, denial.Policy, denial.Reason));
+                }
+        t.Denied = denied ?? NoDenials;
+        if (denied is null || denied.Count < _snapshots.Count) return true;
+
+        var policies = denied.Values.Select(d => d.Policy).Distinct().ToList();
+        var (name, reason) = policies.Count == 1 ? (policies[0], denied.Values.First().Reason) : (string.Join("+", policies), "no elevator may serve it");
+        outbox.Emit(new AccessDenied(now, t.Request.Id, null, name, reason));
+        _requests.Remove(t.Request.Id);
+        _pending.Remove(t.Key);
+        outbox.Send(Address.Passengers, new RequestRefused(t.Request.Id, name, reason));
+        outbox.Send(Address.Client, new RequestRefused(t.Request.Id, name, reason));
+        return false;
+    }
+
+    /// <summary>Explanations list every elevator: those denied by access (note: the policy) or out of service (note: the mode) with no cost.</summary>
+    private IReadOnlyList<CandidateCost> WithUnavailable(Tracked t, IReadOnlyList<CandidateCost> evaluated)
+    {
+        var unavailable = _snapshots.Values.Where(s => !Available(t, s)).ToList();
+        if (unavailable.Count == 0) return evaluated;
+        return
+        [
+            .. evaluated.Concat(unavailable.Select(s => new CandidateCost(s.ElevatorId, null,
+                t.Denied!.TryGetValue(s.ElevatorId, out var d) ? d.Policy : s.Mode.ToString().ToLowerInvariant()))).OrderBy(c => c.ElevatorId),
+        ];
     }
 
     /// <summary>The elevator's snapshot plus the pickups this dispatcher has sent it that the snapshot does not show yet.</summary>
@@ -286,7 +349,9 @@ public sealed class DispatcherHandler(
         var snapshots = _snapshots.Values.ToList();
         foreach (var t in _requests.Values.Where(t => t.Status == Status.Assigned).OrderBy(t => t.Request.Timestamp).ThenBy(t => t.Request.Id).ToList())
         {
-            if (rebalance.BetterElevator(t.Request, t.Elevator!.Value, t.Reassignments, snapshots, now) is not { } better) continue;
+            // Only to elevators this request may use (access, in service); its current one stays for comparison.
+            var allowed = snapshots.All(s => Available(t, s)) ? snapshots : snapshots.Where(s => s.ElevatorId == t.Elevator || Available(t, s)).ToList();
+            if (rebalance.BetterElevator(t.Request, t.Elevator!.Value, t.Reassignments, allowed, now) is not { } better) continue;
             t.Reassignments++;
             outbox.Send(Address.Elevator(t.Elevator.Value), new Unassign(t.Request.Id)); // it confirms with a Released(Rebalance)
         }

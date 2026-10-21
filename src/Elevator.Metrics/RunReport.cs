@@ -13,7 +13,8 @@ public sealed record DurationStats(int Count, double? Avg, double? P95, double? 
 /// <summary>
 /// The run report. All durations are sim seconds (never wall clock).
 /// Wait = first press to boarding; ride = boarding to alighting; journey = wait + ride. Stats cover delivered
-/// passengers only; anyone not delivered at the end is counted in <see cref="Unserved"/> instead.
+/// passengers only; anyone not delivered at the end is counted in <see cref="Unserved"/> instead, except passengers
+/// refused by an access policy (<see cref="RefusedByPolicy"/>).
 /// <see cref="WaitBreakdown"/> is the mean seconds per delivered passenger in each bucket; it sums to the mean wait.
 /// </summary>
 public sealed record RunReport(
@@ -43,4 +44,8 @@ public sealed record RunReport(
     public int Rejections { get; init; }
 
     public IReadOnlyDictionary<WaitBucket, double> WaitBreakdown { get; init; } = new Dictionary<WaitBucket, double>();
+
+    /// <summary>Passengers whose request every elevator's access policies refused (ADR-012). Not in <see cref="Unserved"/>:
+    /// refused by design, not lost.</summary>
+    public int RefusedByPolicy { get; init; }
 }

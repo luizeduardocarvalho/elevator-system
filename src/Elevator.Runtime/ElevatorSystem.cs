@@ -13,6 +13,15 @@ namespace Elevator.Runtime;
 
 public sealed record ActorStats(ActorKind Kind, int Actors, long Messages, WallDuration InHandlers, WallDuration Delivering);
 
+/// <summary>Every elevator's access policies refused the request (ADR-012); <see cref="ElevatorSystem.AssignRequest"/> throws it.</summary>
+public sealed class RequestRefusedException(int requestId, string policy, string reason)
+    : InvalidOperationException($"request {requestId} refused by access policy '{policy}': {reason}")
+{
+    public int RequestId { get; } = requestId;
+
+    public string Policy { get; } = policy;
+}
+
 /// <summary>An accepted assignment, as seen by whoever submitted the request.</summary>
 public sealed record Assignment(int RequestId, int ElevatorId, WallDuration Latency);
 
@@ -71,7 +80,8 @@ public sealed class ElevatorSystem : IAsyncDisposable
         }
         var rebalance = options.Rebalance ? new HysteresisRebalance(scheduling, timing) : null;
         Add(new Actor(new DispatcherHandler(dispatch, options.Elevators, timing,
-            new DispatcherOptions(latency.DispatchMs, rebalance is null ? null : 5_000, options.OverloadThreshold), rebalance, new NearestDispatch()),
+            new DispatcherOptions(latency.DispatchMs, rebalance is null ? null : 5_000, options.OverloadThreshold) { Access = Building.CreateAccess(options.Access) },
+            rebalance, new NearestDispatch()),
             this, _requests.Reader));
         Add(new Actor(new PassengersHandler([.. fleet.Select(t => t.Capacity)]), this));
 
@@ -93,7 +103,8 @@ public sealed class ElevatorSystem : IAsyncDisposable
 
     /// <summary>
     /// Submits <paramref name="request"/> and completes when an elevator has accepted it. Thread-safe; any number of
-    /// callers. Waits (asynchronously) while the request queue is full.
+    /// callers. Waits (asynchronously) while the request queue is full. Throws <see cref="RequestRefusedException"/> when
+    /// no elevator may serve it (access policies, ADR-012).
     /// </summary>
     public async Task<Assignment> AssignRequest(Request request, CancellationToken ct = default)
     {
@@ -185,6 +196,10 @@ public sealed class ElevatorSystem : IAsyncDisposable
             case { To.Kind: ActorKind.Client, Message: RequestAssigned assigned }:
                 if (_pending.TryRemove(assigned.RequestId, out var p))
                     p.Tcs.TrySetResult(new Assignment(assigned.RequestId, assigned.ElevatorId, WallDuration.Since(p.Started)));
+                break;
+            case { To.Kind: ActorKind.Client, Message: RequestRefused refused }:
+                if (_pending.TryRemove(refused.RequestId, out var r))
+                    r.Tcs.TrySetException(new RequestRefusedException(refused.RequestId, refused.Policy, refused.Reason));
                 break;
             case { To.Kind: ActorKind.Client, Message: BestElevatorAnswer answer }:
                 if (_queries.TryRemove(answer.QueryId, out var query)) query.TrySetResult(answer.ElevatorId);
