@@ -1,0 +1,18 @@
+# Three passengers, hand-traceable. Shows the FIFO baseline's weak spot: passenger 3 (floor 7, going up)
+# is passed twice before being served, because FIFO only picks up the oldest hall call.
+# Expected (worked out in tests/Elevator.Simulation.Tests/DeterministicScenarioTests.cs):
+#   waits 9 s, 38 s, 63 s; rides 13 s, 9 s, 7 s; 23 floors travelled, 6 stops, ends at 76 s.
+name: v1-basic
+seed: 1
+floors: 10
+scheduling: fifo
+maxSimTimeS: 600
+timing:
+  floorTravelMs: 2000
+  doorOpeningMs: 1000
+  doorDwellMs: 3000
+  doorClosingMs: 1000
+passengers:
+  - { at: 0, from: 5, to: 9 }
+  - { at: 1, from: 3, to: 1, direction: down }
+  - { at: 2, from: 7, to: 8 }

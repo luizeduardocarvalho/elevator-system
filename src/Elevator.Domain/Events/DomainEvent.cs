@@ -19,7 +19,7 @@ namespace Elevator.Domain.Events;
 [JsonDerivedType(typeof(StateChanged), nameof(StateChanged))]
 [JsonDerivedType(typeof(FloorReached), nameof(FloorReached))]
 [JsonDerivedType(typeof(DoorsOpened), nameof(DoorsOpened))]
-public abstract record DomainEvent([property: JsonPropertyName("t")] SimTime At);
+public abstract record DomainEvent([property: JsonPropertyName("t"), JsonPropertyOrder(-1)] SimTime At);
 
 public sealed record SimulationStarted(SimTime At, string Scenario, int Seed, int Floors, string Scheduling, int Passengers)
     : DomainEvent(At);
