@@ -4,7 +4,7 @@
 - **Seeds:** 21..40 (20 per strategy)
 - **Baseline:** look+cost
 - **Scenarios:** up-peak-t5 (4 elevators, 20 floors, capacity 10, next-trip), up-peak-t10 (4 elevators, 20 floors, capacity 10, next-trip), up-peak-t30 (4 elevators, 20 floors, capacity 10, next-trip), down-peak-t5 (4 elevators, 20 floors, capacity 10, next-trip), down-peak-t10 (4 elevators, 20 floors, capacity 10, next-trip), down-peak-t30 (4 elevators, 20 floors, capacity 10, next-trip), fleet-t5 (4 elevators, 20 floors, capacity 10, next-trip), fleet-t10 (4 elevators, 20 floors, capacity 10, next-trip), fleet-t30 (4 elevators, 20 floors, capacity 10, next-trip)
-- **Runs:** 540, 3.0 s wall
+- **Runs:** 540, 3.1 s wall
 
 All times are sim seconds. Each cell is the mean over seeds ± the 95% CI half-width (Student t).
 Δ columns are **paired per-seed differences** against the baseline (common random numbers: every
@@ -142,8 +142,8 @@ Where the average wait goes (mean seconds per passenger; sums to the mean wait):
 
 | Strategy | dispatch | reassignment | bypassed_full | blocked | finishing_door_cycle | serving_others | idle_start | travel_toward | travel_away |
 |---|---|---|---|---|---|---|---|---|---|
-| fifo+nearest | 0.0 | 0.0 | 0.0 | 0.0 | 0.7 | 25.7 | 0.0 | 39.5 | 29.5 |
-| look+nearest | 0.0 | 0.0 | 0.1 | 0.0 | 0.9 | 6.5 | 0.0 | 12.2 | 3.1 |
+| fifo+nearest | 0.0 | 0.0 | 0.1 | 0.0 | 0.7 | 25.7 | 0.0 | 39.5 | 29.5 |
+| look+nearest | 0.0 | 0.0 | 0.0 | 0.0 | 0.9 | 6.6 | 0.0 | 12.2 | 3.1 |
 | look+cost | 0.0 | 0.0 | 0.0 | 0.0 | 0.6 | 2.7 | 0.0 | 9.6 | 1.1 |
 
 Operations (mean per run; penalty = reassignment + blocked wait seconds, summed over passengers):
@@ -166,8 +166,8 @@ Where the average wait goes (mean seconds per passenger; sums to the mean wait):
 
 | Strategy | dispatch | reassignment | bypassed_full | blocked | finishing_door_cycle | serving_others | idle_start | travel_toward | travel_away |
 |---|---|---|---|---|---|---|---|---|---|
-| fifo+nearest | 0.0 | 0.0 | 0.0 | 0.0 | 0.7 | 25.7 | 0.0 | 39.5 | 29.5 |
-| look+nearest | 0.0 | 0.0 | 0.1 | 0.0 | 0.9 | 6.5 | 0.0 | 12.2 | 3.1 |
+| fifo+nearest | 0.0 | 0.0 | 0.1 | 0.0 | 0.7 | 25.7 | 0.0 | 39.5 | 29.5 |
+| look+nearest | 0.0 | 0.0 | 0.0 | 0.0 | 0.9 | 6.6 | 0.0 | 12.2 | 3.1 |
 | look+cost | 0.0 | 0.0 | 0.0 | 0.0 | 0.6 | 2.7 | 0.0 | 9.6 | 1.1 |
 
 Operations (mean per run; penalty = reassignment + blocked wait seconds, summed over passengers):

@@ -4,7 +4,7 @@
 - **Seeds:** 21..40 (20 per strategy)
 - **Baseline:** look+nearest
 - **Scenarios:** fleet (4 elevators, 20 floors, capacity 10, next-trip)
-- **Runs:** 60, 1.8 s wall
+- **Runs:** 60, 0.6 s wall
 
 All times are sim seconds. Each cell is the mean over seeds ± the 95% CI half-width (Student t).
 Δ columns are **paired per-seed differences** against the baseline (common random numbers: every
@@ -22,8 +22,8 @@ Where the average wait goes (mean seconds per passenger; sums to the mean wait):
 
 | Strategy | dispatch | reassignment | bypassed_full | blocked | finishing_door_cycle | serving_others | idle_start | travel_toward | travel_away |
 |---|---|---|---|---|---|---|---|---|---|
-| look+roundrobin | 0.0 | 0.0 | 0.0 | 0.0 | 0.9 | 13.6 | 0.0 | 22.3 | 7.7 |
-| look+nearest | 0.0 | 0.0 | 0.1 | 0.0 | 0.9 | 6.5 | 0.0 | 12.2 | 3.1 |
+| look+roundrobin | 0.0 | 0.0 | 0.1 | 0.0 | 0.9 | 13.6 | 0.0 | 22.3 | 7.7 |
+| look+nearest | 0.0 | 0.0 | 0.0 | 0.0 | 0.9 | 6.6 | 0.0 | 12.2 | 3.1 |
 | look+cost | 0.0 | 0.0 | 0.0 | 0.0 | 0.6 | 2.7 | 0.0 | 9.6 | 1.1 |
 
 Operations (mean per run; penalty = reassignment + blocked wait seconds, summed over passengers):
