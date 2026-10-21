@@ -1,5 +1,6 @@
 using Elevator.Domain;
 using Elevator.Domain.Events;
+using Elevator.Domain.Faults;
 
 namespace Elevator.Metrics;
 
@@ -16,7 +17,8 @@ public enum WaitBucket
     /// </summary>
     BypassedFull,
     /// <summary>Left behind at an open door because the elevator was full (and still waiting for room); or the
-    /// assigned elevator is in maintenance / rejected for maintenance.</summary>
+    /// assigned elevator is in maintenance or stuck; or an elevator rejected it for being out of service (maintenance,
+    /// emergency, fault; ADR-013).</summary>
     Blocked,
     /// <summary>Assigned elevator is completing a stop that was already in progress when the assignment was accepted.</summary>
     FinishingDoorCycle,
@@ -77,6 +79,8 @@ public static class PassengerLifecycle
         public int Floor = Floors.Lowest;
         public long DoorCycleStartedMs = -1;
         public (long Ms, int Floor) LastArrival = (-1, 0);
+        /// <summary>Its drive is stuck until this time (injected Stuck, ADR-013); -1 when not stuck.</summary>
+        public long StuckUntilMs = -1;
     }
 
     private sealed class Tracker(int id, int from, int to, SimTime calledAt)
@@ -107,11 +111,15 @@ public static class PassengerLifecycle
 
         foreach (var e in events)
         {
-            if (e.At.Ms > lastMs)
+            while (e.At.Ms > lastMs)
             {
-                var span = e.At.Ms - lastMs;
-                foreach (var p in waiting) p.Buckets[(int)BucketOf(p, p.Elevator is { } id ? View(id) : null, fullAt)] += span;
-                lastMs = e.At.Ms;
+                // A timed Stuck ends without an event of its own: split the interval there, so attribution stays exact.
+                var until = e.At.Ms;
+                foreach (var v in elevators.Values)
+                    if (v.StuckUntilMs > lastMs && v.StuckUntilMs < until) until = v.StuckUntilMs;
+                var span = until - lastMs;
+                foreach (var p in waiting) p.Buckets[(int)BucketOf(p, p.Elevator is { } id ? View(id) : null, fullAt, lastMs)] += span;
+                lastMs = until;
             }
 
             switch (e)
@@ -137,7 +145,7 @@ public static class PassengerLifecycle
                     // out-of-service elevator is a capacity/availability problem.
                     p.Status = rej.Reason switch
                     {
-                        AssignmentReason.Maintenance => Status.Blocked,
+                        AssignmentReason.Maintenance or AssignmentReason.Emergency or AssignmentReason.Fault => Status.Blocked,
                         AssignmentReason.Capacity => p.Status == Status.Blocked ? Status.Blocked : Status.BypassedFull,
                         _ => Status.Reassignment,
                     };
@@ -177,13 +185,19 @@ public static class PassengerLifecycle
                 case FloorReached fr:
                     View(fr.ElevatorId).Floor = fr.Floor;
                     break;
+                case FaultCommandApplied { Kind: FaultKind.Stuck } stuck:
+                    View(stuck.ElevatorId).StuckUntilMs = stuck.DurationMs is { } d ? stuck.At.Ms + d : long.MaxValue;
+                    break;
+                case FaultCommandApplied { Kind: FaultKind.Unstick } unstick:
+                    View(unstick.ElevatorId).StuckUntilMs = -1;
+                    break;
             }
         }
 
         return passengers.Values.OrderBy(p => p.Id).Select(p => p.ToRecord()).ToList();
     }
 
-    private static WaitBucket BucketOf(Tracker p, ElevatorView? e, double fullAt)
+    private static WaitBucket BucketOf(Tracker p, ElevatorView? e, double fullAt, long nowMs)
     {
         switch (p.Status)
         {
@@ -193,7 +207,9 @@ public static class PassengerLifecycle
             case Status.Blocked: return WaitBucket.Blocked;
         }
 
-        if (e!.Riders >= fullAt) return WaitBucket.BypassedFull; // the assigned elevator is full: next trip (ADR-010)
+        if (e!.StuckUntilMs > nowMs) return WaitBucket.Blocked; // assigned to a stuck elevator (until the watchdog reassigns)
+
+        if (e.Riders >= fullAt) return WaitBucket.BypassedFull; // the assigned elevator is full: next trip (ADR-010)
 
         switch (e.State)
         {
