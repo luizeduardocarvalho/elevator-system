@@ -17,6 +17,11 @@ public class TransitionTableTests
         { ElevatorState.DoorClosing, Trigger.Reopen, ElevatorState.DoorOpening },
         { ElevatorState.Idle, Trigger.EnterMaintenance, ElevatorState.Maintenance },
         { ElevatorState.Maintenance, Trigger.ExitMaintenance, ElevatorState.Idle },
+        // Emergency stop (ADR-013): halt at the next floor with the doors closed; doors in a cycle close and stay closed.
+        { ElevatorState.MovingUp, Trigger.EmergencyHalt, ElevatorState.Idle },
+        { ElevatorState.MovingDown, Trigger.EmergencyHalt, ElevatorState.Idle },
+        { ElevatorState.DoorOpening, Trigger.EmergencyClose, ElevatorState.DoorClosing },
+        { ElevatorState.DoorOpen, Trigger.EmergencyClose, ElevatorState.DoorClosing },
     };
 
     public static TheoryData<ElevatorState, Trigger> Illegal()

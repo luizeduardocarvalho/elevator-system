@@ -16,6 +16,12 @@ internal sealed class Actor(IHandler handler, ElevatorSystem system, ChannelRead
 
     public Channel<Message> Mailbox { get; } = Channel.CreateUnbounded<Message>(new UnboundedChannelOptions { SingleReader = true });
 
+    /// <summary>
+    /// Priority control channel (ADR-013): read before the mailbox, so an emergency stop takes effect before anything
+    /// already queued. Still a message to the single owner of the handler: no flag shared across threads, no lock.
+    /// </summary>
+    public Channel<Message> Control { get; } = Channel.CreateUnbounded<Message>(new UnboundedChannelOptions { SingleReader = true });
+
     public IHandler Handler => handler;
 
     /// <summary>Messages handled and Stopwatch ticks spent inside the handler (written by this actor's loop only).</summary>
@@ -35,7 +41,8 @@ internal sealed class Actor(IHandler handler, ElevatorSystem system, ChannelRead
         while (!ct.IsCancellationRequested)
         {
             Message? message = null;
-            if (Mailbox.Reader.TryRead(out var m)) message = m;                 // control traffic first
+            if (Control.Reader.TryRead(out var c)) message = c;                 // emergency stops before anything queued
+            else if (Mailbox.Reader.TryRead(out var m)) message = m;            // control traffic first
             else if (requests is not null && requests.TryRead(out var r)) message = r;
             else if (handler.NextWakeUp is { } wake && system.Clock.Now >= wake) message = WakeUpMessage;
 
@@ -69,8 +76,9 @@ internal sealed class Actor(IHandler handler, ElevatorSystem system, ChannelRead
         try
         {
             var mailbox = Mailbox.Reader.WaitToReadAsync(wait.Token).AsTask();
-            if (requests is null) await mailbox.ConfigureAwait(false);
-            else await Task.WhenAny(mailbox, requests.WaitToReadAsync(wait.Token).AsTask()).ConfigureAwait(false);
+            var control = Control.Reader.WaitToReadAsync(wait.Token).AsTask();
+            if (requests is null) await Task.WhenAny(mailbox, control).ConfigureAwait(false);
+            else await Task.WhenAny(mailbox, control, requests.WaitToReadAsync(wait.Token).AsTask()).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {

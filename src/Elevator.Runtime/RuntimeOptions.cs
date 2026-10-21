@@ -30,6 +30,12 @@ public sealed record RuntimeOptions(
     public IReadOnlyList<ElevatorType> EffectiveFleet =>
         Fleet ?? [.. Enumerable.Repeat(ElevatorType.Standard(EffectiveTiming, Capacity), Elevators)];
 
+    /// <summary>
+    /// Create the system without starting its actors; <see cref="ElevatorSystem.Resume"/> starts them. Lets a caller
+    /// queue messages first (tests of mailbox priority).
+    /// </summary>
+    public bool StartPaused { get; init; }
+
     /// <summary>Floor restrictions and VIP service (ADR-012).</summary>
     public AccessConfig Access { get; init; } = AccessConfig.None;
 
