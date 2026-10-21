@@ -75,3 +75,21 @@ protocol** (`Messages.cs`): Assign, accept, reject, release, snapshots, boarding
   - Every state change publishes a snapshot message, so there are more messages than with a shared-memory read.
   - The dispatcher works from snapshots that may be stale. That is handled explicitly by the accept/reject protocol
     (ADR-006) rather than hidden by a lock.
+
+## Performance (M6, measured)
+
+Real clock and real threads, on an M2 Pro (10 cores), on a quiet machine. Full numbers and curves are in
+[docs/results.md](../results.md) §3.
+- **Spec SLO met.**
+  - 100 simultaneous requests: p99 12.2 ms. 1,000: p99 53.6 ms.
+  - Every request assigned; 0 lost; 0 duplicated.
+  - Heap flat over a 60 s soak (+0.9%).
+  - A perf test gate (1k submitters plus a soak) runs in a non-parallel test collection.
+- **Burst capacity.** About 4.5k simultaneous requests within p99 < 100 ms with the default system (cost + overload
+  fallback), about 6.4k with Nearest alone. The 10k stretch level fails (182 ms / 158 ms), as the arithmetic predicts:
+  - the single dispatcher drains about 57k requests/s;
+  - its per-request cost is 16.6 µs of protocol work, of which the decision is about 1.4 µs.
+- **Scale note.** 10k simultaneous presses exceeds the population of a 20-floor building. It probes the software's
+  limit, not a realistic load.
+- **Next steps.** If needed, shard the dispatcher per bank (not per zone, which would break group optimality within a
+  bank), and assign in batches as an assignment problem (Hungarian / grouping by destination).

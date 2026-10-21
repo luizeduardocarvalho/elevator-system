@@ -63,4 +63,75 @@ byte-identically.
 
 ## 3. Performance under load (real clock, real threads)
 
-_To be filled from a quiet-machine run: latency curves, pipeline breakdown, burst capacity, SLO table._
+Measured on the M2 Pro after the machine had quietened down (1-minute load average under 3; it had been 8–75 during
+Xcode builds). Default system: LOOK + cost dispatch, next-trip capacity, overload fallback to Nearest above 200
+requests in flight, realistic capacity (10). Latency is wall clock from `AssignRequest` to the accepted assignment,
+queueing included.
+
+### Spec SLOs ([perf](results/perf.md))
+
+| SLO | Measured | Result |
+|---|---|---|
+| Assignment p99 < 100 ms at 100 concurrent (spec: "100+") | 12.2 ms | PASS |
+| Assignment p99 < 100 ms at 1,000 concurrent | 53.6 ms (800 of 1,000 decided by the fallback) | PASS |
+| Assignment p99 < 100 ms at 10,000 concurrent (stretch) | 201.9 ms | FAIL |
+| Every request assigned (100 / 1k / 10k) | 100 / 1,000 / 10,000 | PASS |
+| Lost = 0, duplicated = 0 | 0, 0 | PASS |
+| Memory: heap growth < 10% over a 60 s soak | +0.9% (1.06 → 1.10 MB; 1,183 of 1,190 delivered) | PASS |
+
+The perf test gate (1,000 submitters, then a 20 s soak) passed 3 runs out of 3.
+
+### Latency vs burst size ([perf-curves](results/perf-curves.md))
+
+Each point is a fresh process with warm-up, median p99 of 3 repeats.
+
+| Simultaneous submitters | 100 | 300 | 1k | 3k | 5k | 6.5k | 8k | 10k |
+|---|---|---|---|---|---|---|---|---|
+| Default (cost + fallback), p99 ms | 12.7 | 38.1 | 50.6 | 80.4 | 103.3 | 125.4 | 158.8 | 181.6 |
+| Cost only, p99 ms | 11.6 | 66.0 | 309.7 | 605.8 | 852.8 | 858.5 | 989.6 | 1,131.3 |
+| Nearest only, p99 ms | 1.1 | 3.2 | 18.5 | 49.5 | 77.2 | 101.9 | 120.9 | 158.0 |
+
+Nothing was lost or duplicated at any point.
+
+**Reading the curves.**
+- *Cost alone* answers within the SLO up to a few hundred simultaneous requests. Beyond that it is CPU-bound at about
+  3–9k decisions/s: a projection costs tens of µs (§2), and the dispatcher is the one serial stage.
+- *The overload fallback* hands decisions to Nearest above 200 in flight. That is what keeps the default under
+  100 ms to about 4.5k simultaneous requests.
+- *Bench quality is unaffected* because normal traffic never gets near 200 in flight (peak 21 for LOOK).
+
+### Burst capacity (the headline)
+
+**About 4.5k simultaneous requests within p99 < 100 ms with the default system, about 6.4k with Nearest alone.**
+That is roughly 45× and 64× the spec's "100+".
+
+The arithmetic:
+- *The ceiling.* The dispatcher is the single serial stage. Nearest's pipeline drains about 57k requests/s (55–59k
+  measured from 3k up), so a burst of N waits about N / 57k s for the last request: 100 ms ↔ ≈ 5.7k. Fixed overheads
+  bring the measured crossing to between 5k (77 ms) and 6.5k (102 ms).
+- *10k simultaneous* needs ≈ 175 ms at that rate, hence the stretch FAIL (158 ms Nearest, 182 ms default).
+- *Scale note.* 10k simultaneous button presses is more than the population of a 20-floor office building (about
+  1,500–2,000 people). The stretch level tests the software's limit, not a load the building can generate.
+
+### Where a request's time goes (Nearest, 10k burst, [perf-nearest](results/perf-nearest.md))
+
+| Actor | Messages per request | Handler µs / request | Delivery µs / request |
+|---|---|---|---|
+| Dispatcher (serial) | 3 (submit, accept, snapshot) | 13.8 | 2.8 |
+| Elevators (4 in parallel) | 1 (assign) | 7.0 | 4.7 |
+| Passengers | 2 (waiting, accepted) | 0.9 | 2.0 |
+
+- *The decision is not the cost.* The Nearest decision itself is about 1.4 µs (§2). The rest of the dispatcher's
+  16.6 µs per request is protocol work:
+  - ingesting a snapshot per accepted assignment;
+  - bookkeeping (pending set, overlay, events);
+  - allocation;
+  - channel writes.
+- *The resulting bound.* 1 / 16.6 µs ≈ 60k requests/s, against 55–59k measured.
+
+**Next steps if more were needed.** Not done; the spec is met by a wide margin.
+- **Shard the dispatcher per elevator bank**, not per zone. Zoning one bank would break the group optimisation the
+  cost function exists for; banks are independent by construction.
+- **Batch assignment.** Drain the channel in batches and assign each batch as an assignment problem (Hungarian
+  algorithm, or grouping by destination). That raises throughput (one snapshot ingestion per batch) and can also
+  improve quality, since requests are no longer assigned greedily one at a time.
