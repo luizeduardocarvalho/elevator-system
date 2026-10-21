@@ -40,9 +40,11 @@ protocol** (`Messages.cs`): Assign, accept, reject, release, snapshots, boarding
   acknowledgements with callers, and a `ConcurrentQueue` copy of the log for tests. None of these holds domain state.
 - **The spec's `ElevatorSystem`:**
   - `assignRequest()` is `AssignRequest`, which submits and awaits acceptance;
-  - `requestQueue` is the bounded channel;
-  - `findBestElevator()` is the dispatch policy inside the dispatcher actor;
-  - `balanceLoad()` is the cost function's load terms (ADR-006).
+  - `requestQueue` is the bounded channel (`RequestQueueLength`);
+  - `findBestElevator()` is `FindBestElevator`: a query message to the dispatcher actor, answered from its snapshots
+    without assigning;
+  - `balanceLoad()` is `BalanceLoad`: the cost function's load terms always apply (ADR-006), and this also asks the
+    dispatcher for an immediate rebalancing pass when rebalancing is enabled.
 - **Causality, not locks, orders a caller's request.** `AssignRequest` posts `PassengerWaiting` to the passengers
   actor *before* writing to the request channel. Every later notice about that request is caused by the submission,
   so it reaches the passengers actor after the passenger exists.

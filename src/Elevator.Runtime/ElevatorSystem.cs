@@ -34,6 +34,8 @@ public sealed class ElevatorSystem : IAsyncDisposable
     private readonly Channel<SubmitRequest> _requests;
     private readonly Channel<DomainEvent> _log = Channel.CreateUnbounded<DomainEvent>(new UnboundedChannelOptions { SingleReader = true });
     private readonly ConcurrentDictionary<int, (TaskCompletionSource<Assignment> Tcs, long Started)> _pending = new();
+    private readonly ConcurrentDictionary<int, TaskCompletionSource<int?>> _queries = new();
+    private int _nextQuery;
     private readonly CancellationTokenSource _stop = new();
     private readonly List<Task> _loops = [];
     private readonly Task _logWriter;
@@ -104,6 +106,31 @@ public sealed class ElevatorSystem : IAsyncDisposable
             return await tcs.Task.ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Spec's <c>findBestElevator()</c>: the elevator the dispatcher would choose for <paramref name="request"/> right
+    /// now, from its current snapshots, without assigning anything. Null when none is eligible. Answered by the
+    /// dispatcher actor itself, so it never reads shared state.
+    /// </summary>
+    public async Task<int?> FindBestElevator(Request request, CancellationToken ct = default)
+    {
+        var id = Interlocked.Increment(ref _nextQuery);
+        var tcs = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _queries[id] = tcs;
+        _actors[Address.Dispatcher].Mailbox.Writer.TryWrite(new FindBestQuery(id, request));
+        using (ct.Register(() => tcs.TrySetCanceled(ct)))
+            return await tcs.Task.ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Spec's <c>balanceLoad()</c>. Load balancing is built into the cost function (predicted load, ADR-006); this
+    /// additionally asks the dispatcher for a rebalancing pass now, which moves requests only when rebalancing is
+    /// enabled (<see cref="RuntimeOptions.Rebalance"/>).
+    /// </summary>
+    public void BalanceLoad() => _actors[Address.Dispatcher].Mailbox.Writer.TryWrite(new RebalanceNow());
+
+    /// <summary>Spec's <c>requestQueue</c>: submissions waiting in the bounded request channel.</summary>
+    public int RequestQueueLength => _requests.Reader.Count;
+
     /// <summary>Feeds scripted/generated passengers at their arrival times (sim time on this system's clock).</summary>
     public Task PlayPassengers(IEnumerable<Passenger> passengers, CancellationToken ct = default) => Task.Run(async () =>
     {
@@ -149,6 +176,9 @@ public sealed class ElevatorSystem : IAsyncDisposable
             case { To.Kind: ActorKind.Client, Message: RequestAssigned assigned }:
                 if (_pending.TryRemove(assigned.RequestId, out var p))
                     p.Tcs.TrySetResult(new Assignment(assigned.RequestId, assigned.ElevatorId, WallDuration.Since(p.Started)));
+                break;
+            case { To.Kind: ActorKind.Client, Message: BestElevatorAnswer answer }:
+                if (_queries.TryRemove(answer.QueryId, out var query)) query.TrySetResult(answer.ElevatorId);
                 break;
             case { To.Kind: ActorKind.Client }:
                 break;

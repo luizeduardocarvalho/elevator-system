@@ -136,6 +136,15 @@ public sealed class DispatcherHandler(
                 Rebalance(now, outbox);
                 ScheduleRebalance(outbox);
                 break;
+            case RebalanceNow:
+                Rebalance(now, outbox);
+                break;
+            case FindBestQuery query:
+                var best = _snapshots.Count < elevatorCount
+                    ? null
+                    : policy.Choose(new DispatchContext(query.Request, [.. _snapshots.Values.Select(WithOverlay)], now, timing, _sequence));
+                outbox.Send(Address.Client, new BestElevatorAnswer(query.QueryId, best?.ElevatorId, best?.Cost ?? double.NaN));
+                break;
         }
     }
 

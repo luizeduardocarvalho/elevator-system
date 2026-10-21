@@ -68,6 +68,12 @@ public sealed record RequestPickedUp(int RequestId, int ElevatorId) : Message;
 
 public sealed record RebalanceTimer : Message;
 
+/// <summary>Spec's findBestElevator(): which elevator would the dispatcher choose now? Answered, nothing assigned.</summary>
+public sealed record FindBestQuery(int QueryId, Request Request) : Message;
+
+/// <summary>Spec's balanceLoad(): run a rebalancing pass now (no-op when rebalancing is off).</summary>
+public sealed record RebalanceNow : Message;
+
 // ---- To passengers ---------------------------------------------------------------------------------------
 /// <summary>A passenger arrives and enters their destination; the passengers handler submits the request.</summary>
 public sealed record PassengerArrives(Request Request) : Message;
@@ -83,3 +89,5 @@ public sealed record ElevatorNotice(DomainEvent Event) : Message;
 
 // ---- To clients ------------------------------------------------------------------------------------------
 public sealed record RequestAssigned(int RequestId, int ElevatorId) : Message;
+
+public sealed record BestElevatorAnswer(int QueryId, int? ElevatorId, double Cost) : Message;
