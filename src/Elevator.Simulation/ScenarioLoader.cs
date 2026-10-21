@@ -50,7 +50,7 @@ public static class ScenarioLoader
         var bypass = dto.Building?.BypassThreshold ?? 0.8;
         if (bypass is <= 0 or > 1) errors.Add($"building.bypassThreshold must be in (0, 1] (got {bypass})");
 
-        var scheduling = dto.Scheduling ?? "fifo";
+        var scheduling = dto.Scheduling ?? "look"; // ADR-004
         if (!SchedulingPolicies.Names.Contains(scheduling, StringComparer.OrdinalIgnoreCase))
             errors.Add($"unknown scheduling '{scheduling}' (known: {string.Join(", ", SchedulingPolicies.Names)})");
 

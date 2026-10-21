@@ -8,7 +8,7 @@ building:
   elevators: 4
   capacity: 10
   bypassThreshold: 0.8
-scheduling: fifo
+scheduling: look
 dispatch: nearest
 maxSimTimeS: 5400
 traffic:

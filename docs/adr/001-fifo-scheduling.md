@@ -2,7 +2,10 @@
 
 ## Status
 
-Accepted (v1-easy, 2026-10-21)
+Superseded by [ADR-004](004-look-scheduling.md) as the default scheduling policy (v2-medium). FIFO stays selectable
+(`--scheduling fifo`) and remains the measured baseline.
+
+Originally accepted in v1-easy, 2026-10-21.
 
 ## Context
 
