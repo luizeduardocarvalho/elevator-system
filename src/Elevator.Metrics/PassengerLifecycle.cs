@@ -8,11 +8,12 @@ public enum WaitBucket
 {
     /// <summary>Not yet assigned for the first time.</summary>
     Dispatch,
-    /// <summary>Unassigned after a reject (stale, capacity, maintenance) or a rebalance move.</summary>
+    /// <summary>Unassigned after a stale reject or a rebalance move: the dispatcher's view was wrong or improved.</summary>
     Reassignment,
-    /// <summary>Unassigned because the assigned elevator filled up and handed the pickup back (full-load bypass).</summary>
+    /// <summary>Unassigned because the elevator was full: it handed the pickup back (full-load bypass) or rejected it for capacity.</summary>
     BypassedFull,
-    /// <summary>Left behind at an open door because the elevator was full; or the assigned elevator is in maintenance.</summary>
+    /// <summary>Left behind at an open door because the elevator was full (and still waiting for room); or the
+    /// assigned elevator is in maintenance / rejected for maintenance.</summary>
     Blocked,
     /// <summary>Assigned elevator is completing a stop that was already in progress when the assignment was accepted.</summary>
     FinishingDoorCycle,
@@ -124,7 +125,14 @@ public static class PassengerLifecycle
                     break;
                 case AssignmentRejected rej when passengers.GetValueOrDefault(rej.RequestId) is { BoardedAt: null } p:
                     p.Rejections++;
-                    p.Status = Status.Reassignment;
+                    // The reason decides where the time goes: a stale view is a dispatch problem; a full or
+                    // out-of-service elevator is a capacity/availability problem.
+                    p.Status = rej.Reason switch
+                    {
+                        AssignmentReason.Maintenance => Status.Blocked,
+                        AssignmentReason.Capacity => p.Status == Status.Blocked ? Status.Blocked : Status.BypassedFull,
+                        _ => Status.Reassignment,
+                    };
                     p.Elevator = null;
                     break;
                 case AssignmentReleased rel when passengers.GetValueOrDefault(rel.RequestId) is { BoardedAt: null } p && p.Elevator == rel.ElevatorId:
