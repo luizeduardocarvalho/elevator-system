@@ -1,0 +1,23 @@
+# Lunch: two humps, out to and back from the lobby, plus interfloor trips.
+# 20 floors, 4 elevators, 30 minutes of traffic; the run continues until everyone is delivered (or 90 min).
+# Same peak rate (12/min) as up-peak and down-peak, with a trough of 6/min between the two humps.
+name: lunch
+seed: 1
+building:
+  floors: 20
+  elevators: 4
+  capacity: 10
+  bypassThreshold: 0.8
+scheduling: fifo
+dispatch: nearest
+maxSimTimeS: 5400
+traffic:
+  profile:
+    lobby: 1
+    mix: { fromLobby: 0.40, toLobby: 0.40, interfloor: 0.20 }
+    rate:
+      - { atS: 0,    perMinute: 4 }
+      - { atS: 450,  perMinute: 12 }
+      - { atS: 900,  perMinute: 6 }
+      - { atS: 1350, perMinute: 12 }
+      - { atS: 1800, perMinute: 4 }

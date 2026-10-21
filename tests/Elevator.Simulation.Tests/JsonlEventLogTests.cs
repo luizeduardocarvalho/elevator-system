@@ -24,6 +24,14 @@ public class JsonlEventLogTests
             new PassengerBoarded(t, 1, 0, 2),
             new PassengerAlighted(t, 1, 0, 3),
             new SimulationEnded(t, 1, 0),
+            new RequestSubmitted(t, 5, 1, 9),
+            new AssignmentProposed(t, 5, 2, 12.5, 30_000, false),
+            new AssignmentAccepted(t, 5, 2),
+            new AssignmentRejected(t, 5, 1, AssignmentReason.Stale),
+            new AssignmentReleased(t, 5, 2, AssignmentReason.BypassedFull),
+            new DispatchDeferred(t, 5),
+            new DuplicateSubmission(t, 5),
+            new PassengerLeftBehind(t, 5, 2, 1),
         ];
 
         using var writer = new StringWriter();

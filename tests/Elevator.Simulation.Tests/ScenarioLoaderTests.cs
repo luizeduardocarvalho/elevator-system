@@ -41,4 +41,32 @@ public class ScenarioLoaderTests
     [Fact]
     public void Missing_file_is_reported() =>
         Assert.StartsWith("scenario file not found", Assert.Single(ScenarioLoader.LoadFile("nope.yaml").Errors));
+
+    [Fact]
+    public void Building_dispatch_latency_and_profile_are_loaded()
+    {
+        var s = ScenarioLoader.Load("""
+            building: { floors: 20, elevators: 4, capacity: 12, bypassThreshold: 0.75 }
+            dispatch: roundrobin
+            latency: { snapshotMs: 500, dispatchMs: 100 }
+            traffic:
+              profile:
+                lobby: 1
+                mix: { fromLobby: 0.85, toLobby: 0.05, interfloor: 0.10 }
+                rate: [ { atS: 0, perMinute: 4 }, { atS: 600, perMinute: 12 } ]
+            """).Scenario!;
+        Assert.Equal((20, 4, 12, 0.75, "roundrobin"), (s.Floors, s.Elevators, s.Capacity, s.BypassThreshold, s.Dispatch));
+        Assert.Equal(new MessageLatency(500, 100), s.Latency);
+        Assert.Equal(2, s.Profile!.Rate.Count);
+    }
+
+    [Theory]
+    [InlineData("building: { elevators: 0 }", "building.elevators must be at least 1")]
+    [InlineData("building: { capacity: 0 }", "building.capacity must be at least 1")]
+    [InlineData("building: { bypassThreshold: 1.5 }", "building.bypassThreshold must be in (0, 1]")]
+    [InlineData("dispatch: psychic", "unknown dispatch 'psychic'")]
+    [InlineData("floors: 10\nbuilding: { floors: 12 }", "give 'floors' or 'building.floors', not both")]
+    [InlineData("traffic: { profile: { mix: { fromLobby: 1 }, rate: [ { atS: 0, perMinute: 1 } ] } }", "traffic.profile.rate needs at least two points")]
+    public void Invalid_building_settings_are_reported(string yaml, string expected) =>
+        Assert.Contains(Errors(yaml.Replace("\\n", "\n")), e => e.StartsWith(expected, StringComparison.Ordinal));
 }

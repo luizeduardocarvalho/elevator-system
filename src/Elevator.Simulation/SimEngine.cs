@@ -1,0 +1,126 @@
+using Elevator.Domain;
+using Elevator.Domain.Control;
+using Elevator.Domain.Events;
+using Elevator.Policy;
+using Elevator.Policy.Dispatch;
+
+namespace Elevator.Simulation;
+
+public sealed record SimulationResult(IReadOnlyList<DomainEvent> Events, int Delivered, int Unserved, SimTime EndedAt);
+
+/// <summary>
+/// The deterministic shell (ADR-005): delivers protocol messages to the shared handlers from one priority queue
+/// ordered by (sim time, sequence number). No threads, no decisions; same handlers as the actor runtime.
+///
+/// The outer loop still moves a <see cref="SimClock"/> in fixed ticks (the future TUI's frame), but a tick only
+/// bounds how far the queue is drained, so the event log is identical for any tick size.
+/// </summary>
+public sealed class SimEngine
+{
+    private readonly PriorityQueue<Envelope, (long TimeMs, long Seq)> _queue = new();
+    private readonly Dictionary<Address, IHandler> _handlers = [];
+    private readonly Dictionary<Address, SimTime> _scheduledWakeUps = [];
+    private readonly List<ElevatorHandler> _elevators = [];
+    private readonly PassengersHandler _passengers;
+    private readonly Outbox _outbox = new();
+    private readonly int _expectedPassengers;
+    private long _seq;
+
+    public static SimulationResult Run(Scenario scenario, Strategy? strategy = null, long tickMs = ScenarioRunner.DefaultTickMs) =>
+        new SimEngine(scenario, strategy ?? new Strategy(scenario.Scheduling, scenario.Dispatch)).Run(tickMs);
+
+    private SimEngine(Scenario scenario, Strategy strategy)
+    {
+        Scenario = scenario;
+        Strategy = strategy;
+        var scheduling = SchedulingPolicies.Create(strategy.Scheduling);
+        var dispatch = DispatchPolicies.Create(strategy.Dispatch, scheduling, scenario.Timing);
+        var latency = scenario.Latency ?? MessageLatency.None;
+
+        for (var i = 0; i < scenario.Elevators; i++)
+        {
+            var elevator = new ElevatorUnit(i, scenario.Floors, scenario.Timing, scheduling, Floors.Lowest, scenario.Capacity, scenario.BypassThreshold);
+            var handler = new ElevatorHandler(elevator, new ElevatorHandlerOptions(SnapshotDelayMs: latency.SnapshotMs), estimator: null);
+            _elevators.Add(handler);
+            Register(handler);
+        }
+        Register(new DispatcherHandler(dispatch, scenario.Elevators, scenario.Timing, new DispatcherOptions(latency.DispatchMs)));
+        _passengers = new PassengersHandler(scenario.Capacity);
+        Register(_passengers);
+
+        var passengers = ScenarioRunner.BuildPassengers(scenario);
+        _expectedPassengers = passengers.Count;
+        Log.Add(new SimulationStarted(SimTime.Zero, scenario.Name, scenario.Seed, scenario.Floors, scheduling.Name, passengers.Count,
+            scenario.Elevators, dispatch.Name, scenario.Capacity));
+
+        foreach (var e in _elevators) Enqueue(SimTime.Zero, new Envelope(e.Address, new Start()));
+        foreach (var p in passengers) Enqueue(SimTime.Zero, new Envelope(Address.Passengers, new PassengerArrives(p.ToRequest()), p.ArrivesAt.Ms));
+    }
+
+    public Scenario Scenario { get; }
+
+    public Strategy Strategy { get; }
+
+    public List<DomainEvent> Log { get; } = [];
+
+    private void Register(IHandler handler) => _handlers.Add(handler.Address, handler);
+
+    private void Enqueue(SimTime now, Envelope envelope)
+    {
+        if (envelope.To.Kind == ActorKind.Client) return; // nobody waits on acks in a simulation
+        _queue.Enqueue(envelope, (now.Ms + envelope.DelayMs, _seq++));
+    }
+
+    private bool Finished =>
+        _passengers.Arrived == _expectedPassengers && _passengers.Delivered == _expectedPassengers
+        && _elevators.All(e => e.Elevator.State == ElevatorState.Idle && e.Elevator.NextDeadline is null);
+
+    private SimulationResult Run(long tickMs)
+    {
+        if (tickMs <= 0) throw new ArgumentOutOfRangeException(nameof(tickMs));
+
+        var clock = new SimClock();
+        var endedAt = Scenario.MaxSimTime;
+        while (clock.Now < Scenario.MaxSimTime)
+        {
+            var target = SimTime.Min(clock.Now.AddMs(tickMs), Scenario.MaxSimTime);
+            if (DrainUntil(target) is { } finishedAt)
+            {
+                endedAt = finishedAt;
+                break;
+            }
+            clock.AdvanceTo(target);
+        }
+
+        var unserved = _expectedPassengers - _passengers.Delivered;
+        Log.Add(new SimulationEnded(endedAt, _passengers.Delivered, unserved));
+        return new SimulationResult(Log, _passengers.Delivered, unserved, endedAt);
+    }
+
+    /// <summary>Delivers every message due at or before <paramref name="target"/>; returns the finish time if the run completed.</summary>
+    private SimTime? DrainUntil(SimTime target)
+    {
+        if (_expectedPassengers == 0) return SimTime.Zero;
+
+        while (_queue.TryPeek(out var envelope, out var key) && key.TimeMs <= target.Ms)
+        {
+            _queue.Dequeue();
+            var now = new SimTime(key.TimeMs);
+            var handler = _handlers[envelope.To];
+
+            _outbox.Clear();
+            handler.Handle(envelope.Message, now, _outbox);
+            Log.AddRange(_outbox.Events);
+            foreach (var next in _outbox.Messages) Enqueue(now, next);
+
+            if (handler.NextWakeUp is { } wake && (!_scheduledWakeUps.TryGetValue(handler.Address, out var scheduled) || scheduled != wake))
+            {
+                _scheduledWakeUps[handler.Address] = wake;
+                _queue.Enqueue(new Envelope(handler.Address, new WakeUp()), (wake.Ms, _seq++));
+            }
+
+            if (Finished) return now;
+        }
+        return null;
+    }
+}

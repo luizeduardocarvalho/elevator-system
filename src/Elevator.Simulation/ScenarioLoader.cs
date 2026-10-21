@@ -1,5 +1,6 @@
 using Elevator.Domain;
 using Elevator.Policy;
+using Elevator.Policy.Dispatch;
 using YamlDotNet.Core;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
@@ -38,12 +39,27 @@ public static class ScenarioLoader
         if (dto is null) return new(null, ["scenario is empty"]);
 
         var errors = new List<string>();
-        var floors = dto.Floors ?? 10;
+        if (dto.Floors is not null && dto.Building?.Floors is not null) errors.Add("give 'floors' or 'building.floors', not both");
+        var floors = dto.Building?.Floors ?? dto.Floors ?? 10;
         if (floors < 2) errors.Add($"floors must be at least 2 (got {floors})");
+
+        var elevators = dto.Building?.Elevators ?? 1;
+        if (elevators < 1) errors.Add($"building.elevators must be at least 1 (got {elevators})");
+        var capacity = dto.Building?.Capacity ?? 10;
+        if (capacity < 1) errors.Add($"building.capacity must be at least 1 (got {capacity})");
+        var bypass = dto.Building?.BypassThreshold ?? 0.8;
+        if (bypass is <= 0 or > 1) errors.Add($"building.bypassThreshold must be in (0, 1] (got {bypass})");
 
         var scheduling = dto.Scheduling ?? "fifo";
         if (!SchedulingPolicies.Names.Contains(scheduling, StringComparer.OrdinalIgnoreCase))
             errors.Add($"unknown scheduling '{scheduling}' (known: {string.Join(", ", SchedulingPolicies.Names)})");
+
+        var dispatch = dto.Dispatch ?? "nearest";
+        if (!DispatchPolicies.Names.Contains(dispatch, StringComparer.OrdinalIgnoreCase))
+            errors.Add($"unknown dispatch '{dispatch}' (known: {string.Join(", ", DispatchPolicies.Names)})");
+
+        var latency = new MessageLatency(dto.Latency?.SnapshotMs ?? 0, dto.Latency?.DispatchMs ?? 0);
+        if (latency.SnapshotMs < 0 || latency.DispatchMs < 0) errors.Add("latency values must be >= 0");
 
         var maxSimTimeS = dto.MaxSimTimeS ?? 3600;
         if (maxSimTimeS <= 0) errors.Add("maxSimTimeS must be > 0");
@@ -87,6 +103,16 @@ public static class ScenarioLoader
             traffic = new PoissonTraffic(poisson.RatePerMinute ?? 0, poisson.DurationS ?? 0, poisson.StartS ?? 0);
         }
 
+        TrafficProfile? profile = null;
+        if (dto.Traffic?.Profile is { } prof)
+        {
+            profile = new TrafficProfile(
+                (prof.Rate ?? []).Select(r => new RatePoint(r.AtS ?? -1, r.PerMinute ?? -1)).ToList(),
+                new TrafficMix(prof.Mix?.FromLobby ?? 0, prof.Mix?.ToLobby ?? 0, prof.Mix?.Interfloor ?? 0),
+                prof.Lobby ?? Floors.Lowest);
+            errors.AddRange(profile.Validate(floors));
+        }
+
         if (errors.Count > 0) return new(null, errors);
 
         return new(new Scenario(
@@ -97,7 +123,13 @@ public static class ScenarioLoader
             scheduling.ToLowerInvariant(),
             SimTime.FromSeconds(maxSimTimeS),
             passengers,
-            traffic), []);
+            traffic,
+            elevators,
+            capacity,
+            bypass,
+            dispatch.ToLowerInvariant(),
+            profile,
+            latency), []);
     }
 
     // YAML shape. Everything nullable so missing keys can be reported instead of silently defaulting to 0.
@@ -107,6 +139,9 @@ public static class ScenarioLoader
         public int? Seed { get; set; }
         public int? Floors { get; set; }
         public string? Scheduling { get; set; }
+        public string? Dispatch { get; set; }
+        public BuildingDto? Building { get; set; }
+        public LatencyDto? Latency { get; set; }
         public double? MaxSimTimeS { get; set; }
         public TimingDto? Timing { get; set; }
         public List<PassengerDto>? Passengers { get; set; }
@@ -132,6 +167,41 @@ public static class ScenarioLoader
     private sealed class TrafficDto
     {
         public PoissonDto? Poisson { get; set; }
+        public ProfileDto? Profile { get; set; }
+    }
+
+    private sealed class BuildingDto
+    {
+        public int? Floors { get; set; }
+        public int? Elevators { get; set; }
+        public int? Capacity { get; set; }
+        public double? BypassThreshold { get; set; }
+    }
+
+    private sealed class LatencyDto
+    {
+        public long? SnapshotMs { get; set; }
+        public long? DispatchMs { get; set; }
+    }
+
+    private sealed class ProfileDto
+    {
+        public int? Lobby { get; set; }
+        public MixDto? Mix { get; set; }
+        public List<RatePointDto>? Rate { get; set; }
+    }
+
+    private sealed class MixDto
+    {
+        public double? FromLobby { get; set; }
+        public double? ToLobby { get; set; }
+        public double? Interfloor { get; set; }
+    }
+
+    private sealed class RatePointDto
+    {
+        public double? AtS { get; set; }
+        public double? PerMinute { get; set; }
     }
 
     private sealed class PoissonDto

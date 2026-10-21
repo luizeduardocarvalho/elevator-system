@@ -1,0 +1,23 @@
+# Morning up-peak: most trips start at the lobby.
+# 20 floors, 4 elevators, 30 minutes of traffic; the run continues until everyone is delivered (or 90 min).
+# Same peak rate (12/min) for every profile: same building, same population. Under FIFO, down-peak saturates
+# (see docs/results/m1-baseline.md); that is a finding, not a calibration error.
+name: up-peak
+seed: 1
+building:
+  floors: 20
+  elevators: 4
+  capacity: 10
+  bypassThreshold: 0.8
+scheduling: fifo
+dispatch: nearest
+maxSimTimeS: 5400
+traffic:
+  profile:
+    lobby: 1
+    mix: { fromLobby: 0.85, toLobby: 0.05, interfloor: 0.10 }
+    rate:
+      - { atS: 0,    perMinute: 4 }
+      - { atS: 600,  perMinute: 12 }
+      - { atS: 1200, perMinute: 12 }
+      - { atS: 1800, perMinute: 4 }
