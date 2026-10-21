@@ -67,3 +67,9 @@ against them:
 
 Every type round-trips through JSONL (tested), and no default run emits any of them. The full list and the owners
 are in [contract-v3.md](../contract-v3.md).
+
+**v3.1 (contract amendment):**
+- `PassengerArrived` gains optional `Load`, `Vip` and `AccessLevel`.
+- `SimulationStarted` gains an optional `Fleet`.
+- All are written only when set, so default logs are byte-identical and older logs still read (see
+  [contract-v3.md](../contract-v3.md) § v3.1).

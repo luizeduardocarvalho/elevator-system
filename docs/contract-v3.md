@@ -85,3 +85,24 @@ Command lines):
 
 001–010 exist. **011 = TUI** (Stage 3). **012 = eligibility policies and elevator types**, **013 = maintenance,
 emergency, watchdog and reassignment** (Stage 4).
+
+## v3.1 amendment: passenger attributes and fleet in the log
+
+Added after both stages were built, to close three gaps they reported:
+- the TUI showed load in people, not units;
+- `bypassed_full` used the building-wide capacity on typed fleets;
+- VIP waits could not be measured.
+
+All fields are **optional and written only when they carry information**, so default runs serialise exactly as
+before and logs written before the amendment read the same (tested with v2-medium lines).
+
+| Event | New field | Meaning when absent | Written when | Writer | Readers |
+|---|---|---|---|---|---|
+| `PassengerArrived` | `Load` (int?) | 1 unit (a person) | ≠ 1 | Stage 4 passengers handler | TUI (load units, joined by passenger id), Metrics |
+| `PassengerArrived` | `Vip` (bool?) | not VIP | true | Stage 4 passengers handler | Metrics (VIP vs non-VIP wait), TUI |
+| `PassengerArrived` | `AccessLevel` (int?) | 0 | > 0 | Stage 4 passengers handler | event tail, audits |
+| `SimulationStarted` | `Fleet` (list of `FleetEntry(ElevatorId, Type, Capacity, BypassThreshold, ServedFloors)`) | every elevator uses the building values | a typed fleet is configured | Stage 4 engine setup | Metrics (per-elevator full threshold for `bypassed_full`), TUI (type, capacity in units) |
+
+- **Helpers:** `PassengerArrived.LoadUnits` and `.IsVip` (never serialised).
+- **No per-boarding fields.** `PassengerBoarded` and `PassengerAlighted` are unchanged: consumers join the arrival by
+  passenger id.

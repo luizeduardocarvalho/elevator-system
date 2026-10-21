@@ -41,15 +41,47 @@ namespace Elevator.Domain.Events;
 [JsonDerivedType(typeof(DispatchEvaluated), nameof(DispatchEvaluated))]
 public abstract record DomainEvent([property: JsonPropertyName("t"), JsonPropertyOrder(-1)] SimTime At);
 
+/// <param name="Fleet">v3.1 contract: per-elevator type, capacity, bypass threshold and served floors. Written only for
+/// a configured (typed) fleet; null for the default building, whose values are the building-wide ones above.</param>
 public sealed record SimulationStarted(
     SimTime At, string Scenario, int Seed, int Floors, string Scheduling, int Passengers,
     int Elevators = 1, string Dispatch = "none", int Capacity = int.MaxValue, double BypassThreshold = 1.0,
-    string CapacityMode = "next-trip")
-    : DomainEvent(At);
+    string CapacityMode = "next-trip",
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<FleetEntry>? Fleet = null)
+    : DomainEvent(At)
+{
+    public bool Equals(SimulationStarted? other) =>
+        other is not null && At == other.At && Scenario == other.Scenario && Seed == other.Seed && Floors == other.Floors
+        && Scheduling == other.Scheduling && Passengers == other.Passengers && Elevators == other.Elevators
+        && Dispatch == other.Dispatch && Capacity == other.Capacity && BypassThreshold.Equals(other.BypassThreshold)
+        && CapacityMode == other.CapacityMode
+        && (Fleet is null ? other.Fleet is null : other.Fleet is not null && Fleet.SequenceEqual(other.Fleet));
+
+    public override int GetHashCode() => HashCode.Combine(At, Scenario, Seed, Floors, Passengers, Elevators, Fleet?.Count);
+}
+
+/// <summary>One elevator of a configured fleet (v3.1 contract), as logged in <see cref="SimulationStarted.Fleet"/>.</summary>
+/// <param name="ServedFloors">Bit f = floor f, as in ElevatorSnapshot.ServedFloors.</param>
+public sealed record FleetEntry(int ElevatorId, string Type, int Capacity, double BypassThreshold, ulong ServedFloors);
 
 public sealed record SimulationEnded(SimTime At, int Delivered, int Unserved) : DomainEvent(At);
 
-public sealed record PassengerArrived(SimTime At, int PassengerId, int From, int To) : DomainEvent(At);
+/// <param name="Load">v3.1 contract: load units when not 1 (null = a person, 1 unit). Written only when set.</param>
+/// <param name="Vip">v3.1 contract: true for a VIP passenger; null otherwise. Written only when set.</param>
+/// <param name="AccessLevel">v3.1 contract: access level when above 0 (restricted floors); null = 0. Written only when set.</param>
+public sealed record PassengerArrived(
+    SimTime At, int PassengerId, int From, int To,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Load = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? Vip = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? AccessLevel = null)
+    : DomainEvent(At)
+{
+    [JsonIgnore]
+    public int LoadUnits => Load ?? 1;
+
+    [JsonIgnore]
+    public bool IsVip => Vip == true;
+}
 
 public sealed record PassengerBoarded(SimTime At, int PassengerId, int ElevatorId, int Floor) : DomainEvent(At);
 

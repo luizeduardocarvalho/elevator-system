@@ -144,4 +144,57 @@ public class SharedContractTests
         Assert.Equal(new Dictionary<(int, Direction), int> { [(5, Direction.Up)] = 1, [(3, Direction.Down)] = 1, [(7, Direction.Up)] = 1 },
             engine.Waiting);
     }
+
+    // ---- v3.1 amendment: optional fields, written only when set ----
+
+    [Fact]
+    public void Passenger_attributes_round_trip_and_are_absent_when_unset()
+    {
+        var t = new SimTime(1_000);
+        DomainEvent[] events =
+        [
+            new PassengerArrived(t, 1, 1, 9, Load: 4, Vip: true, AccessLevel: 2),
+            new PassengerArrived(t, 2, 3, 7),
+        ];
+        using var writer = new StringWriter();
+        JsonlEventLog.Write(writer, events);
+        var lines = writer.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(events, JsonlEventLog.Read(new StringReader(writer.ToString())));
+        Assert.Contains("\"load\":4", lines[0], StringComparison.Ordinal);
+        Assert.Equal("""{"seq":1,"type":"PassengerArrived","t":1000,"passengerId":2,"from":3,"to":7}""", lines[1]); // unchanged shape
+        var read = (PassengerArrived)JsonlEventLog.Deserialize(lines[1]);
+        Assert.Equal((1, false), (read.LoadUnits, read.IsVip));
+    }
+
+    [Fact]
+    public void Fleet_round_trips_and_is_absent_for_the_default_building()
+    {
+        FleetEntry[] fleet = [new(0, "local", 10, 0.8, 0b1111_1110), new(1, "express", 12, 0.8, 0b1000_0010), new(2, "freight", 30, 1.0, 0b1111_1110)];
+        DomainEvent[] events =
+        [
+            new SimulationStarted(SimTime.Zero, "typed", 1, 7, "look", 10, 3, "cost", 10, 0.8, "next-trip", fleet),
+            new SimulationStarted(SimTime.Zero, "plain", 1, 10, "look", 10, 4, "cost", 10, 0.8),
+        ];
+        using var writer = new StringWriter();
+        JsonlEventLog.Write(writer, events);
+
+        Assert.Equal(events, JsonlEventLog.Read(new StringReader(writer.ToString())));
+        Assert.DoesNotContain("fleet", writer.ToString().Split('\n')[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Logs_written_before_the_amendment_read_with_nulls_and_reserialise_unchanged()
+    {
+        // Lines from a v2-medium log of lunch.yaml, before the v3.1 fields existed.
+        const string started = """{"seq":0,"type":"SimulationStarted","t":0,"scenario":"lunch","seed":1,"floors":20,"scheduling":"look","passengers":264,"elevators":4,"dispatch":"cost","capacity":10,"bypassThreshold":0.8,"capacityMode":"next-trip"}""";
+        const string arrived = """{"seq":1,"type":"PassengerArrived","t":1430,"passengerId":1,"from":16,"to":1}""";
+
+        var s = Assert.IsType<SimulationStarted>(JsonlEventLog.Deserialize(started));
+        var a = Assert.IsType<PassengerArrived>(JsonlEventLog.Deserialize(arrived));
+        Assert.Null(s.Fleet);
+        Assert.Equal((null, null, null, 1, false), (a.Load, a.Vip, a.AccessLevel, a.LoadUnits, a.IsVip));
+        Assert.Equal(started, JsonlEventLog.Serialize(s, 0));
+        Assert.Equal(arrived, JsonlEventLog.Serialize(a, 1));
+    }
 }
