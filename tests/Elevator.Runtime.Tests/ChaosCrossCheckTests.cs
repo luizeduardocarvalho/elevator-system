@@ -65,7 +65,9 @@ public class ChaosCrossCheckTests
             Assert.Single(log.OfType<EmergencyCleared>(), m => m.ElevatorId == 2);
             Assert.Equal(log.OfType<FaultDetected>().Count(), log.OfType<FaultRecovered>().Count()); // every fault recovered
         }
-        Assert.Equal(sim.Ops.MaintenanceS, actors.Ops.MaintenanceS, 0); // 180 s in both: commands in sim time
+        // 180 s and 60 s in the sim. The runtime injector waits on the wall clock, so a command can land a little late
+        // under load (5 ms of wall time is 1 s of sim time at 200×).
+        Assert.InRange(actors.Ops.MaintenanceS, sim.Ops.MaintenanceS - 3, sim.Ops.MaintenanceS + 3);
         Assert.InRange(actors.Ops.EmergencyS, sim.Ops.EmergencyS - 3, sim.Ops.EmergencyS + 3);
 
         // Light load: the experience agrees within timer jitter.
