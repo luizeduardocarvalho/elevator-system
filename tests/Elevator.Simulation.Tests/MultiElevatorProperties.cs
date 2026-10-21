@@ -15,7 +15,7 @@ public class MultiElevatorProperties
 {
     public sealed record Case(Scenario Scenario, Strategy Strategy);
 
-    public static readonly string[] Schedulings = ["fifo"];
+    public static readonly string[] Schedulings = ["fifo", "look"];
     public static readonly string[] Dispatches = ["roundrobin", "nearest"];
 
     private static Gen<Case> CaseGen() =>

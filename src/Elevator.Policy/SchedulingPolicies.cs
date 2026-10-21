@@ -8,6 +8,7 @@ public static class SchedulingPolicies
     private static readonly Dictionary<string, Func<ISchedulingPolicy>> Factories = new(StringComparer.OrdinalIgnoreCase)
     {
         ["fifo"] = () => new FifoScheduling(),
+        ["look"] = () => new LookScheduling(),
     };
 
     public static IReadOnlyCollection<string> Names => Factories.Keys;
