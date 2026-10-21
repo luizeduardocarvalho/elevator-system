@@ -29,6 +29,10 @@ internal sealed class RunCommand : Command<RunCommand.Settings>
         [Description("Override the scenario's dispatch policy (roundrobin, nearest...).")]
         public string? Dispatch { get; init; }
 
+        [CommandOption("--rebalance")]
+        [Description("Enable optional rebalancing of sticky assignments (ADR-006).")]
+        public bool Rebalance { get; init; }
+
         [CommandOption("--passengers <PATH>")]
         [Description("Write one CSV row per passenger: lifecycle timestamps and wait attribution.")]
         public string? Passengers { get; init; }
@@ -74,7 +78,7 @@ internal sealed class RunCommand : Command<RunCommand.Settings>
             scenario = scenario with { Dispatch = dispatch.ToLowerInvariant() };
         }
 
-        var result = ScenarioRunner.Run(scenario);
+        var result = ScenarioRunner.Run(scenario, new Strategy(scenario.Scheduling, scenario.Dispatch, settings.Rebalance));
 
         var logPath = settings.Log ?? Path.Combine("out", $"{scenario.Name}-seed{scenario.Seed}.jsonl");
         JsonlEventLog.WriteFile(logPath, result.Events);

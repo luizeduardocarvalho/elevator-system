@@ -34,3 +34,28 @@ public class CapacityScenarioTests
         Assert.Equal(27.0, p3.WaitS!.Value, 6);
     }
 }
+
+public class RebalanceScenarioTests
+{
+    /// <summary>
+    /// Lunch traffic (seed 3) with LOOK + Nearest + rebalancing, where Nearest leaves room for improvement so moves
+    /// actually happen. Every move must appear as Released(Rebalance) followed by a new acceptance of the same request,
+    /// no request moves more than twice, and everyone is still served exactly once.
+    /// </summary>
+    [Fact]
+    public void Rebalanced_requests_are_released_then_reassigned_and_served_once()
+    {
+        var scenario = Repo.Load("lunch.yaml") with { Seed = 3 };
+        var result = SimEngine.Run(scenario, new Strategy("look", "nearest", Rebalance: true));
+
+        var moves = result.Events.OfType<AssignmentReleased>().Where(r => r.Reason == AssignmentReason.Rebalance).ToList();
+        Assert.NotEmpty(moves);
+        foreach (var move in moves)
+        {
+            var after = result.Events.SkipWhile(e => e != move).Skip(1);
+            Assert.Contains(after, e => e is AssignmentAccepted a && a.RequestId == move.RequestId);
+        }
+        Assert.Equal(0, result.Unserved);
+        Assert.All(PassengerLifecycle.Analyze(result.Events), p => Assert.True(p.Reassignments <= 2));
+    }
+}

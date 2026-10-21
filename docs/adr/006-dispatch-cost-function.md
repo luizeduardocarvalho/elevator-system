@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (v2-medium, 2026-10-21). Rebalancing results are added in the "Rebalancing" section (M4).
+Accepted (v2-medium, 2026-10-21).
 
 ## Context
 
@@ -106,3 +106,32 @@ Against the FIFO+Nearest baseline: −10.0 / −230.4 / −81.4 s average wait.
   - Lunch with `latency.snapshotMs: 3000`, seed 1: 454 stale rejections and 2 forced assignments, everyone served.
   - The `reassignment` bucket shows the cost. This is the scenario the staleness rule exists for, and it can be
     reproduced exactly in the sim.
+
+## Rebalancing (optional, `+rebalance`)
+
+**Decision.** Every 5 s, `HysteresisRebalance` reconsiders each assigned, not-yet-picked-up request using the same
+cost function. The current elevator is evaluated with the request removed from its snapshot, so both sides compare
+"adding r" on equal terms. A request moves only if all of these hold:
+- the best other elevator is cheaper by more than **H = 15 s** (hysteresis, so estimate noise never makes requests flap);
+- the current elevator is **not within stopping distance**: its projected pickup is more than one floor of travel
+  plus the door opening away (the commit point);
+- the request has moved **fewer than 2 times**.
+
+A move is `Unassign` → `Released(Rebalance)` → re-dispatch → `Accepted`. Time between the release and the new
+acceptance goes to the `reassignment` bucket.
+
+**Measured** ([m4-rebalance](../results/m4-rebalance.md), held-out seeds 21–40, paired against sticky LOOK+Cost):
+
+| Profile | Δ wait avg | Δ wait p95 | Moves per run (seeds 21–25) |
+|---|---|---|---|
+| up-peak | −0.3 ± 0.4 s (n.s.) | −0.4 ± 0.5 s (n.s.) | ~6 of ~225 passengers |
+| down-peak | −0.7 ± 0.5 s | −2.3 ± 1.8 s | ~37 of ~225 (16%) |
+| lunch | −0.3 ± 0.5 s (n.s.) | −1.3 ± 2.0 s (n.s.) | ~10 of ~206 |
+
+On top of Nearest, rebalancing recovers most of Nearest's gap. Lunch wait goes 20.9 → 15.3 s, against 13.8 s for
+sticky Cost. So rebalancing repairs poor initial decisions, and cost-based dispatch rarely makes them.
+
+**Consequence: sticky stays the default.** At best rebalancing saves 0.7 s on average, at down-peak, while changing
+the displayed elevator for one passenger in six. Under destination dispatch that is a real usability cost the
+simulation does not model: people walking to the wrong door. Rebalancing stays selectable for buildings that
+weigh it differently.

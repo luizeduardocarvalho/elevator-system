@@ -45,14 +45,16 @@ public sealed class SimEngine
             _elevators.Add(handler);
             Register(handler);
         }
-        Register(new DispatcherHandler(dispatch, scenario.Elevators, scenario.Timing, new DispatcherOptions(latency.DispatchMs)));
+        var rebalance = strategy.Rebalance ? new HysteresisRebalance(scheduling, scenario.Timing) : null;
+        Register(new DispatcherHandler(dispatch, scenario.Elevators, scenario.Timing,
+            new DispatcherOptions(latency.DispatchMs, RebalanceIntervalMs: rebalance is null ? null : 5_000), rebalance));
         _passengers = new PassengersHandler(scenario.Capacity);
         Register(_passengers);
 
         var passengers = ScenarioRunner.BuildPassengers(scenario);
         _expectedPassengers = passengers.Count;
         Log.Add(new SimulationStarted(SimTime.Zero, scenario.Name, scenario.Seed, scenario.Floors, scheduling.Name, passengers.Count,
-            scenario.Elevators, dispatch.Name, scenario.Capacity));
+            scenario.Elevators, dispatch.Name + (rebalance is null ? "" : "+rebalance"), scenario.Capacity));
 
         foreach (var e in _elevators) Enqueue(SimTime.Zero, new Envelope(e.Address, new Start()));
         foreach (var p in passengers) Enqueue(SimTime.Zero, new Envelope(Address.Passengers, new PassengerArrives(p.ToRequest()), p.ArrivesAt.Ms));
