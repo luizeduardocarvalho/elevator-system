@@ -46,7 +46,7 @@ public class StopProjectionEquivalenceTests
         var now = snapshot.At.AddMs(c.NowDelayMs);
         var extra = Request.Create(c.Extra.From, c.Extra.To, now, Floors, id: 99_999).Value!;
 
-        var oracle = new RouteProjection(policy, ElevatorTiming.Default);
+        var oracle = new RouteProjection(policy, ElevatorTiming.Default, StopProjection.DefaultHorizonMs); // same horizon
         var fast = new StopProjection(policy, ElevatorTiming.Default);
 
         var oWith = oracle.Project(snapshot, extra, now);

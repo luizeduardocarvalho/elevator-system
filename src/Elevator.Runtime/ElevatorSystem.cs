@@ -11,6 +11,8 @@ using Elevator.Simulation;
 
 namespace Elevator.Runtime;
 
+public sealed record ActorStats(ActorKind Kind, int Actors, long Messages, WallDuration InHandlers, WallDuration Delivering);
+
 /// <summary>An accepted assignment, as seen by whoever submitted the request.</summary>
 public sealed record Assignment(int RequestId, int ElevatorId, WallDuration Latency);
 
@@ -120,6 +122,13 @@ public sealed class ElevatorSystem : IAsyncDisposable
     public Exception? Fault => _loops.FirstOrDefault(t => t.IsFaulted)?.Exception?.InnerException;
 
     public PassengersHandler PassengersForInspection => (PassengersHandler)_actors[Address.Passengers].Handler;
+
+    /// <summary>Per actor kind: messages handled, time in handlers, time delivering. Read after the system has stopped.</summary>
+    public IReadOnlyList<ActorStats> Stats() =>
+        _actors.Values.GroupBy(a => a.Handler.Address.Kind)
+            .Select(g => new ActorStats(g.Key, g.Count(), g.Sum(a => a.MessagesHandled), new WallDuration(g.Sum(a => a.HandlerTicks)),
+                new WallDuration(g.Sum(a => a.DeliveryTicks))))
+            .ToList();
 
     internal void Record(DomainEvent e) => _log.Writer.TryWrite(e);
 

@@ -11,6 +11,12 @@ public sealed record LatencySummary(double P50Ms, double P95Ms, double P99Ms, do
 
 public sealed record BurstResult(int Submitters, int Submitted, int Assigned, int Lost, int Duplicated, LatencySummary Latency, TimeSpan Wall)
 {
+    /// <summary>Per actor kind, after the run: where the wall time of the pipeline went.</summary>
+    public IReadOnlyList<ActorStats> Stats { get; init; } = [];
+
+    /// <summary>Decisions made by the primary dispatch policy vs the overload fallback.</summary>
+    public (int Primary, int Fallback) Decisions { get; init; }
+
     public double ThroughputPerSecond => Assigned / Math.Max(Wall.TotalSeconds, 1e-9);
 }
 
@@ -30,10 +36,14 @@ public static class PerfRunner
     public static async Task<BurstResult> Burst(RuntimeOptions options, int submitters, int requestsEach, TimeSpan timeout, int seed = 1, TextWriter? log = null)
     {
         var checker = new OwnershipChecker();
-        await using var system = ElevatorSystem.Start(options with { KeepEvents = false }, (seq, e) =>
+        var overloaded = false;
+        var (primary, fallback) = (0, 0);
+        var system = ElevatorSystem.Start(options with { KeepEvents = false }, (seq, e) =>
         {
             checker.Observe(seq, e);
             log?.WriteLine(Simulation.JsonlEventLog.Serialize(e, seq));
+            if (e is OverloadModeChanged o) overloaded = o.Active;
+            if (e is AssignmentProposed) { if (overloaded) fallback++; else primary++; }
         });
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var latencies = new long[submitters * requestsEach];
@@ -59,9 +69,14 @@ public static class PerfRunner
         var wall = Stopwatch.GetElapsedTime(started);
         if (system.Fault is { } fault) throw new InvalidOperationException("actor fault during perf run", fault);
 
+        await system.DisposeAsync().ConfigureAwait(false); // stop first: counters are then final
         var submitted = submitters * requestsEach;
         return new BurstResult(submitters, submitted, assigned, submitted - assigned, checker.Violations,
-            Summarize(latencies.Where(t => t > 0)), wall);
+            Summarize(latencies.Where(t => t > 0)), wall)
+        {
+            Stats = system.Stats(),
+            Decisions = (primary, fallback),
+        };
     }
 
     /// <summary>

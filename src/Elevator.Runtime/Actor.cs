@@ -18,6 +18,14 @@ internal sealed class Actor(IHandler handler, ElevatorSystem system, ChannelRead
 
     public IHandler Handler => handler;
 
+    /// <summary>Messages handled and Stopwatch ticks spent inside the handler (written by this actor's loop only).</summary>
+    public long MessagesHandled { get; private set; }
+
+    public long HandlerTicks { get; private set; }
+
+    /// <summary>Ticks spent delivering this actor's outgoing messages (channel writes, ack completion).</summary>
+    public long DeliveryTicks { get; private set; }
+
     public Task Start(CancellationToken ct) => Task.Run(() => Loop(ct), ct);
 
     private async Task Loop(CancellationToken ct)
@@ -42,9 +50,14 @@ internal sealed class Actor(IHandler handler, ElevatorSystem system, ChannelRead
             last = now;
 
             outbox.Clear();
+            var t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             handler.Handle(message, now, outbox);
+            var t1 = System.Diagnostics.Stopwatch.GetTimestamp();
             foreach (var e in outbox.Events) system.Record(e);
             foreach (var envelope in outbox.Messages) await system.Deliver(envelope, ct).ConfigureAwait(false);
+            HandlerTicks += t1 - t0;
+            DeliveryTicks += System.Diagnostics.Stopwatch.GetTimestamp() - t1;
+            MessagesHandled++;
         }
     }
 

@@ -30,7 +30,7 @@ namespace Elevator.Policy;
 /// <para><see cref="RouteProjection"/> is kept as the reference oracle: <c>StopProjectionEquivalenceTests</c>
 /// checks that the two agree exactly on random elevators.</para>
 /// </summary>
-public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming timing, long horizonMs = 3_600_000) : IEtaEstimator
+public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming timing, long horizonMs = StopProjection.DefaultHorizonMs) : IEtaEstimator
 {
     /// <summary>
     /// Count and drop-off time of each group, in flat arrays indexed [source + 1, destination]. Source −1 means already
@@ -66,6 +66,12 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
         public string Describe() => string.Join(" ", Enumerable.Range(0, Counts.Length).Where(i => Counts[i] > 0)
             .Select(i => $"({i / Width - 1}, {i % Width})x{Counts[i]}@{Done[i]}"));
     }
+
+    /// <summary>
+    /// How far ahead a projection looks (sim time). Under a large backlog with capacity binding, an elevator needs many
+    /// trips to clear its queue and the projection would replay all of them; the horizon bounds that work.
+    /// </summary>
+    public const long DefaultHorizonMs = 600_000;
 
     public SimTime? EstimatePickup(ElevatorSnapshot snapshot, Request request, SimTime now) => Project(snapshot, request, now).PickupAt;
 

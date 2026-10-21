@@ -54,8 +54,17 @@ public sealed class CostBasedDispatch(ISchedulingPolicy scheduling, ElevatorTimi
             if (double.IsPositiveInfinity(eval.Cost)) continue;
             if (best is null || eval.Cost < best.Cost) best = new DispatchChoice(s.ElevatorId, eval.Cost, eval.PickupAt);
         }
-        return best;
+        if (best is not null) return best;
+
+        // NextTrip mode always names an elevator (ADR-010). If no projection reaches the pickup within its horizon
+        // (a huge backlog), rank by Nearest's effective distance instead of deferring; no ETA, so no staleness check.
+        if (context.Candidates.Any(c => c.CapacityMode == CapacityMode.NextTrip && c.State != ElevatorState.Maintenance)
+            && _beyondHorizon.Choose(context) is { } fallback)
+            return fallback with { Cost = double.MaxValue, Eta = null };
+        return null;
     }
+
+    private readonly NearestDispatch _beyondHorizon = new();
 
     public CostEvaluation Evaluate(ElevatorSnapshot s, Request r, SimTime now)
     {

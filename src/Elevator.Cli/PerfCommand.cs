@@ -49,6 +49,10 @@ internal sealed class PerfCommand : AsyncCommand<PerfCommand.Settings>
         [Description("Sim speed during the soak, so the building keeps up with the rate. Default: 100")]
         public double SoakSpeed { get; init; } = 100;
 
+        [CommandOption("--overload-threshold <N>")]
+        [Description("Requests in flight before falling back to Nearest; 'none' to disable. Default: 200")]
+        public string OverloadThreshold { get; init; } = "200";
+
         [CommandOption("--log-dir <DIR>")]
         [Description("Write each burst level's event log as JSONL into this directory (for diagnosis).")]
         public string? LogDir { get; init; }
@@ -62,7 +66,9 @@ internal sealed class PerfCommand : AsyncCommand<PerfCommand.Settings>
 
     public override async Task<int> ExecuteAsync(CommandContext context, Settings s, CancellationToken cancellationToken)
     {
-        var options = new RuntimeOptions(s.Floors, s.Elevators, s.Capacity, Scheduling: s.Scheduling, Dispatch: s.Dispatch, Speed: 1);
+        int? overload = s.OverloadThreshold == "none" ? null : int.Parse(s.OverloadThreshold, CultureInfo.InvariantCulture);
+        var options = new RuntimeOptions(s.Floors, s.Elevators, s.Capacity, Scheduling: s.Scheduling, Dispatch: s.Dispatch, Speed: 1,
+            OverloadThreshold: overload);
         var levels = ScenarioPaths.List(s.Levels).Select(l => int.Parse(l, CultureInfo.InvariantCulture)).ToList();
         var bursts = new List<BurstResult>();
 
@@ -92,11 +98,23 @@ internal sealed class PerfCommand : AsyncCommand<PerfCommand.Settings>
         }
 
         var latency = new Table().Title($"Assignment latency (wall clock) · {s.Scheduling}+{s.Dispatch} · {s.Elevators} elevators, {s.Floors} floors")
-            .AddColumns("Submitters", "Requests", "Assigned", "Lost", "Dup", "p50 ms", "p95 ms", "p99 ms", "max ms", "req/s");
+            .AddColumns("Submitters", "Requests", "Assigned", "Lost", "Dup", "p50 ms", "p95 ms", "p99 ms", "max ms", "req/s", "by fallback");
         foreach (var b in bursts)
             latency.AddRow(I(b.Submitters), I(b.Submitted), I(b.Assigned), I(b.Lost), I(b.Duplicated),
-                D(b.Latency.P50Ms), D(b.Latency.P95Ms), D(b.Latency.P99Ms), D(b.Latency.MaxMs), D(b.ThroughputPerSecond, "0"));
+                D(b.Latency.P50Ms), D(b.Latency.P95Ms), D(b.Latency.P99Ms), D(b.Latency.MaxMs), D(b.ThroughputPerSecond, "0"),
+                $"{b.Decisions.Fallback}/{b.Decisions.Primary + b.Decisions.Fallback}");
         AnsiConsole.Write(latency);
+
+        // Where the time goes, per request, on the largest burst: the dispatcher is the single serial stage.
+        if (bursts.MaxBy(b => b.Submitted) is { } big)
+        {
+            var breakdown = new Table().Title($"Pipeline per request ({big.Submitters} submitters)")
+                .AddColumns("Actor", "Messages/request", "Handler µs/request", "Delivery µs/request");
+            foreach (var st in big.Stats.OrderBy(x => x.Kind))
+                breakdown.AddRow(st.Kind.ToString(), D(st.Messages / (double)big.Submitted), D(st.InHandlers.Microseconds / big.Submitted),
+                    D(st.Delivering.Microseconds / big.Submitted));
+            AnsiConsole.Write(breakdown);
+        }
 
         var slos = new List<(string Slo, string Measured, bool Pass)>();
         foreach (var b in bursts)
@@ -128,9 +146,17 @@ internal sealed class PerfCommand : AsyncCommand<PerfCommand.Settings>
             .AppendLine($"- **System:** {s.Scheduling}+{s.Dispatch}, {s.Elevators} elevators, {s.Floors} floors, capacity {s.Capacity}")
             .AppendLine($"- **Machine:** {Environment.ProcessorCount} logical cores, .NET {Environment.Version}, {System.Runtime.InteropServices.RuntimeInformation.OSDescription}")
             .AppendLine("- **Latency:** wall clock from `AssignRequest` to the accepted assignment (queueing in the bounded request channel included).")
-            .AppendLine().AppendLine("| Submitters | Requests | Assigned | Lost | Dup | p50 ms | p95 ms | p99 ms | max ms | req/s |").AppendLine("|---|---|---|---|---|---|---|---|---|---|");
+            .AppendLine($"- **Overload fallback:** {(s.OverloadThreshold == "none" ? "disabled" : $"Nearest above {s.OverloadThreshold} requests in flight")}")
+            .AppendLine().AppendLine("| Submitters | Requests | Assigned | Lost | Dup | p50 ms | p95 ms | p99 ms | max ms | req/s | decided by fallback |").AppendLine("|---|---|---|---|---|---|---|---|---|---|---|");
         foreach (var b in bursts)
-            sb.AppendLine($"| {b.Submitters} | {b.Submitted} | {b.Assigned} | {b.Lost} | {b.Duplicated} | {D(b.Latency.P50Ms)} | {D(b.Latency.P95Ms)} | {D(b.Latency.P99Ms)} | {D(b.Latency.MaxMs)} | {D(b.ThroughputPerSecond, "0")} |");
+            sb.AppendLine($"| {b.Submitters} | {b.Submitted} | {b.Assigned} | {b.Lost} | {b.Duplicated} | {D(b.Latency.P50Ms)} | {D(b.Latency.P95Ms)} | {D(b.Latency.P99Ms)} | {D(b.Latency.MaxMs)} | {D(b.ThroughputPerSecond, "0")} | {b.Decisions.Fallback} of {b.Decisions.Primary + b.Decisions.Fallback} |");
+        if (bursts.MaxBy(b => b.Submitted) is { } big)
+        {
+            sb.AppendLine().AppendLine($"Pipeline per request at {big.Submitters} submitters (wall clock):").AppendLine()
+              .AppendLine("| Actor | Messages / request | Handler µs / request | Delivery µs / request |").AppendLine("|---|---|---|---|");
+            foreach (var st in big.Stats.OrderBy(x => x.Kind))
+                sb.AppendLine($"| {st.Kind} | {D(st.Messages / (double)big.Submitted)} | {D(st.InHandlers.Microseconds / big.Submitted)} | {D(st.Delivering.Microseconds / big.Submitted)} |");
+        }
         if (soak is not null)
             sb.AppendLine().AppendLine($"Soak: {soak.Submitted} submitted, {soak.Delivered} delivered, heap samples (MB): {string.Join(", ", soak.HeapMb.Select(m => D(m)))}; p99 {D(soak.Latency.P99Ms)} ms.");
         sb.AppendLine().AppendLine("| SLO | Measured | Result |").AppendLine("|---|---|---|");
