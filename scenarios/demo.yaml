@@ -1,0 +1,44 @@
+# Demo scenario: a short morning in a 10-floor building, mixing scripted moments that show real
+# elevator behaviour with some random background traffic.
+#
+# Run it:  dotnet run --project src/Elevator.Cli -- run scenarios/demo.yaml --verbose
+name: demo
+seed: 2026
+floors: 10
+scheduling: fifo
+maxSimTimeS: 1800
+
+timing:
+  floorTravelMs: 2000   # 2 s per floor
+  doorOpeningMs: 1000
+  doorDwellMs: 3000
+  doorClosingMs: 1000
+
+passengers:
+  # 1) Lobby rush: three people arrive together at floor 1 going to different floors.
+  #    One hall call (1 UP), all three board together, and the elevator stops at 4, 6 and 9 in order.
+  - { at: 0,   from: 1, to: 6 }
+  - { at: 0.5, from: 1, to: 4 }
+  - { at: 1,   from: 1, to: 9 }
+
+  # 2) Same floor, opposite directions: only the person going the lantern's way boards.
+  - { at: 10, from: 7, to: 10 }
+  - { at: 10, from: 7, to: 3, direction: down }
+
+  # 3) Late arrival at floor 1 while the doors are closing (they close 4 to 5 s): the doors reopen.
+  - { at: 4.5, from: 1, to: 2 }
+
+  # 4) FIFO's weak spot: an early call far away is served before a later call close by.
+  - { at: 15, from: 10, to: 1 }
+  - { at: 16, from: 5,  to: 1 }
+
+  # 5) Edge floors: down from the top, up from the bottom.
+  - { at: 60, from: 10, to: 1 }
+  - { at: 62, from: 1,  to: 10 }
+
+# Background traffic on top of the scripted passengers: about 3 per minute for 5 minutes, from 90 s.
+traffic:
+  poisson:
+    ratePerMinute: 3
+    durationS: 300
+    startS: 90

@@ -20,6 +20,14 @@ internal static class EventFormatter
         StateChanged s => $"E{s.ElevatorId} {Spec(s.From)} -> {Spec(s.To)} at floor {s.Floor} ({Spec(s.Trigger)})",
         FloorReached f => $"E{f.ElevatorId} reaches floor {f.Floor}",
         DoorsOpened d => $"E{d.ElevatorId} doors open at floor {d.Floor}, lantern {(d.Lantern is { } l ? Spec(l) : "off")}",
+        RequestSubmitted r => $"request {r.RequestId} ({r.From}->{r.To}) submitted",
+        AssignmentProposed a => $"dispatcher proposes E{a.ElevatorId} for request {a.RequestId} (cost {a.Cost}{(a.Forced ? ", forced" : "")})",
+        AssignmentAccepted a => $"E{a.ElevatorId} accepts request {a.RequestId}",
+        AssignmentRejected a => $"E{a.ElevatorId} rejects request {a.RequestId} ({Spec(a.Reason)})",
+        AssignmentReleased a => $"E{a.ElevatorId} releases request {a.RequestId} ({Spec(a.Reason)})",
+        DispatchDeferred d => $"no elevator eligible for request {d.RequestId}; waiting",
+        DuplicateSubmission d => $"duplicate submission of request {d.RequestId} ignored",
+        PassengerLeftBehind p => $"P{p.PassengerId} left behind by full E{p.ElevatorId} at floor {p.Floor}",
         _ => e.ToString(),
     };
 

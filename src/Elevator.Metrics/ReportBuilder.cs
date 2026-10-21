@@ -2,37 +2,21 @@ using Elevator.Domain.Events;
 
 namespace Elevator.Metrics;
 
-/// <summary>Builds a <see cref="RunReport"/> from the event log alone. It never touches the elevator.</summary>
+/// <summary>Builds a <see cref="RunReport"/> from the event log alone. It never touches the elevators.</summary>
 public static class ReportBuilder
 {
     public static RunReport Build(IEnumerable<DomainEvent> events)
     {
-        SimulationStarted? started = null;
-        SimulationEnded? ended = null;
-        var arrived = new Dictionary<int, long>();
-        var boarded = new Dictionary<int, long>();
-        var alighted = new Dictionary<int, long>();
-        int floors = 0, stops = 0, rejected = 0;
+        var list = events as IReadOnlyList<DomainEvent> ?? events.ToList();
+        var started = list.OfType<SimulationStarted>().FirstOrDefault();
+        var ended = list.OfType<SimulationEnded>().LastOrDefault();
+        var records = PassengerLifecycle.Analyze(list);
+        var delivered = records.Where(r => r.Delivered && r.BoardedAt is not null).ToList();
+        var passengers = started?.Passengers ?? records.Count;
 
-        foreach (var e in events)
-        {
-            switch (e)
-            {
-                case SimulationStarted s: started = s; break;
-                case SimulationEnded s: ended = s; break;
-                case PassengerArrived a: arrived[a.PassengerId] = a.At.Ms; break;
-                case PassengerBoarded b: boarded[b.PassengerId] = b.At.Ms; break;
-                case PassengerAlighted a: alighted[a.PassengerId] = a.At.Ms; break;
-                case FloorReached: floors++; break;
-                case DoorsOpened: stops++; break;
-                case RequestRejected: rejected++; break;
-            }
-        }
-
-        var delivered = alighted.Keys.Where(id => arrived.ContainsKey(id) && boarded.ContainsKey(id)).ToList();
-        var waits = delivered.Select(id => (boarded[id] - arrived[id]) / 1000.0).ToList();
-        var rides = delivered.Select(id => (alighted[id] - boarded[id]) / 1000.0).ToList();
-        var passengers = started?.Passengers ?? arrived.Count;
+        var breakdown = Enum.GetValues<WaitBucket>().ToDictionary(
+            b => b,
+            b => delivered.Count == 0 ? 0 : delivered.Average(r => r.WaitBuckets[b]));
 
         return new RunReport(
             started?.Scenario ?? "?",
@@ -41,11 +25,20 @@ public static class ReportBuilder
             passengers,
             delivered.Count,
             passengers - delivered.Count,
-            rejected,
-            DurationStats.From(waits),
-            DurationStats.From(rides),
-            floors,
-            stops,
-            (ended?.At.Ms ?? 0) / 1000.0);
+            list.Count(e => e is RequestRejected),
+            DurationStats.From(delivered.Select(r => r.WaitS!.Value).ToList()),
+            DurationStats.From(delivered.Select(r => r.RideS!.Value).ToList()),
+            list.Count(e => e is FloorReached),
+            list.Count(e => e is DoorsOpened),
+            (ended?.At.Ms ?? 0) / 1000.0)
+        {
+            Dispatch = started?.Dispatch ?? "none",
+            Elevators = started?.Elevators ?? 1,
+            Journey = DurationStats.From(delivered.Select(r => r.JourneyS!.Value).ToList()),
+            LeftBehind = records.Sum(r => r.LeftBehind),
+            Reassignments = records.Sum(r => r.Reassignments),
+            Rejections = records.Sum(r => r.Rejections),
+            WaitBreakdown = breakdown,
+        };
     }
 }
