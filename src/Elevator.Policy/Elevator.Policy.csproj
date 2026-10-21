@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\Elevator.Domain\Elevator.Domain.csproj" />
+  </ItemGroup>
+</Project>

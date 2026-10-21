@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Consumes the event log only; must never call into the elevator state machine. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Elevator.Domain\Elevator.Domain.csproj" />
+  </ItemGroup>
+</Project>
