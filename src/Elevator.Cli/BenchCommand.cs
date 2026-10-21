@@ -130,7 +130,7 @@ internal sealed class BenchCommand : Command<BenchCommand.Settings>
 
         var meta = new Dictionary<string, string>
         {
-            ["Command"] = "`elevator bench " + string.Join(' ', context.Arguments) + "`",
+            ["Command"] = "`elevator " + string.Join(' ', context.Arguments.Select(a => a.Contains(' ', StringComparison.Ordinal) ? $"\"{a}\"" : a)) + "`",
             ["Seeds"] = $"{settings.FirstSeed}..{settings.FirstSeed + settings.Seeds - 1} ({settings.Seeds} per strategy)",
             ["Baseline"] = settings.Baseline,
             ["Scenarios"] = string.Join(", ", scenarios.Select(s => $"{s.Name} ({s.Elevators} elevators, {s.Floors} floors, capacity {s.Capacity})")),
