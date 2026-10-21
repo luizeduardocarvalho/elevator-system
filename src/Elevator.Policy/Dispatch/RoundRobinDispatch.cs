@@ -15,6 +15,13 @@ public sealed class RoundRobinDispatch : IDispatchPolicy
         var eligible = Eligibility.Candidates(context.Candidates).OrderBy(s => s.ElevatorId).ToList();
         if (eligible.Count == 0) return null;
         var chosen = eligible[(int)(context.Sequence % eligible.Count)];
-        return new DispatchChoice(chosen.ElevatorId, 0);
+        return new DispatchChoice(chosen.ElevatorId, 0)
+        {
+            Candidates = context.Explain
+                ? context.Candidates.OrderBy(s => s.ElevatorId)
+                    .Select(s => eligible.Contains(s) ? new Domain.Events.CandidateCost(s.ElevatorId, 0, "rotation") : new Domain.Events.CandidateCost(s.ElevatorId, null, "ineligible"))
+                    .ToList()
+                : null,
+        };
     }
 }

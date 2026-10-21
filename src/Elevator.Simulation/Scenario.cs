@@ -1,4 +1,5 @@
 using Elevator.Domain;
+using Elevator.Domain.Faults;
 
 namespace Elevator.Simulation;
 
@@ -21,7 +22,12 @@ public sealed record Scenario(
     string Dispatch = "cost",
     TrafficProfile? Profile = null,
     MessageLatency? Latency = null,
-    CapacityMode CapacityMode = CapacityMode.NextTrip);
+    CapacityMode CapacityMode = CapacityMode.NextTrip,
+    IReadOnlyList<FaultCommand>? Faults = null)
+{
+    /// <summary>Scheduled fault and operator commands (shared v3 contract); not acted on until the Hard stage.</summary>
+    public IReadOnlyList<FaultCommand> FaultSchedule => Faults ?? [];
+}
 
 /// <summary>An explicitly scripted passenger: arrives at <paramref name="At"/> on <paramref name="From"/>, wants <paramref name="To"/>.</summary>
 public sealed record PassengerSpec(SimTime At, int From, int To);

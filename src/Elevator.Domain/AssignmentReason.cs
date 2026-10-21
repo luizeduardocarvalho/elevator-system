@@ -14,4 +14,8 @@ public enum AssignmentReason
     Rebalance,
     /// <summary>The elevator came but was full at the door; the passenger presses again.</summary>
     LeftBehind,
+    /// <summary>The watchdog declared the elevator faulty; its pickups are handed back (shared v3 contract).</summary>
+    Fault,
+    /// <summary>Emergency stop; its pickups are handed back (shared v3 contract).</summary>
+    Emergency,
 }

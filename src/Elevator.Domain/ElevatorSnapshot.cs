@@ -50,6 +50,19 @@ public sealed record ElevatorSnapshot(
 
     public CapacityMode CapacityMode { get; init; } = CapacityMode.NextTrip;
 
+    // ---- Shared v3 contract (docs/contract-v3.md) ----
+
+    /// <summary>Operating mode (maintenance, emergency, fault). Always Normal until the Hard stage sets it.</summary>
+    public ElevatorMode Mode { get; init; } = ElevatorMode.Normal;
+
+    /// <summary>Elevator type (Local, Express, Freight...); "standard" until the Hard stage configures types.</summary>
+    public string TypeName { get; init; } = "standard";
+
+    /// <summary>Floors this elevator serves: bit f = floor f. Default: every floor.</summary>
+    public ulong ServedFloors { get; init; } = ulong.MaxValue;
+
+    public bool Serves(int floor) => floor is >= 0 and < 64 && (ServedFloors & (1UL << floor)) != 0;
+
     /// <summary>Full-load bypass: at or above the threshold it serves its riders only (no pickups).</summary>
     public bool IsFull => Load >= BypassThreshold * Capacity;
 

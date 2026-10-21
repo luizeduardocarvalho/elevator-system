@@ -23,12 +23,21 @@ public sealed class NearestDispatch : IDispatchPolicy
     public DispatchChoice? Choose(DispatchContext context)
     {
         DispatchChoice? best = null;
-        foreach (var s in Eligibility.Candidates(context.Candidates).OrderBy(s => s.ElevatorId))
+        var eligible = Eligibility.Candidates(context.Candidates);
+        foreach (var s in eligible.OrderBy(s => s.ElevatorId))
         {
             var distance = EffectiveDistance(s, context.Request);
             if (best is null || distance < best.Cost) best = new DispatchChoice(s.ElevatorId, distance);
         }
-        return best;
+        if (best is null || !context.Explain) return best;
+        return best with
+        {
+            Candidates = context.Candidates.OrderBy(s => s.ElevatorId)
+                .Select(s => eligible.Contains(s)
+                    ? new Domain.Events.CandidateCost(s.ElevatorId, EffectiveDistance(s, context.Request), "floors")
+                    : new Domain.Events.CandidateCost(s.ElevatorId, null, "ineligible"))
+                .ToList(),
+        };
     }
 
     public static int EffectiveDistance(ElevatorSnapshot s, Request r)

@@ -128,6 +128,12 @@ public sealed class ElevatorSystem : IAsyncDisposable
     /// </summary>
     public void BalanceLoad() => _actors[Address.Dispatcher].Mailbox.Writer.TryWrite(new RebalanceNow());
 
+    /// <summary>
+    /// Delivers <paramref name="message"/> to the actor at <paramref name="to"/> (shared v3 contract: the injection seam
+    /// for fault and operator commands, as <c>SimEngine.Post</c> in the simulator).
+    /// </summary>
+    public void Post(Address to, Message message) => _actors[to].Mailbox.Writer.TryWrite(message);
+
     /// <summary>Spec's <c>requestQueue</c>: submissions waiting in the bounded request channel.</summary>
     public int RequestQueueLength => _requests.Reader.Count;
 

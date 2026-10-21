@@ -48,19 +48,23 @@ public sealed class CostBasedDispatch(ISchedulingPolicy scheduling, ElevatorTimi
     public DispatchChoice? Choose(DispatchContext context)
     {
         DispatchChoice? best = null;
+        var explained = context.Explain ? new List<Domain.Events.CandidateCost>() : null;
         foreach (var s in context.Candidates.OrderBy(s => s.ElevatorId))
         {
             var eval = Evaluate(s, context.Request, context.Now);
+            explained?.Add(double.IsPositiveInfinity(eval.Cost)
+                ? new Domain.Events.CandidateCost(s.ElevatorId, null, "ineligible")
+                : new Domain.Events.CandidateCost(s.ElevatorId, Math.Round(eval.Cost, 3), $"eta {eval.EtaS:0.#}s + {_weights.Lambda}·{eval.AddedDelayS:0.#}s + {_weights.Mu}·{eval.LoadAtPickup}/{s.Capacity}"));
             if (double.IsPositiveInfinity(eval.Cost)) continue;
             if (best is null || eval.Cost < best.Cost) best = new DispatchChoice(s.ElevatorId, eval.Cost, eval.PickupAt);
         }
-        if (best is not null) return best;
+        if (best is not null) return explained is null ? best : best with { Candidates = explained };
 
         // NextTrip mode always names an elevator (ADR-010). If no projection reaches the pickup within its horizon
         // (a huge backlog), rank by Nearest's effective distance instead of deferring; no ETA, so no staleness check.
         if (context.Candidates.Any(c => c.CapacityMode == CapacityMode.NextTrip && c.State != ElevatorState.Maintenance)
             && _beyondHorizon.Choose(context) is { } fallback)
-            return fallback with { Cost = double.MaxValue, Eta = null };
+            return fallback with { Cost = double.MaxValue, Eta = null, Candidates = explained };
         return null;
     }
 

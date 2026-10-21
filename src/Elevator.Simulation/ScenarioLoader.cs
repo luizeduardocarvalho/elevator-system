@@ -1,4 +1,5 @@
 using Elevator.Domain;
+using Elevator.Domain.Faults;
 using Elevator.Policy;
 using Elevator.Policy.Dispatch;
 using YamlDotNet.Core;
@@ -120,6 +121,27 @@ public static class ScenarioLoader
             errors.AddRange(profile.Validate(floors));
         }
 
+        var faults = new List<FaultCommand>();
+        foreach (var (f, i) in (dto.Faults ?? []).Select((f, i) => (f, i)))
+        {
+            var where = $"faults[{i}]";
+            if (f.AtS is not { } atS || f.Elevator is not { } elevator || f.Kind is not { } kindText)
+            {
+                errors.Add($"{where}: 'atS', 'elevator' and 'kind' are required");
+                continue;
+            }
+            if (atS < 0) errors.Add($"{where}: 'atS' must be >= 0");
+            if (elevator < 0 || elevator >= elevators) errors.Add($"{where}: elevator {elevator} does not exist (0..{elevators - 1})");
+            if (!FaultKinds.TryParse(kindText, out var kind))
+            {
+                errors.Add($"{where}: unknown kind '{kindText}' (known: {string.Join(", ", FaultKinds.Names)})");
+                continue;
+            }
+            if (f.DurationS is { } d && (kind != FaultKind.Stuck || d <= 0))
+                errors.Add(kind != FaultKind.Stuck ? $"{where}: 'durationS' only applies to kind stuck" : $"{where}: 'durationS' must be > 0");
+            faults.Add(new FaultCommand(SimTime.FromSeconds(atS), elevator, kind, f.DurationS is { } ds ? SimTime.FromSeconds(ds).Ms : null));
+        }
+
         if (errors.Count > 0) return new(null, errors);
 
         return new(new Scenario(
@@ -137,7 +159,8 @@ public static class ScenarioLoader
             dispatch.ToLowerInvariant(),
             profile,
             latency,
-            capacityMode), []);
+            capacityMode,
+            faults.OrderBy(f => f.At).ToList()), []);
     }
 
     // YAML shape. Everything nullable so missing keys can be reported instead of silently defaulting to 0.
@@ -154,6 +177,15 @@ public static class ScenarioLoader
         public TimingDto? Timing { get; set; }
         public List<PassengerDto>? Passengers { get; set; }
         public TrafficDto? Traffic { get; set; }
+        public List<FaultDto>? Faults { get; set; }
+    }
+
+    private sealed class FaultDto
+    {
+        public double? AtS { get; set; }
+        public int? Elevator { get; set; }
+        public string? Kind { get; set; }
+        public double? DurationS { get; set; }
     }
 
     private sealed class TimingDto

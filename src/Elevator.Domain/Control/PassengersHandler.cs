@@ -27,6 +27,10 @@ public sealed class PassengersHandler(int capacity) : IHandler
 
     public SimTime? NextWakeUp => null;
 
+    /// <summary>People waiting per floor and direction (shared v3 contract: the TUI's ▲/▼ counts).</summary>
+    public IReadOnlyDictionary<(int Floor, Direction Direction), int> WaitingCounts =>
+        _waiting.Where(kv => kv.Value.Count > 0).ToDictionary(kv => kv.Key, kv => kv.Value.Count);
+
     public int Arrived { get; private set; }
 
     public int Delivered { get; private set; }

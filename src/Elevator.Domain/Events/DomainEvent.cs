@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Elevator.Domain.Faults;
 
 namespace Elevator.Domain.Events;
 
@@ -28,6 +29,16 @@ namespace Elevator.Domain.Events;
 [JsonDerivedType(typeof(DuplicateSubmission), nameof(DuplicateSubmission))]
 [JsonDerivedType(typeof(PassengerLeftBehind), nameof(PassengerLeftBehind))]
 [JsonDerivedType(typeof(OverloadModeChanged), nameof(OverloadModeChanged))]
+[JsonDerivedType(typeof(MaintenanceRequested), nameof(MaintenanceRequested))]
+[JsonDerivedType(typeof(MaintenanceEntered), nameof(MaintenanceEntered))]
+[JsonDerivedType(typeof(MaintenanceExited), nameof(MaintenanceExited))]
+[JsonDerivedType(typeof(EmergencyStopped), nameof(EmergencyStopped))]
+[JsonDerivedType(typeof(EmergencyCleared), nameof(EmergencyCleared))]
+[JsonDerivedType(typeof(FaultDetected), nameof(FaultDetected))]
+[JsonDerivedType(typeof(FaultRecovered), nameof(FaultRecovered))]
+[JsonDerivedType(typeof(AccessDenied), nameof(AccessDenied))]
+[JsonDerivedType(typeof(FaultCommandApplied), nameof(FaultCommandApplied))]
+[JsonDerivedType(typeof(DispatchEvaluated), nameof(DispatchEvaluated))]
 public abstract record DomainEvent([property: JsonPropertyName("t"), JsonPropertyOrder(-1)] SimTime At);
 
 public sealed record SimulationStarted(
@@ -92,3 +103,47 @@ public sealed record PassengerLeftBehind(SimTime At, int PassengerId, int Elevat
 
 /// <summary>The dispatcher entered (or left) overload mode: too many requests in flight, so it uses its cheap fallback policy.</summary>
 public sealed record OverloadModeChanged(SimTime At, bool Active, int InFlight) : DomainEvent(At);
+
+// ---- Shared v3 contract (docs/contract-v3.md): emitted by the Hard stage; DispatchEvaluated on request -------
+
+/// <summary>Maintenance requested: the elevator stops taking assignments and drains (delivers its riders).</summary>
+public sealed record MaintenanceRequested(SimTime At, int ElevatorId) : DomainEvent(At);
+
+/// <summary>Riders delivered, parked out of service at <paramref name="Floor"/>.</summary>
+public sealed record MaintenanceEntered(SimTime At, int ElevatorId, int Floor) : DomainEvent(At);
+
+public sealed record MaintenanceExited(SimTime At, int ElevatorId) : DomainEvent(At);
+
+public sealed record EmergencyStopped(SimTime At, int ElevatorId, int Floor) : DomainEvent(At);
+
+public sealed record EmergencyCleared(SimTime At, int ElevatorId) : DomainEvent(At);
+
+/// <summary>The watchdog saw no progress for <paramref name="SilentForMs"/>; the elevator's calls are reassigned.</summary>
+public sealed record FaultDetected(SimTime At, int ElevatorId, int Floor, long SilentForMs) : DomainEvent(At);
+
+/// <summary>The elevator moved again after a fault.</summary>
+public sealed record FaultRecovered(SimTime At, int ElevatorId) : DomainEvent(At);
+
+/// <summary>
+/// An access policy refused a request: for one elevator (<paramref name="ElevatorId"/>), or for all of them (null).
+/// </summary>
+public sealed record AccessDenied(SimTime At, int RequestId, int? ElevatorId, string Policy, string Reason) : DomainEvent(At);
+
+/// <summary>A fault or operator command took effect (injected live or from a scenario's fault schedule).</summary>
+public sealed record FaultCommandApplied(SimTime At, int ElevatorId, FaultKind Kind, long? DurationMs) : DomainEvent(At);
+
+/// <summary>One elevator's score in a dispatch decision; <paramref name="Cost"/> null = ineligible (∞).</summary>
+public sealed record CandidateCost(int ElevatorId, double? Cost, string? Note = null);
+
+/// <summary>
+/// Every candidate's cost for one dispatch decision and the winner (null = none eligible). Emitted just before
+/// <see cref="AssignmentProposed"/>, only when explanations are enabled (SimEngineOptions.EmitDispatchEvaluations).
+/// </summary>
+public sealed record DispatchEvaluated(SimTime At, int RequestId, IReadOnlyList<CandidateCost> Candidates, int? WinnerId) : DomainEvent(At)
+{
+    public bool Equals(DispatchEvaluated? other) =>
+        other is not null && At == other.At && RequestId == other.RequestId && WinnerId == other.WinnerId
+        && Candidates.SequenceEqual(other.Candidates);
+
+    public override int GetHashCode() => HashCode.Combine(At, RequestId, WinnerId, Candidates.Count);
+}

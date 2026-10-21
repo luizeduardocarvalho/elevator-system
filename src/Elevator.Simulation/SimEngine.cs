@@ -1,12 +1,21 @@
 using Elevator.Domain;
 using Elevator.Domain.Control;
 using Elevator.Domain.Events;
+using Elevator.Domain.Faults;
 using Elevator.Policy;
 using Elevator.Policy.Dispatch;
 
 namespace Elevator.Simulation;
 
 public sealed record SimulationResult(IReadOnlyList<DomainEvent> Events, int Delivered, int Unserved, SimTime EndedAt);
+
+/// <param name="EmitDispatchEvaluations">Log every candidate's cost per dispatch decision (DispatchEvaluated). Off by
+/// default: logs are then identical to v2.</param>
+/// <param name="FaultInjector">Builds the fault injector for this engine (Hard stage). Null = <see cref="NoOpFaultInjector"/>.</param>
+public sealed record SimEngineOptions(bool EmitDispatchEvaluations = false, Func<SimEngine, IFaultInjector>? FaultInjector = null)
+{
+    public static SimEngineOptions Default { get; } = new();
+}
 
 /// <summary>
 /// The deterministic shell (ADR-005): delivers protocol messages to the shared handlers from one priority queue
@@ -32,13 +41,29 @@ public sealed class SimEngine
     private readonly int _expectedPassengers;
     private long _seq;
 
-    public static SimulationResult Run(Scenario scenario, Strategy? strategy = null, long tickMs = ScenarioRunner.DefaultTickMs) =>
-        new SimEngine(scenario, strategy ?? new Strategy(scenario.Scheduling, scenario.Dispatch)).Run(tickMs);
+    private bool _ended;
 
-    private SimEngine(Scenario scenario, Strategy strategy)
+    /// <summary>Runs the scenario to the end in fixed ticks (the headless path used by run and bench).</summary>
+    public static SimulationResult Run(Scenario scenario, Strategy? strategy = null, long tickMs = ScenarioRunner.DefaultTickMs)
+    {
+        if (tickMs <= 0) throw new ArgumentOutOfRangeException(nameof(tickMs));
+        var engine = Create(scenario, strategy);
+        while (!engine.Finished) engine.AdvanceTo(engine.Now.AddMs(tickMs));
+        return engine.Finish();
+    }
+
+    /// <summary>
+    /// A steppable engine (shared v3 contract): drive it with <see cref="AdvanceTo"/> in any steps (the TUI's fixed
+    /// tick) and the event log is identical to <see cref="Run"/>'s; end it with <see cref="Finish"/>.
+    /// </summary>
+    public static SimEngine Create(Scenario scenario, Strategy? strategy = null, SimEngineOptions? options = null) =>
+        new(scenario, strategy ?? new Strategy(scenario.Scheduling, scenario.Dispatch), options ?? SimEngineOptions.Default);
+
+    private SimEngine(Scenario scenario, Strategy strategy, SimEngineOptions options)
     {
         Scenario = scenario;
         Strategy = strategy;
+        Options = options;
         var scheduling = SchedulingPolicies.Create(strategy.Scheduling);
         var dispatch = DispatchPolicies.Create(strategy.Dispatch, scheduling, scenario.Timing);
         var latency = scenario.Latency ?? MessageLatency.None;
@@ -54,7 +79,8 @@ public sealed class SimEngine
         }
         var rebalance = strategy.Rebalance ? new HysteresisRebalance(scheduling, scenario.Timing) : null;
         Register(new DispatcherHandler(dispatch, scenario.Elevators, scenario.Timing,
-            new DispatcherOptions(latency.DispatchMs, RebalanceIntervalMs: rebalance is null ? null : 5_000, OverloadThreshold: OverloadThreshold),
+            new DispatcherOptions(latency.DispatchMs, RebalanceIntervalMs: rebalance is null ? null : 5_000, OverloadThreshold: OverloadThreshold,
+                EmitDispatchEvaluations: options.EmitDispatchEvaluations),
             rebalance, new NearestDispatch()));
         _passengers = new PassengersHandler(scenario.Capacity);
         Register(_passengers);
@@ -67,13 +93,82 @@ public sealed class SimEngine
 
         foreach (var e in _elevators) Enqueue(SimTime.Zero, new Envelope(e.Address, new Start()));
         foreach (var p in passengers) Enqueue(SimTime.Zero, new Envelope(Address.Passengers, new PassengerArrives(p.ToRequest()), p.ArrivesAt.Ms));
+
+        FaultInjector = options.FaultInjector?.Invoke(this) ?? NoOpFaultInjector.Instance;
     }
 
     public Scenario Scenario { get; }
 
     public Strategy Strategy { get; }
 
+    public SimEngineOptions Options { get; }
+
     public List<DomainEvent> Log { get; } = [];
+
+    /// <summary>Sim time reached so far (the target of the last <see cref="AdvanceTo"/>, or the finish time).</summary>
+    public SimTime Now { get; private set; } = SimTime.Zero;
+
+    /// <summary>Everyone delivered and every elevator idle, or the scenario's max sim time reached.</summary>
+    public bool Finished { get; private set; }
+
+    /// <summary>When the run finished (the last event's time, or the max sim time).</summary>
+    public SimTime? FinishedAt { get; private set; }
+
+    /// <summary>The injector for this engine (NoOpFaultInjector unless the options supply one).</summary>
+    public IFaultInjector FaultInjector { get; }
+
+    /// <summary>Each elevator's latest snapshot, as of its last handled message (read-only; for rendering).</summary>
+    public IReadOnlyList<ElevatorSnapshot> Elevators => [.. _elevators.Select(e => e.Elevator.Snapshot())];
+
+    /// <summary>People waiting per floor and direction (read-only; for rendering).</summary>
+    public IReadOnlyDictionary<(int Floor, Direction Direction), int> Waiting => _passengers.WaitingCounts;
+
+    public int Delivered => _passengers.Delivered;
+
+    public int ExpectedPassengers => _expectedPassengers;
+
+    /// <summary>
+    /// Delivers every message due up to <paramref name="target"/> (capped at the scenario's max sim time). The tick
+    /// size never changes the log: messages are handled in (time, sequence) order whatever the steps.
+    /// </summary>
+    public void AdvanceTo(SimTime target)
+    {
+        if (Finished) return;
+        if (target < Now) throw new ArgumentOutOfRangeException(nameof(target), $"time went backwards: {target} < {Now}");
+        target = SimTime.Min(target, Scenario.MaxSimTime);
+        if (DrainUntil(target) is { } finishedAt)
+        {
+            Finished = true;
+            FinishedAt = finishedAt;
+            Now = finishedAt;
+            return;
+        }
+        Now = target;
+        if (Now >= Scenario.MaxSimTime)
+        {
+            Finished = true;
+            FinishedAt = Scenario.MaxSimTime;
+        }
+    }
+
+    /// <summary>
+    /// Delivers <paramref name="message"/> to <paramref name="to"/> at <see cref="Now"/>, after anything already due
+    /// at <see cref="Now"/>. The injection seam for fault and operator commands (shared v3 contract).
+    /// </summary>
+    public void Post(Address to, Message message) => Enqueue(Now, new Envelope(to, message));
+
+    /// <summary>Ends the run: logs SimulationEnded and returns the result. Idempotent.</summary>
+    public SimulationResult Finish()
+    {
+        var endedAt = FinishedAt ?? Now;
+        var unserved = _expectedPassengers - _passengers.Delivered;
+        if (!_ended)
+        {
+            _ended = true;
+            Log.Add(new SimulationEnded(endedAt, _passengers.Delivered, unserved));
+        }
+        return new SimulationResult(Log, _passengers.Delivered, unserved, endedAt);
+    }
 
     private void Register(IHandler handler) => _handlers.Add(handler.Address, handler);
 
@@ -83,31 +178,9 @@ public sealed class SimEngine
         _queue.Enqueue(envelope, (now.Ms + envelope.DelayMs, _seq++));
     }
 
-    private bool Finished =>
+    private bool AllDone =>
         _passengers.Arrived == _expectedPassengers && _passengers.Delivered == _expectedPassengers
         && _elevators.All(e => e.Elevator.State == ElevatorState.Idle && e.Elevator.NextDeadline is null);
-
-    private SimulationResult Run(long tickMs)
-    {
-        if (tickMs <= 0) throw new ArgumentOutOfRangeException(nameof(tickMs));
-
-        var clock = new SimClock();
-        var endedAt = Scenario.MaxSimTime;
-        while (clock.Now < Scenario.MaxSimTime)
-        {
-            var target = SimTime.Min(clock.Now.AddMs(tickMs), Scenario.MaxSimTime);
-            if (DrainUntil(target) is { } finishedAt)
-            {
-                endedAt = finishedAt;
-                break;
-            }
-            clock.AdvanceTo(target);
-        }
-
-        var unserved = _expectedPassengers - _passengers.Delivered;
-        Log.Add(new SimulationEnded(endedAt, _passengers.Delivered, unserved));
-        return new SimulationResult(Log, _passengers.Delivered, unserved, endedAt);
-    }
 
     /// <summary>Delivers every message due at or before <paramref name="target"/>; returns the finish time if the run completed.</summary>
     private SimTime? DrainUntil(SimTime target)
@@ -131,7 +204,7 @@ public sealed class SimEngine
                 _queue.Enqueue(new Envelope(handler.Address, new WakeUp()), (wake.Ms, _seq++));
             }
 
-            if (Finished) return now;
+            if (AllDone) return now;
         }
         return null;
     }

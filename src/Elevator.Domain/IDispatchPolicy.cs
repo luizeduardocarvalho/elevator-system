@@ -2,11 +2,19 @@ namespace Elevator.Domain;
 
 /// <summary>Everything a dispatch policy may look at. <see cref="Candidates"/> already excludes elevators that rejected this request.</summary>
 /// <param name="Sequence">Ordinal of this dispatch decision (deterministic); round-robin uses it.</param>
-public sealed record DispatchContext(Request Request, IReadOnlyList<ElevatorSnapshot> Candidates, SimTime Now, ElevatorTiming Timing, long Sequence);
+public sealed record DispatchContext(Request Request, IReadOnlyList<ElevatorSnapshot> Candidates, SimTime Now, ElevatorTiming Timing, long Sequence)
+{
+    /// <summary>Also report every candidate's cost in <see cref="DispatchChoice.Candidates"/> (shared v3 contract).</summary>
+    public bool Explain { get; init; }
+}
 
 /// <param name="Cost">Score of the chosen elevator, lower is better; units depend on the policy.</param>
 /// <param name="Eta">Estimated pickup time, when the policy computes one (used for the staleness check).</param>
-public sealed record DispatchChoice(int ElevatorId, double Cost, SimTime? Eta = null);
+public sealed record DispatchChoice(int ElevatorId, double Cost, SimTime? Eta = null)
+{
+    /// <summary>Every candidate's cost, when <see cref="DispatchContext.Explain"/> was set; null otherwise.</summary>
+    public IReadOnlyList<Events.CandidateCost>? Candidates { get; init; }
+}
 
 /// <summary>
 /// A dispatch strategy: which elevator should serve this request? Pure function over snapshots

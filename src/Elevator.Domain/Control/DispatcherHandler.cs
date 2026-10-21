@@ -6,7 +6,10 @@ namespace Elevator.Domain.Control;
 /// <param name="RebalanceIntervalMs">Optional rebalancing period; null = sticky assignments only (ADR-006).</param>
 /// <param name="OverloadThreshold">Requests in flight above which the dispatcher switches to its cheap fallback policy
 /// (defense in depth, ADR-006); null = never.</param>
-public sealed record DispatcherOptions(long DispatchDelayMs = 0, long? RebalanceIntervalMs = null, int? OverloadThreshold = null)
+/// <param name="EmitDispatchEvaluations">Log every candidate's cost before each proposal (shared v3 contract; the TUI's
+/// ASSIGN line). Off by default, so normal logs are unchanged.</param>
+public sealed record DispatcherOptions(long DispatchDelayMs = 0, long? RebalanceIntervalMs = null, int? OverloadThreshold = null,
+    bool EmitDispatchEvaluations = false)
 {
     public static DispatcherOptions Default { get; } = new();
 }
@@ -205,15 +208,21 @@ public sealed class DispatcherHandler(
         // overlay up to date would cost O(proposals ahead of the elevators) per snapshot, so it is skipped.
         Func<ElevatorSnapshot, ElevatorSnapshot> view = overloaded ? (s => s) : WithOverlay;
         var candidates = _snapshots.Values.Where(s => !t.Excluded.Contains(s.ElevatorId)).Select(view).ToList();
-        var choice = active.Choose(new DispatchContext(t.Request, candidates, now, timing, _sequence));
+        var explain = _options.EmitDispatchEvaluations;
+        var choice = active.Choose(new DispatchContext(t.Request, candidates, now, timing, _sequence) { Explain = explain });
         var forced = false;
 
         if (choice is null && t.Excluded.Count > 0 && t.OnlyStaleRejections)
         {
             // Everyone eligible said "stale": stop bouncing and force the best one (ADR-006).
-            choice = active.Choose(new DispatchContext(t.Request, [.. _snapshots.Values.Select(view)], now, timing, _sequence));
+            choice = active.Choose(new DispatchContext(t.Request, [.. _snapshots.Values.Select(view)], now, timing, _sequence) { Explain = explain });
             forced = choice is not null;
         }
+
+        if (explain)
+            outbox.Emit(new DispatchEvaluated(now, t.Request.Id,
+                choice?.Candidates ?? [.. candidates.OrderBy(s => s.ElevatorId).Select(s => new CandidateCost(s.ElevatorId, null, "ineligible"))],
+                choice?.ElevatorId));
 
         if (choice is null)
         {
