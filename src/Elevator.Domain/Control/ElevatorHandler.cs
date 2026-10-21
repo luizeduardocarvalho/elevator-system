@@ -17,7 +17,8 @@ public sealed record ElevatorHandlerOptions(long SnapshotDelayMs = 0, long Stale
 /// Accept/reject, in priority order:
 /// <list type="number">
 /// <item>Maintenance → reject (always wins).</item>
-/// <item>Full (load at or above the bypass threshold) → reject as Capacity (always wins).</item>
+/// <item>Capacity → reject (always wins): in Defer mode when full now; in NextTrip mode only if the request can never
+/// fit (its load exceeds the capacity), since a full elevator serves it on a later trip (ADR-010).</item>
 /// <item>Stale: our own ETA exceeds the dispatcher's estimate by more than the tolerance → reject, unless the
 /// assignment is forced or the request is aged (waiting ≥ AgingMs). Aging stops a request bouncing forever.</item>
 /// <item>Otherwise accept.</item>
@@ -84,7 +85,9 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
     private AssignmentReason? RejectionReason(Assign assign, SimTime now)
     {
         if (Elevator.State == ElevatorState.Maintenance) return AssignmentReason.Maintenance;
-        if (Elevator.IsFull) return AssignmentReason.Capacity;
+        // Defer mode: full now means no. NextTrip mode: a full elevator takes it for a later trip, unless it can never fit.
+        if (Elevator.CapacityMode == CapacityMode.Defer ? Elevator.IsFull : assign.Request.Load > Elevator.Capacity)
+            return AssignmentReason.Capacity;
         if (assign.Forced || estimator is null || assign.EtaEstimate is not { } estimate) return null;
 
         var aged = now.Ms - assign.Request.Timestamp.Ms >= _options.AgingMs;

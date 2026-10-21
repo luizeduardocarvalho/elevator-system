@@ -30,8 +30,10 @@ public sealed record CostEvaluation(double Cost, double EtaS, double AddedDelayS
 /// <item><b>L̂/C</b>: predicted load at pickup (current riders + pickups before it − drop-offs before it) over capacity.
 /// This is the load-balancing term (the spec's balanceLoad): prefer emptier elevators.</item>
 /// </list>
-/// Ineligible (cost ∞): maintenance, currently full, the request would not be picked up, or at pickup the
-/// elevator would already be at the bypass threshold (L̂ ≥ threshold·C) or the passenger would not fit (L̂ + load > C).
+/// Ineligible (cost ∞): maintenance, or the request would not be picked up within the projection horizon. In Defer
+/// mode also: currently full, or at pickup the elevator would already be at the bypass threshold (L̂ ≥ threshold·C)
+/// or the passenger would not fit (L̂ + load > C). In NextTrip mode (default, ADR-010) a full elevator stays a
+/// candidate: its projected ETA includes waiting for its next drop-off cycle.
 /// </summary>
 public sealed class CostBasedDispatch(ISchedulingPolicy scheduling, ElevatorTiming timing, CostWeights? weights = null, string name = "cost") : IDispatchPolicy
 {
@@ -57,12 +59,15 @@ public sealed class CostBasedDispatch(ISchedulingPolicy scheduling, ElevatorTimi
 
     public CostEvaluation Evaluate(ElevatorSnapshot s, Request r, SimTime now)
     {
-        if (s.State == ElevatorState.Maintenance || s.IsFull) return CostEvaluation.Ineligible(s.Load);
+        var defer = s.CapacityMode == CapacityMode.Defer;
+        if (s.State == ElevatorState.Maintenance || (defer && s.IsFull)) return CostEvaluation.Ineligible(s.Load);
 
         var with = _projection.Project(s, r, now);
         if (with.PickupAt is not { } pickupAt) return CostEvaluation.Ineligible(with.LoadAtPickup);
-        // Same rule as the mechanics: at or above the threshold it bypasses pickups; and the passenger must fit.
-        if (with.LoadAtPickup >= s.BypassThreshold * s.Capacity || with.LoadAtPickup + r.Load > s.Capacity)
+        // Defer mode: same rule as its mechanics (at or above the threshold it hands pickups back; the passenger must
+        // fit). NextTrip mode needs no such rule: the projection already puts a full elevator's pickup on its next
+        // trip, so the ETA carries the wait (ADR-010).
+        if (defer && (with.LoadAtPickup >= s.BypassThreshold * s.Capacity || with.LoadAtPickup + r.Load > s.Capacity))
             return CostEvaluation.Ineligible(with.LoadAtPickup);
 
         var addedDelayMs = StopProjection.AddedDelayMs(Baseline(s, now), with);

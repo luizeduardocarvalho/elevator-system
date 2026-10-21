@@ -30,9 +30,10 @@ public class MultiElevatorProperties
         from scheduling in Gen.Elements(Schedulings)
         from dispatch in Gen.Elements(Dispatches)
         from rebalance in Gen.Elements(false, true)
+        from mode in Gen.Elements(CapacityMode.NextTrip, CapacityMode.Defer)
         select new Case(
             new Scenario("prop", 1, floors, ElevatorTiming.Default, scheduling, SimTime.FromSeconds(200_000), specs, null,
-                elevators, capacity, threshold, dispatch, null, new MessageLatency(snapshotMs, dispatchMs)),
+                elevators, capacity, threshold, dispatch, null, new MessageLatency(snapshotMs, dispatchMs), mode),
             new Strategy(scheduling, dispatch, rebalance));
 
     private static Gen<PassengerSpec> PassengerGen(int floors) =>

@@ -29,6 +29,10 @@ internal sealed class RunCommand : Command<RunCommand.Settings>
         [Description("Override the scenario's dispatch policy (roundrobin, nearest...).")]
         public string? Dispatch { get; init; }
 
+        [CommandOption("--capacity-mode <MODE>")]
+        [Description("next-trip (default) or defer (ADR-010).")]
+        public string? CapacityMode { get; init; }
+
         [CommandOption("--rebalance")]
         [Description("Enable optional rebalancing of sticky assignments (ADR-006).")]
         public bool Rebalance { get; init; }
@@ -76,6 +80,16 @@ internal sealed class RunCommand : Command<RunCommand.Settings>
                 return 2;
             }
             scenario = scenario with { Dispatch = dispatch.ToLowerInvariant() };
+        }
+
+        if (settings.CapacityMode is { } modeText)
+        {
+            try { scenario = scenario with { CapacityMode = CapacityModes.Parse(modeText) }; }
+            catch (FormatException ex)
+            {
+                AnsiConsole.MarkupLineInterpolated($"[red]{ex.Message}[/]");
+                return 2;
+            }
         }
 
         var result = ScenarioRunner.Run(scenario, new Strategy(scenario.Scheduling, scenario.Dispatch, settings.Rebalance));

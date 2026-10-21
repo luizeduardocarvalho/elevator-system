@@ -10,7 +10,10 @@ public enum WaitBucket
     Dispatch,
     /// <summary>Unassigned after a stale reject or a rebalance move: the dispatcher's view was wrong or improved.</summary>
     Reassignment,
-    /// <summary>Unassigned because the elevator was full: it handed the pickup back (full-load bypass) or rejected it for capacity.</summary>
+    /// <summary>
+    /// Waiting because of a full elevator: the assigned elevator is full and bypassing pickups until its next trip
+    /// (NextTrip mode), or it handed the pickup back / rejected it for capacity (Defer mode).
+    /// </summary>
     BypassedFull,
     /// <summary>Left behind at an open door because the elevator was full (and still waiting for room); or the
     /// assigned elevator is in maintenance / rejected for maintenance.</summary>
@@ -69,6 +72,7 @@ public static class PassengerLifecycle
 
     private sealed class ElevatorView
     {
+        public int Riders;
         public ElevatorState State = ElevatorState.Idle;
         public int Floor = Floors.Lowest;
         public long DoorCycleStartedMs = -1;
@@ -97,6 +101,7 @@ public static class PassengerLifecycle
         var passengers = new Dictionary<int, Tracker>();
         var waiting = new List<Tracker>();
         long lastMs = 0;
+        var fullAt = double.PositiveInfinity; // riders at which an elevator bypasses pickups (persons: load 1 each)
 
         ElevatorView View(int id) => elevators.TryGetValue(id, out var v) ? v : elevators[id] = new ElevatorView();
 
@@ -105,12 +110,15 @@ public static class PassengerLifecycle
             if (e.At.Ms > lastMs)
             {
                 var span = e.At.Ms - lastMs;
-                foreach (var p in waiting) p.Buckets[(int)BucketOf(p, p.Elevator is { } id ? View(id) : null)] += span;
+                foreach (var p in waiting) p.Buckets[(int)BucketOf(p, p.Elevator is { } id ? View(id) : null, fullAt)] += span;
                 lastMs = e.At.Ms;
             }
 
             switch (e)
             {
+                case SimulationStarted started:
+                    fullAt = started.Capacity == int.MaxValue ? double.PositiveInfinity : started.BypassThreshold * started.Capacity;
+                    break;
                 case PassengerArrived a:
                     var t = new Tracker(a.PassengerId, a.From, a.To, a.At);
                     passengers[a.PassengerId] = t;
@@ -145,6 +153,7 @@ public static class PassengerLifecycle
                     p.Elevator = null;
                     break;
                 case PassengerBoarded b when passengers.GetValueOrDefault(b.PassengerId) is { } p:
+                    View(b.ElevatorId).Riders++;
                     p.BoardedAt = b.At;
                     p.Elevator = b.ElevatorId;
                     var arrival = View(b.ElevatorId).LastArrival;
@@ -152,6 +161,7 @@ public static class PassengerLifecycle
                     waiting.Remove(p);
                     break;
                 case PassengerAlighted al when passengers.GetValueOrDefault(al.PassengerId) is { } p:
+                    View(al.ElevatorId).Riders--;
                     p.AlightedAt = al.At;
                     break;
                 case StateChanged sc:
@@ -173,7 +183,7 @@ public static class PassengerLifecycle
         return passengers.Values.OrderBy(p => p.Id).Select(p => p.ToRecord()).ToList();
     }
 
-    private static WaitBucket BucketOf(Tracker p, ElevatorView? e)
+    private static WaitBucket BucketOf(Tracker p, ElevatorView? e, double fullAt)
     {
         switch (p.Status)
         {
@@ -183,7 +193,9 @@ public static class PassengerLifecycle
             case Status.Blocked: return WaitBucket.Blocked;
         }
 
-        switch (e!.State)
+        if (e!.Riders >= fullAt) return WaitBucket.BypassedFull; // the assigned elevator is full: next trip (ADR-010)
+
+        switch (e.State)
         {
             case ElevatorState.Maintenance:
                 return WaitBucket.Blocked;

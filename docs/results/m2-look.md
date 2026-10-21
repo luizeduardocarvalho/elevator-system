@@ -1,10 +1,10 @@
 # M2: LOOK vs FIFO
 
-- **Command:** `elevator bench --scheduling fifo,look --dispatch roundrobin,nearest --seeds 20 --out docs/results/m2-look.md --title "M2: LOOK vs FIFO"`
+- **Command:** `elevator bench --scheduling fifo,look --dispatch roundrobin,nearest --seeds 20 --out docs/results/m2-look.md --title "M2: LOOK vs FIFO" --capacity-mode defer`
 - **Seeds:** 1..20 (20 per strategy)
 - **Baseline:** fifo+nearest
-- **Scenarios:** up-peak (4 elevators, 20 floors, capacity 10), down-peak (4 elevators, 20 floors, capacity 10), lunch (4 elevators, 20 floors, capacity 10)
-- **Runs:** 240, 1.5 s wall
+- **Scenarios:** up-peak (4 elevators, 20 floors, capacity 10, defer), down-peak (4 elevators, 20 floors, capacity 10, defer), lunch (4 elevators, 20 floors, capacity 10, defer)
+- **Runs:** 240, 1.4 s wall
 
 All times are sim seconds. Each cell is the mean over seeds ± the 95% CI half-width (Student t).
 Δ columns are **paired per-seed differences** against the baseline (common random numbers: every

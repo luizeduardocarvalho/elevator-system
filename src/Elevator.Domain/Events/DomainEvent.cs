@@ -32,7 +32,8 @@ public abstract record DomainEvent([property: JsonPropertyName("t"), JsonPropert
 
 public sealed record SimulationStarted(
     SimTime At, string Scenario, int Seed, int Floors, string Scheduling, int Passengers,
-    int Elevators = 1, string Dispatch = "none", int Capacity = int.MaxValue)
+    int Elevators = 1, string Dispatch = "none", int Capacity = int.MaxValue, double BypassThreshold = 1.0,
+    string CapacityMode = "next-trip")
     : DomainEvent(At);
 
 public sealed record SimulationEnded(SimTime At, int Delivered, int Unserved) : DomainEvent(At);

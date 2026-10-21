@@ -59,7 +59,7 @@ public sealed class ElevatorSystem : IAsyncDisposable
 
         for (var i = 0; i < options.Elevators; i++)
         {
-            var elevator = new Domain.Elevator(i, options.Floors, timing, scheduling, Floors.Lowest, options.Capacity, options.BypassThreshold);
+            var elevator = new Domain.Elevator(i, options.Floors, timing, scheduling, Floors.Lowest, options.Capacity, options.BypassThreshold, options.CapacityMode);
             Add(new Actor(new ElevatorHandler(elevator, new ElevatorHandlerOptions(SnapshotDelayMs: latency.SnapshotMs), estimator), this));
         }
         var rebalance = options.Rebalance ? new HysteresisRebalance(scheduling, timing) : null;

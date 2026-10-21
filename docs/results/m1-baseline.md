@@ -1,10 +1,10 @@
 # M1 baseline: FIFO before any smarter strategy
 
-- **Command:** `elevator bench --scheduling fifo --dispatch roundrobin,nearest --seeds 20 --out docs/results/m1-baseline.md --title "M1 baseline: FIFO before any smarter strategy"`
+- **Command:** `elevator bench --scheduling fifo --dispatch roundrobin,nearest --seeds 20 --out docs/results/m1-baseline.md --title "M1 baseline: FIFO before any smarter strategy" --capacity-mode defer`
 - **Seeds:** 1..20 (20 per strategy)
 - **Baseline:** fifo+nearest
-- **Scenarios:** up-peak (4 elevators, 20 floors, capacity 10), down-peak (4 elevators, 20 floors, capacity 10), lunch (4 elevators, 20 floors, capacity 10)
-- **Runs:** 120, 0.9 s wall
+- **Scenarios:** up-peak (4 elevators, 20 floors, capacity 10, defer), down-peak (4 elevators, 20 floors, capacity 10, defer), lunch (4 elevators, 20 floors, capacity 10, defer)
+- **Runs:** 120, 0.8 s wall
 
 All times are sim seconds. Each cell is the mean over seeds ± the 95% CI half-width (Student t).
 Δ columns are **paired per-seed differences** against the baseline (common random numbers: every

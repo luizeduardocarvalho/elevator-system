@@ -7,8 +7,8 @@ public class DestinationDispatchMechanicsTests
     private static Request R(int id, int from, int to, long calledAtMs = 0) =>
         Request.Create(from, to, new SimTime(calledAtMs), Harness.Floors, id: id).Value!;
 
-    private static Elevator Make(int capacity = 10, double threshold = 0.8, int startFloor = 1) =>
-        new(0, Harness.Floors, ElevatorTiming.Default, TestPolicies.NearestCarCallThenOldestHallCall, startFloor, capacity, threshold);
+    private static Elevator Make(int capacity = 10, double threshold = 0.8, int startFloor = 1, CapacityMode mode = CapacityMode.NextTrip) =>
+        new(0, Harness.Floors, ElevatorTiming.Default, TestPolicies.NearestCarCallThenOldestHallCall, startFloor, capacity, threshold, mode);
 
     [Fact]
     public void Requests_at_the_same_floor_and_direction_share_one_stop()
@@ -36,9 +36,33 @@ public class DestinationDispatchMechanicsTests
     }
 
     [Fact]
-    public void Reaching_the_bypass_threshold_hands_back_every_pending_pickup()
+    public void Next_trip_a_full_elevator_keeps_its_pickups_bypasses_them_and_answers_once_riders_get_off()
     {
         var e = Make(capacity: 5, threshold: 0.8); // full at 4
+        e.AssignPickup(R(10, 3, 9)); // someone waiting at 3, going up
+        for (var i = 1; i <= 4; i++) e.Board(R(i, 1, 4)); // four riders to 4: full
+        e.DrainEvents();
+        Assert.True(e.IsFull);
+        Assert.Single(e.HallCalls); // kept, not handed back
+
+        // Up 1→4 is 3 floors (6 s), doors fully open at 7 s.
+        e.Tick(new SimTime(7_000));
+        var events = e.DrainEvents();
+        Assert.DoesNotContain(events, ev => ev is AssignmentReleased);
+        Assert.DoesNotContain(events, ev => ev is HallCallAnswered); // passed floor 3 while full
+        var openAt4 = events.OfType<DoorsOpened>().Single(d => d.Floor == 4);
+
+        foreach (var i in Enumerable.Range(1, 4)) e.Alight(i); // riders get off at 4 as the doors open: room again
+        e.Tick(new SimTime(200_000));
+        var answered = Assert.Single(e.DrainEvents().OfType<HallCallAnswered>());
+        Assert.Equal(3, answered.Floor); // it came back for them
+        Assert.True(answered.At > openAt4.At);
+    }
+
+    [Fact]
+    public void Defer_mode_reaching_the_bypass_threshold_hands_back_every_pending_pickup()
+    {
+        var e = Make(capacity: 5, threshold: 0.8, mode: CapacityMode.Defer); // full at 4
         e.EnterMaintenance();
         e.AssignPickup(R(10, 7, 9));
         e.AssignPickup(R(11, 3, 1));

@@ -18,8 +18,9 @@ namespace Elevator.Domain;
 /// riders going that way board.</item>
 /// <item>A matching pickup at the floor where it stands is answered at once (doors open), reopens the doors
 /// (doors closing) or opens them (idle).</item>
-/// <item>Full-load bypass: once the load reaches the bypass threshold it hands back every pending pickup
-/// (<see cref="AssignmentReleased"/>) and only serves its riders until it has room again.</item>
+/// <item>Full-load bypass: at or above the bypass threshold it only serves its riders. In NextTrip mode (default,
+/// ADR-010) it keeps its pickups and comes back for them once riders get off; in Defer mode it hands them back
+/// (<see cref="AssignmentReleased"/>).</item>
 /// </list>
 /// The policy only answers "where next, and which lantern?" (<see cref="ISchedulingPolicy.Decide"/>).
 /// </summary>
@@ -40,7 +41,7 @@ public sealed class Elevator
     private bool _levelWithFloor;     // true while stopped, or at the instant a moving elevator reaches a floor
 
     public Elevator(int id, int floors, ElevatorTiming timing, ISchedulingPolicy policy, int startFloor = Floors.Lowest,
-        int capacity = int.MaxValue, double bypassThreshold = 1.0)
+        int capacity = int.MaxValue, double bypassThreshold = 1.0, CapacityMode capacityMode = CapacityMode.NextTrip)
     {
         if (floors < 2) throw new ArgumentOutOfRangeException(nameof(floors), "need at least two floors");
         if (Floors.Check(startFloor, floors) is { } error) throw new ArgumentOutOfRangeException(nameof(startFloor), error);
@@ -52,6 +53,7 @@ public sealed class Elevator
         FloorCount = floors;
         Capacity = capacity;
         BypassThreshold = bypassThreshold;
+        CapacityMode = capacityMode;
         _timing = timing;
         _policy = policy;
         CurrentFloor = startFloor;
@@ -64,7 +66,7 @@ public sealed class Elevator
     /// </summary>
     public static Elevator FromSnapshot(ElevatorSnapshot s, ElevatorTiming timing, ISchedulingPolicy policy)
     {
-        var e = new Elevator(s.ElevatorId, s.Floors, timing, policy, s.CurrentFloor, s.Capacity, s.BypassThreshold)
+        var e = new Elevator(s.ElevatorId, s.Floors, timing, policy, s.CurrentFloor, s.Capacity, s.BypassThreshold, s.CapacityMode)
         {
             State = s.State,
             CommittedDirection = s.CommittedDirection,
@@ -88,6 +90,11 @@ public sealed class Elevator
     public int Capacity { get; }
 
     public double BypassThreshold { get; }
+
+    public CapacityMode CapacityMode { get; }
+
+    /// <summary>NextTrip mode and full: pickups are bypassed (not served, not shown to the policy) until there is room.</summary>
+    private bool Bypassing => CapacityMode == CapacityMode.NextTrip && IsFull;
 
     /// <summary>The floor the elevator is at, or the last floor it passed while moving.</summary>
     public int CurrentFloor { get; private set; }
@@ -120,7 +127,10 @@ public sealed class Elevator
 
     public ElevatorSnapshot Snapshot() =>
         new(Id, CurrentFloor, State, CommittedDirection, _carCalls, _hallCalls, FloorCount, _riders,
-            Capacity, BypassThreshold, Now, _deadline, _closingStartedAt, Version) { RiderTotals = _riderTotals };
+            Capacity, BypassThreshold, Now, _deadline, _closingStartedAt, Version) { RiderTotals = _riderTotals, CapacityMode = CapacityMode };
+
+    /// <summary>What the scheduling policy sees: while bypassing, only the drop-offs.</summary>
+    private ElevatorSnapshot PolicyView() => Bypassing ? Snapshot() with { HallCalls = [] } : Snapshot();
 
     /// <summary>Returns and clears the events produced since the last call.</summary>
     public IReadOnlyList<DomainEvent> DrainEvents()
@@ -196,7 +206,7 @@ public sealed class Elevator
     {
         if (_carCalls.Contains(CurrentFloor)) return true;
         if (CurrentFloor == Floors.Lowest || CurrentFloor == FloorCount) return true;
-        var target = _policy.Decide(Snapshot()).Target;
+        var target = _policy.Decide(PolicyView()).Target;
         return target is null || target == CurrentFloor || !direction.IsAhead(CurrentFloor, target.Value);
     }
 
@@ -306,6 +316,7 @@ public sealed class Elevator
             floor == CurrentFloor && State is ElevatorState.DoorOpening or ElevatorState.DoorOpen or ElevatorState.DoorClosing;
         if (!standingHereWithDoorsInCycle) return;
 
+        if (Bypassing) return; // full: served on a later trip
         CommittedDirection ??= direction; // stopped with no work: adopt the caller's direction
         if (CommittedDirection != direction) return; // served later, when the elevator comes back for it
 
@@ -345,7 +356,7 @@ public sealed class Elevator
         _riderTotals = _riderTotals.Add(rider);
         Version++;
         AddRequest(rider.DestinationFloor);
-        if (IsFull) ReleaseAllPickups(AssignmentReason.BypassedFull);
+        if (CapacityMode == CapacityMode.Defer && IsFull) ReleaseAllPickups(AssignmentReason.BypassedFull);
     }
 
     /// <summary>Load sensor: the rider with <paramref name="requestId"/> stepped out.</summary>
@@ -356,6 +367,12 @@ public sealed class Elevator
         _riderTotals = _riderTotals.Remove(_riders[index]);
         _riders = _riders.RemoveAt(index);
         Version++;
+
+        // Riders getting off can make room while the doors are open: a bypassed pickup here is answered now.
+        if (CapacityMode == CapacityMode.NextTrip && State == ElevatorState.DoorOpen && !IsFull && AnswerHallCallHere())
+            _deadline = Now.AddMs(_timing.DoorDwellMs);
+        // Idle and no longer full: the bypassed pickups are visible to the policy again.
+        if (State == ElevatorState.Idle) DecideFromIdle();
     }
 
     /// <summary>Removes a not-yet-picked-up request (rebalancing). False if it is no longer pending here.</summary>
@@ -389,7 +406,7 @@ public sealed class Elevator
     {
         if (State != ElevatorState.Idle) return;
 
-        var target = _policy.Decide(Snapshot()).Target;
+        var target = _policy.Decide(PolicyView()).Target;
         if (target is null) CommittedDirection = null;
         else if (target == CurrentFloor) OpenDoor();
         else if (target > CurrentFloor) MoveUp();
@@ -402,21 +419,23 @@ public sealed class Elevator
     /// </summary>
     private Direction? LanternForStop()
     {
-        var decision = _policy.Decide(Snapshot());
+        var decision = _policy.Decide(PolicyView());
         if (decision.Target is not { } target) return null;
         if (target != CurrentFloor) return Directions.Between(CurrentFloor, target);
         return decision.ServeDirection ?? _hallCalls.FirstOrDefault(c => c.Floor == CurrentFloor)?.Direction;
     }
 
-    private void AnswerHallCallHere()
+    private bool AnswerHallCallHere()
     {
+        if (Bypassing) return false; // full: pickups wait for the next trip
         var index = _hallCalls.FindIndex(c => c.Floor == CurrentFloor && c.Direction == CommittedDirection);
-        if (index < 0) return;
+        if (index < 0) return false;
 
         var call = _hallCalls[index];
         _hallCalls = _hallCalls.RemoveAt(index);
         Version++;
         Emit(new HallCallAnswered(Now, Id, call.Floor, call.Direction));
+        return true;
     }
 
     private void Fire(Trigger trigger)

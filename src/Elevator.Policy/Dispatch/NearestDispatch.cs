@@ -13,7 +13,8 @@ namespace Elevator.Policy.Dispatch;
 /// <item>Otherwise it must finish its sweep first: distance to the farthest stop ahead in d, then back to the
 /// pickup: |far − floor| + |far − pickup|.</item>
 /// </list>
-/// Ties go to the lowest elevator id. Maintenance or full elevators are ineligible.
+/// Ties go to the lowest elevator id. Elevators in maintenance are never chosen; full ones only when every elevator is
+/// full and the building runs in NextTrip mode (ADR-010).
 /// </summary>
 public sealed class NearestDispatch : IDispatchPolicy
 {
@@ -22,7 +23,7 @@ public sealed class NearestDispatch : IDispatchPolicy
     public DispatchChoice? Choose(DispatchContext context)
     {
         DispatchChoice? best = null;
-        foreach (var s in context.Candidates.Where(Eligibility.CanTakePickup).OrderBy(s => s.ElevatorId))
+        foreach (var s in Eligibility.Candidates(context.Candidates).OrderBy(s => s.ElevatorId))
         {
             var distance = EffectiveDistance(s, context.Request);
             if (best is null || distance < best.Cost) best = new DispatchChoice(s.ElevatorId, distance);

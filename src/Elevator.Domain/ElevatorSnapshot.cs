@@ -48,6 +48,8 @@ public sealed record ElevatorSnapshot(
 
     public int Load => RiderTotals.TotalLoad;
 
+    public CapacityMode CapacityMode { get; init; } = CapacityMode.NextTrip;
+
     /// <summary>Full-load bypass: at or above the threshold it serves its riders only (no pickups).</summary>
     public bool IsFull => Load >= BypassThreshold * Capacity;
 

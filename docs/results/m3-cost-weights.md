@@ -1,10 +1,10 @@
 # M3: cost weight sweep (λ, μ) under LOOK, vs LOOK+Nearest
 
-- **Command:** `elevator bench --strategies look+nearest,look+cost:0:0,look+cost:0:10,look+cost:0:30,look+cost:0.5:0,look+cost:0.5:10,look+cost:0.5:30,look+cost:1:0,look+cost:1:10,look+cost:1:30,look+cost:2:0,look+cost:2:10,look+cost:2:30 --baseline look+nearest --seeds 20 --out docs/results/m3-cost-weights.md --title "M3: cost weight sweep (λ, μ) under LOOK, vs LOOK+Nearest"`
+- **Command:** `elevator bench --strategies look+nearest,look+cost:0:0,look+cost:0:10,look+cost:0:30,look+cost:0.5:0,look+cost:0.5:10,look+cost:0.5:30,look+cost:1:0,look+cost:1:10,look+cost:1:30,look+cost:2:0,look+cost:2:10,look+cost:2:30 --baseline look+nearest --seeds 20 --out docs/results/m3-cost-weights.md --title "M3: cost weight sweep (λ, μ) under LOOK, vs LOOK+Nearest" --capacity-mode defer`
 - **Seeds:** 1..20 (20 per strategy)
 - **Baseline:** look+nearest
-- **Scenarios:** up-peak (4 elevators, 20 floors, capacity 10), down-peak (4 elevators, 20 floors, capacity 10), lunch (4 elevators, 20 floors, capacity 10)
-- **Runs:** 780, 11.1 s wall
+- **Scenarios:** up-peak (4 elevators, 20 floors, capacity 10, defer), down-peak (4 elevators, 20 floors, capacity 10, defer), lunch (4 elevators, 20 floors, capacity 10, defer)
+- **Runs:** 780, 3.4 s wall
 
 All times are sim seconds. Each cell is the mean over seeds ± the 95% CI half-width (Student t).
 Δ columns are **paired per-seed differences** against the baseline (common random numbers: every

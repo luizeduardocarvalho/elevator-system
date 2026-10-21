@@ -1,10 +1,10 @@
 # M3: cost-based dispatch, full grid (held-out seeds 21-40)
 
-- **Command:** `elevator bench --scheduling fifo,look --dispatch roundrobin,nearest,cost --seeds 20 --first-seed 21 --out docs/results/m3-cost.md --title "M3: cost-based dispatch, full grid (held-out seeds 21-40)"`
+- **Command:** `elevator bench --scheduling fifo,look --dispatch roundrobin,nearest,cost --seeds 20 --first-seed 21 --out docs/results/m3-cost.md --title "M3: cost-based dispatch, full grid (held-out seeds 21-40)" --capacity-mode defer`
 - **Seeds:** 21..40 (20 per strategy)
 - **Baseline:** fifo+nearest
-- **Scenarios:** up-peak (4 elevators, 20 floors, capacity 10), down-peak (4 elevators, 20 floors, capacity 10), lunch (4 elevators, 20 floors, capacity 10)
-- **Runs:** 360, 3.3 s wall
+- **Scenarios:** up-peak (4 elevators, 20 floors, capacity 10, defer), down-peak (4 elevators, 20 floors, capacity 10, defer), lunch (4 elevators, 20 floors, capacity 10, defer)
+- **Runs:** 360, 1.8 s wall
 
 All times are sim seconds. Each cell is the mean over seeds ± the 95% CI half-width (Student t).
 Δ columns are **paired per-seed differences** against the baseline (common random numbers: every

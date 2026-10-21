@@ -44,9 +44,10 @@ public sealed class SimEngine
         var latency = scenario.Latency ?? MessageLatency.None;
         var estimator = new StopProjection(scheduling, scenario.Timing); // each elevator's own view, for the staleness check
 
+        var capacityMode = strategy.Capacity ?? scenario.CapacityMode;
         for (var i = 0; i < scenario.Elevators; i++)
         {
-            var elevator = new ElevatorUnit(i, scenario.Floors, scenario.Timing, scheduling, Floors.Lowest, scenario.Capacity, scenario.BypassThreshold);
+            var elevator = new ElevatorUnit(i, scenario.Floors, scenario.Timing, scheduling, Floors.Lowest, scenario.Capacity, scenario.BypassThreshold, capacityMode);
             var handler = new ElevatorHandler(elevator, new ElevatorHandlerOptions(SnapshotDelayMs: latency.SnapshotMs), estimator);
             _elevators.Add(handler);
             Register(handler);
@@ -61,7 +62,8 @@ public sealed class SimEngine
         var passengers = ScenarioRunner.BuildPassengers(scenario);
         _expectedPassengers = passengers.Count;
         Log.Add(new SimulationStarted(SimTime.Zero, scenario.Name, scenario.Seed, scenario.Floors, scheduling.Name, passengers.Count,
-            scenario.Elevators, dispatch.Name + (rebalance is null ? "" : "+rebalance"), scenario.Capacity));
+            scenario.Elevators, dispatch.Name + (rebalance is null ? "" : "+rebalance"), scenario.Capacity,
+            scenario.BypassThreshold, CapacityModes.Name(capacityMode)));
 
         foreach (var e in _elevators) Enqueue(SimTime.Zero, new Envelope(e.Address, new Start()));
         foreach (var p in passengers) Enqueue(SimTime.Zero, new Envelope(Address.Passengers, new PassengerArrives(p.ToRequest()), p.ArrivesAt.Ms));

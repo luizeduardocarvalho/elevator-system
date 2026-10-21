@@ -13,9 +13,9 @@ public class AssignmentAcceptanceTests
 
     private static Request R(int id, long calledAtMs = 0) => Request.Create(5, 9, new SimTime(calledAtMs), 10, id: id).Value!;
 
-    private static (ElevatorHandler Handler, Outbox Outbox) Make(long ourEtaMs, int riders = 0)
+    private static (ElevatorHandler Handler, Outbox Outbox) Make(long ourEtaMs, int riders = 0, CapacityMode mode = CapacityMode.NextTrip)
     {
-        var elevator = new Elevator(0, 10, ElevatorTiming.Default, TestPolicies.NearestCarCallThenOldestHallCall, 1, capacity: 5, bypassThreshold: 0.8);
+        var elevator = new Elevator(0, 10, ElevatorTiming.Default, TestPolicies.NearestCarCallThenOldestHallCall, 1, capacity: 5, bypassThreshold: 0.8, mode);
         for (var i = 0; i < riders; i++) elevator.Board(Request.Create(1, 2, SimTime.Zero, 10, id: 100 + i).Value!);
         return (new ElevatorHandler(elevator, new ElevatorHandlerOptions(StalenessToleranceMs: 10_000, AgingMs: 60_000), new FixedEta(ourEtaMs)), new Outbox());
     }
@@ -54,9 +54,22 @@ public class AssignmentAcceptanceTests
     }
 
     [Fact]
+    public void Next_trip_mode_a_full_elevator_accepts_for_a_later_trip_but_never_a_request_that_cannot_fit()
+    {
+        var (h, o) = Make(ourEtaMs: 0, riders: 4); // full: 4 ≥ 0.8 × 5
+        h.Handle(new Assign(R(1), null, Forced: false), SimTime.Zero, o);
+        Assert.Null(Outcome(o));
+
+        (h, o) = Make(ourEtaMs: 0);
+        var tooBig = Request.Create(5, 9, SimTime.Zero, 10, id: 2, load: 6).Value!; // load 6 > capacity 5
+        h.Handle(new Assign(tooBig, null, Forced: true), new SimTime(120_000), o);
+        Assert.Equal(AssignmentReason.Capacity, Outcome(o));
+    }
+
+    [Fact]
     public void Capacity_and_maintenance_rejects_always_win()
     {
-        var (h, o) = Make(ourEtaMs: 0, riders: 4); // 4 ≥ 0.8 × 5
+        var (h, o) = Make(ourEtaMs: 0, riders: 4, mode: CapacityMode.Defer); // Defer: full now (4 ≥ 0.8 × 5) means no
         h.Handle(new Assign(R(1, calledAtMs: 0), null, Forced: true), new SimTime(120_000), o); // forced and aged
         Assert.Equal(AssignmentReason.Capacity, Outcome(o));
 

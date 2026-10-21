@@ -35,6 +35,10 @@ internal sealed class BenchCommand : Command<BenchCommand.Settings>
         [Description("off, on or off,on. Default: off")]
         public string Rebalance { get; init; } = "off";
 
+        [CommandOption("--capacity-mode <LIST>")]
+        [Description("next-trip, defer or both (adds a grid dimension). Default: each scenario's own mode.")]
+        public string? CapacityMode { get; init; }
+
         [CommandOption("--strategies <LIST>")]
         [Description("Explicit strategies (e.g. fifo+nearest,look+cost); replaces the grid.")]
         public string? Strategies { get; init; }
@@ -59,14 +63,21 @@ internal sealed class BenchCommand : Command<BenchCommand.Settings>
     public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
     {
         List<Strategy> strategies;
+        Domain.CapacityMode? singleMode = null;
         try
         {
-            strategies = settings.Strategies is { } explicitList
+            // One capacity mode applies to the whole run (names unchanged); several become a grid dimension ("/defer").
+            var modes = settings.CapacityMode is { } list ? ScenarioPaths.List(list).Select(CapacityModes.Parse).ToList() : [];
+            if (modes.Count == 1) singleMode = modes[0];
+            var modeDimension = modes.Count > 1 ? modes.Select(m => (Domain.CapacityMode?)m).ToList() : [null];
+
+            var basic = settings.Strategies is { } explicitList
                 ? ScenarioPaths.List(explicitList).Select(Strategy.Parse).ToList()
                 : (from s in ScenarioPaths.List(settings.Scheduling ?? string.Join(',', SchedulingPolicies.Names))
                    from d in ScenarioPaths.List(settings.Dispatch ?? string.Join(',', DispatchPolicies.Names))
                    from r in ScenarioPaths.List(settings.Rebalance)
                    select new Strategy(s.ToLowerInvariant(), d.ToLowerInvariant(), r == "on")).ToList();
+            strategies = (from st in basic from c in modeDimension select st with { Capacity = st.Capacity ?? c }).ToList();
             foreach (var s in strategies)
             {
                 SchedulingPolicies.Create(s.Scheduling);
@@ -88,7 +99,7 @@ internal sealed class BenchCommand : Command<BenchCommand.Settings>
                 AnsiConsole.MarkupLineInterpolated($"[red]Invalid scenario {name}:[/] {string.Join("; ", loaded.Errors)}");
                 return 2;
             }
-            scenarios.Add(loaded.Scenario!);
+            scenarios.Add(singleMode is { } mode ? loaded.Scenario! with { CapacityMode = mode } : loaded.Scenario!);
         }
 
         var seeds = Enumerable.Range(settings.FirstSeed, settings.Seeds).ToList();
@@ -133,7 +144,7 @@ internal sealed class BenchCommand : Command<BenchCommand.Settings>
             ["Command"] = "`elevator " + string.Join(' ', context.Arguments.Select(a => a.Contains(' ', StringComparison.Ordinal) ? $"\"{a}\"" : a)) + "`",
             ["Seeds"] = $"{settings.FirstSeed}..{settings.FirstSeed + settings.Seeds - 1} ({settings.Seeds} per strategy)",
             ["Baseline"] = settings.Baseline,
-            ["Scenarios"] = string.Join(", ", scenarios.Select(s => $"{s.Name} ({s.Elevators} elevators, {s.Floors} floors, capacity {s.Capacity})")),
+            ["Scenarios"] = string.Join(", ", scenarios.Select(s => $"{s.Name} ({s.Elevators} elevators, {s.Floors} floors, capacity {s.Capacity}, {CapacityModes.Name(s.CapacityMode)})")),
             ["Runs"] = $"{jobs.Count}, {stopwatch.Elapsed.TotalSeconds.ToString("0.0", CultureInfo.InvariantCulture)} s wall",
         };
         if (Path.GetDirectoryName(settings.Out) is { Length: > 0 } dir) Directory.CreateDirectory(dir);

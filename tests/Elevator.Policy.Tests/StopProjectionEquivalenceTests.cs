@@ -15,7 +15,7 @@ namespace Elevator.Policy.Tests;
 public class StopProjectionEquivalenceTests
 {
     public sealed record Case(string Policy, int Capacity, double Threshold, int Start, (int From, int To, long AtMs)[] Assigned,
-        int Boarded, long SnapshotAtMs, long NowDelayMs, (int From, int To) Extra);
+        int Boarded, long SnapshotAtMs, long NowDelayMs, (int From, int To) Extra, CapacityMode Mode);
 
     private const int Floors = 12;
 
@@ -35,7 +35,8 @@ public class StopProjectionEquivalenceTests
         from at in Gen.Choose(0, 90_000)
         from delay in Gen.Elements(0L, 0L, 1_500L, 9_000L)
         from extra in Trip
-        select new Case(policy, capacity, threshold, start, assigned, boarded, at, delay, extra);
+        from mode in Gen.Elements(CapacityMode.NextTrip, CapacityMode.Defer)
+        select new Case(policy, capacity, threshold, start, assigned, boarded, at, delay, extra, mode);
 
     [Property(MaxTest = 1500)]
     public Property Per_stop_projection_equals_the_per_passenger_oracle() => Prop.ForAll(Cases.ToArbitrary(), c =>
@@ -79,13 +80,13 @@ public class StopProjectionEquivalenceTests
     /// <summary>A real elevator driven to a random state: assignments over time, some riders boarding, mid-route.</summary>
     private static ElevatorSnapshot BuildSnapshot(Case c, ISchedulingPolicy policy)
     {
-        var e = new ElevatorUnit(0, Floors, ElevatorTiming.Default, policy, c.Start, c.Capacity, c.Threshold);
+        var e = new ElevatorUnit(0, Floors, ElevatorTiming.Default, policy, c.Start, c.Capacity, c.Threshold, c.Mode);
         var id = 0;
         var boardedSoFar = 0;
         foreach (var (from, to, at) in c.Assigned.OrderBy(a => a.AtMs))
         {
             if (at > e.Now.Ms) Advance(e, at, c.Boarded, ref boardedSoFar);
-            if (e.IsFull || e.State == ElevatorState.Maintenance) continue;
+            if ((c.Mode == CapacityMode.Defer && e.IsFull) || e.State == ElevatorState.Maintenance) continue;
             e.AssignPickup(Request.Create(from, to, new SimTime(at), Floors, id: ++id).Value!);
             e.DrainEvents();
         }

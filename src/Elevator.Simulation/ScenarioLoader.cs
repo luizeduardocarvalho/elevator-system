@@ -58,6 +58,13 @@ public static class ScenarioLoader
         if (!DispatchPolicies.IsKnown(dispatch))
             errors.Add($"unknown dispatch '{dispatch}' (known: {string.Join(", ", DispatchPolicies.Names)})");
 
+        var capacityMode = CapacityMode.NextTrip;
+        if (dto.Building?.CapacityMode is { } modeText)
+        {
+            try { capacityMode = CapacityModes.Parse(modeText); }
+            catch (FormatException ex) { errors.Add($"building.capacityMode: {ex.Message}"); }
+        }
+
         var latency = new MessageLatency(dto.Latency?.SnapshotMs ?? 0, dto.Latency?.DispatchMs ?? 0);
         if (latency.SnapshotMs < 0 || latency.DispatchMs < 0) errors.Add("latency values must be >= 0");
 
@@ -129,7 +136,8 @@ public static class ScenarioLoader
             bypass,
             dispatch.ToLowerInvariant(),
             profile,
-            latency), []);
+            latency,
+            capacityMode), []);
     }
 
     // YAML shape. Everything nullable so missing keys can be reported instead of silently defaulting to 0.
@@ -176,6 +184,7 @@ public static class ScenarioLoader
         public int? Elevators { get; set; }
         public int? Capacity { get; set; }
         public double? BypassThreshold { get; set; }
+        public string? CapacityMode { get; set; }
     }
 
     private sealed class LatencyDto

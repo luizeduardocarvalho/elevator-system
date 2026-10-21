@@ -12,7 +12,7 @@ public sealed class RoundRobinDispatch : IDispatchPolicy
 
     public DispatchChoice? Choose(DispatchContext context)
     {
-        var eligible = context.Candidates.Where(Eligibility.CanTakePickup).OrderBy(s => s.ElevatorId).ToList();
+        var eligible = Eligibility.Candidates(context.Candidates).OrderBy(s => s.ElevatorId).ToList();
         if (eligible.Count == 0) return null;
         var chosen = eligible[(int)(context.Sequence % eligible.Count)];
         return new DispatchChoice(chosen.ElevatorId, 0);

@@ -19,10 +19,12 @@ public sealed record RuntimeOptions(
     bool KeepEvents = true,
     ElevatorTiming? Timing = null,
     MessageLatency? Latency = null,
-    int? OverloadThreshold = SimEngine.OverloadThreshold)
+    int? OverloadThreshold = SimEngine.OverloadThreshold,
+    CapacityMode CapacityMode = CapacityMode.NextTrip)
 {
     public ElevatorTiming EffectiveTiming => Timing ?? ElevatorTiming.Default;
 
     public static RuntimeOptions From(Scenario s, double speed) =>
-        new(s.Floors, s.Elevators, s.Capacity, s.BypassThreshold, s.Scheduling, s.Dispatch, Speed: speed, Timing: s.Timing, Latency: s.Latency);
+        new(s.Floors, s.Elevators, s.Capacity, s.BypassThreshold, s.Scheduling, s.Dispatch, Speed: speed, Timing: s.Timing, Latency: s.Latency,
+            CapacityMode: s.CapacityMode);
 }

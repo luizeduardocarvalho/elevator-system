@@ -7,12 +7,14 @@ public class DispatchTests
 {
     private static Request Req(int from, int to, int id = 1) => Request.Create(from, to, SimTime.Zero, 20, id: id).Value!;
 
-    private static ElevatorSnapshot Car(int id, int floor, Direction? dir = null, int[]? carCalls = null, ElevatorState state = ElevatorState.Idle, int load = 0) =>
+    private static ElevatorSnapshot Car(int id, int floor, Direction? dir = null, int[]? carCalls = null, ElevatorState state = ElevatorState.Idle, int load = 0,
+        CapacityMode mode = CapacityMode.NextTrip) =>
         ElevatorSnapshot.ForPolicy(floor, state, dir, carCalls ?? [], [], 20, id) with
         {
             Capacity = 10,
             BypassThreshold = 0.8,
             Riders = Enumerable.Range(100, load).Select(i => Req(1, 2, i)).ToArray(),
+            CapacityMode = mode,
         };
 
     private static DispatchContext Ctx(Request r, long seq = 0, params ElevatorSnapshot[] cars) =>
@@ -52,12 +54,28 @@ public class DispatchTests
         Assert.Equal(0, new NearestDispatch().Choose(Ctx(Req(5, 9), 0, Car(1, 3), Car(0, 7)))!.ElevatorId);
 
     [Fact]
-    public void Full_and_maintenance_elevators_are_ineligible()
+    public void Elevators_with_room_are_preferred_and_maintenance_is_never_chosen()
     {
         var full = Car(0, 5, load: 8);           // 8 ≥ 0.8 × 10
         var maintenance = Car(1, 5, state: ElevatorState.Maintenance);
         var far = Car(2, 20);
         Assert.Equal(2, new NearestDispatch().Choose(Ctx(Req(5, 9), 0, full, maintenance, far))!.ElevatorId);
+    }
+
+    [Fact]
+    public void Next_trip_when_every_elevator_is_full_one_is_still_named()
+    {
+        var full = Car(0, 5, load: 8);
+        var maintenance = Car(1, 5, state: ElevatorState.Maintenance);
+        Assert.Equal(0, new NearestDispatch().Choose(Ctx(Req(5, 9), 0, full, maintenance))!.ElevatorId);
+        Assert.Equal(0, new RoundRobinDispatch().Choose(Ctx(Req(5, 9), 0, full, maintenance))!.ElevatorId);
+    }
+
+    [Fact]
+    public void Defer_when_every_elevator_is_full_the_request_waits()
+    {
+        var full = Car(0, 5, load: 8, mode: CapacityMode.Defer);
+        var maintenance = Car(1, 5, state: ElevatorState.Maintenance, mode: CapacityMode.Defer);
         Assert.Null(new NearestDispatch().Choose(Ctx(Req(5, 9), 0, full, maintenance)));
         Assert.Null(new RoundRobinDispatch().Choose(Ctx(Req(5, 9), 0, full, maintenance)));
     }

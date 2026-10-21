@@ -20,7 +20,8 @@ public sealed record Scenario(
     double BypassThreshold = 0.8,
     string Dispatch = "cost",
     TrafficProfile? Profile = null,
-    MessageLatency? Latency = null);
+    MessageLatency? Latency = null,
+    CapacityMode CapacityMode = CapacityMode.NextTrip);
 
 /// <summary>An explicitly scripted passenger: arrives at <paramref name="At"/> on <paramref name="From"/>, wants <paramref name="To"/>.</summary>
 public sealed record PassengerSpec(SimTime At, int From, int To);

@@ -1,10 +1,10 @@
 # M3: LOOK+Cost vs LOOK+Nearest (held-out seeds 21-40)
 
-- **Command:** `elevator bench --strategies look+nearest,look+cost --baseline look+nearest --seeds 20 --first-seed 21 --out docs/results/m3-cost-vs-nearest.md --title "M3: LOOK+Cost vs LOOK+Nearest (held-out seeds 21-40)"`
+- **Command:** `elevator bench --strategies look+nearest,look+cost --baseline look+nearest --seeds 20 --first-seed 21 --out docs/results/m3-cost-vs-nearest.md --title "M3: LOOK+Cost vs LOOK+Nearest (held-out seeds 21-40)" --capacity-mode defer`
 - **Seeds:** 21..40 (20 per strategy)
 - **Baseline:** look+nearest
-- **Scenarios:** up-peak (4 elevators, 20 floors, capacity 10), down-peak (4 elevators, 20 floors, capacity 10), lunch (4 elevators, 20 floors, capacity 10)
-- **Runs:** 120, 2.1 s wall
+- **Scenarios:** up-peak (4 elevators, 20 floors, capacity 10, defer), down-peak (4 elevators, 20 floors, capacity 10, defer), lunch (4 elevators, 20 floors, capacity 10, defer)
+- **Runs:** 120, 0.9 s wall
 
 All times are sim seconds. Each cell is the mean over seeds ± the 95% CI half-width (Student t).
 Δ columns are **paired per-seed differences** against the baseline (common random numbers: every
