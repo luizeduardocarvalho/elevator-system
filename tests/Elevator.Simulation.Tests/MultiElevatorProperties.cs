@@ -16,7 +16,7 @@ public class MultiElevatorProperties
     public sealed record Case(Scenario Scenario, Strategy Strategy);
 
     public static readonly string[] Schedulings = ["fifo", "look"];
-    public static readonly string[] Dispatches = ["roundrobin", "nearest"];
+    public static readonly string[] Dispatches = ["roundrobin", "nearest", "cost"];
 
     private static Gen<Case> CaseGen() =>
         from floors in Gen.Choose(3, 20)

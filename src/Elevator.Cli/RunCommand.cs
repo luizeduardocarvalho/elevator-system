@@ -66,7 +66,7 @@ internal sealed class RunCommand : Command<RunCommand.Settings>
 
         if (settings.Dispatch is { } dispatch)
         {
-            if (!DispatchPolicies.Names.Contains(dispatch, StringComparer.OrdinalIgnoreCase))
+            if (!DispatchPolicies.IsKnown(dispatch))
             {
                 AnsiConsole.MarkupLineInterpolated($"[red]Unknown dispatch '{dispatch}'[/] (known: {string.Join(", ", DispatchPolicies.Names)})");
                 return 2;

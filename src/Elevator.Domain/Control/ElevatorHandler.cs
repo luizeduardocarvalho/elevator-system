@@ -90,7 +90,7 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
         var aged = now.Ms - assign.Request.Timestamp.Ms >= _options.AgingMs;
         if (aged) return null;
 
-        var eta = estimator.EstimatePickup(Elevator.Snapshot(), assign.Request);
+        var eta = estimator.EstimatePickup(Elevator.Snapshot(), assign.Request, now);
         return eta is { } mine && mine.Ms - estimate.Ms > _options.StalenessToleranceMs ? AssignmentReason.Stale : null;
     }
 

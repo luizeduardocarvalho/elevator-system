@@ -36,11 +36,12 @@ public sealed class SimEngine
         var scheduling = SchedulingPolicies.Create(strategy.Scheduling);
         var dispatch = DispatchPolicies.Create(strategy.Dispatch, scheduling, scenario.Timing);
         var latency = scenario.Latency ?? MessageLatency.None;
+        var estimator = new RouteProjection(scheduling, scenario.Timing); // each elevator's own view, for the staleness check
 
         for (var i = 0; i < scenario.Elevators; i++)
         {
             var elevator = new ElevatorUnit(i, scenario.Floors, scenario.Timing, scheduling, Floors.Lowest, scenario.Capacity, scenario.BypassThreshold);
-            var handler = new ElevatorHandler(elevator, new ElevatorHandlerOptions(SnapshotDelayMs: latency.SnapshotMs), estimator: null);
+            var handler = new ElevatorHandler(elevator, new ElevatorHandlerOptions(SnapshotDelayMs: latency.SnapshotMs), estimator);
             _elevators.Add(handler);
             Register(handler);
         }

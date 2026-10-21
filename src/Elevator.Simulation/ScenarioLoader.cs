@@ -54,8 +54,8 @@ public static class ScenarioLoader
         if (!SchedulingPolicies.Names.Contains(scheduling, StringComparer.OrdinalIgnoreCase))
             errors.Add($"unknown scheduling '{scheduling}' (known: {string.Join(", ", SchedulingPolicies.Names)})");
 
-        var dispatch = dto.Dispatch ?? "nearest";
-        if (!DispatchPolicies.Names.Contains(dispatch, StringComparer.OrdinalIgnoreCase))
+        var dispatch = dto.Dispatch ?? "cost"; // ADR-006
+        if (!DispatchPolicies.IsKnown(dispatch))
             errors.Add($"unknown dispatch '{dispatch}' (known: {string.Join(", ", DispatchPolicies.Names)})");
 
         var latency = new MessageLatency(dto.Latency?.SnapshotMs ?? 0, dto.Latency?.DispatchMs ?? 0);

@@ -247,6 +247,9 @@ public sealed class Elevator
 
     public void EnterMaintenance() => Fire(Trigger.EnterMaintenance);
 
+    /// <summary>If idle, decide again whether there is work. Needed after <see cref="FromSnapshot"/> of a hand-built snapshot.</summary>
+    public void Resume() => DecideFromIdle();
+
     public void ExitMaintenance()
     {
         Fire(Trigger.ExitMaintenance);

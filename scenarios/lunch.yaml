@@ -9,7 +9,7 @@ building:
   capacity: 10
   bypassThreshold: 0.8
 scheduling: look
-dispatch: nearest
+dispatch: cost
 maxSimTimeS: 5400
 traffic:
   profile:

@@ -19,8 +19,11 @@ public interface IDispatchPolicy
     DispatchChoice? Choose(DispatchContext context);
 }
 
-/// <summary>Estimates when <paramref name="request"/> would be picked up if assigned to the elevator in <paramref name="snapshot"/>.</summary>
+/// <summary>
+/// Estimates when <paramref name="request"/> would be picked up if assigned at <paramref name="now"/> to the elevator
+/// described by <paramref name="snapshot"/> (which may be older than now).
+/// </summary>
 public interface IEtaEstimator
 {
-    SimTime? EstimatePickup(ElevatorSnapshot snapshot, Request request);
+    SimTime? EstimatePickup(ElevatorSnapshot snapshot, Request request, SimTime now);
 }

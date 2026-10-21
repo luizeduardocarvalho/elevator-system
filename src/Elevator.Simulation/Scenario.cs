@@ -18,7 +18,7 @@ public sealed record Scenario(
     int Elevators = 1,
     int Capacity = 10,
     double BypassThreshold = 0.8,
-    string Dispatch = "nearest",
+    string Dispatch = "cost",
     TrafficProfile? Profile = null,
     MessageLatency? Latency = null);
 
