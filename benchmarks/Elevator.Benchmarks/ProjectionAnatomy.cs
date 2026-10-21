@@ -30,7 +30,8 @@ public static class ProjectionAnatomy
 
     public static void Run()
     {
-        Console.WriteLine("backlog/elevator | Decide calls | stops scanned/call | stops scanned | µs/decision");
+        Console.WriteLine("Per-passenger projection (oracle, as before the rewrite) vs per-stop projection (now), one cost decision:");
+        Console.WriteLine("backlog/elevator | oracle Decide calls | oracle stops scanned | per-stop work steps | per-stop µs/decision");
         foreach (var backlog in new[] { 0, 25, 100, 400 })
         {
             var counting = new CountingPolicy(new LookScheduling());
@@ -46,13 +47,20 @@ public static class ProjectionAnatomy
             }
             var context = new DispatchContext(Random(rng, ++id), snapshots, new SimTime(3_000), ElevatorTiming.Default, 0);
 
-            new CostBasedDispatch(counting, ElevatorTiming.Default).Choose(context); // count one decision
+            // The oracle (per passenger), counted through the policy calls it makes for one decision (with + without, 4 elevators).
+            var oracle = new RouteProjection(counting, ElevatorTiming.Default);
+            foreach (var s in snapshots) { oracle.Project(s, context.Request, context.Now); oracle.Project(s, null, context.Now); }
             var (calls, scanned) = (counting.Calls, counting.StopsScanned);
 
-            const int reps = 20;
+            // The per-stop projection: deterministic work units for the same decision.
+            var fast = new StopProjection(new LookScheduling(), ElevatorTiming.Default);
+            var steps = snapshots.Sum(s => fast.Project(s, context.Request, context.Now).Steps + fast.Project(s, null, context.Now).Steps);
+
+            const int reps = 200;
+            for (var i = 0; i < 20; i++) new CostBasedDispatch(new LookScheduling(), ElevatorTiming.Default).Choose(context); // warm
             var sw = Stopwatch.StartNew();
             for (var i = 0; i < reps; i++) new CostBasedDispatch(new LookScheduling(), ElevatorTiming.Default).Choose(context);
-            Console.WriteLine($"{backlog,16} | {calls,12} | {scanned / Math.Max(1.0, calls),18:0.0} | {scanned,13} | {sw.Elapsed.TotalMicroseconds / reps,11:0}");
+            Console.WriteLine($"{backlog,16} | {calls,19} | {scanned,20} | {steps,19} | {sw.Elapsed.TotalMicroseconds / reps,20:0.0}");
         }
     }
 

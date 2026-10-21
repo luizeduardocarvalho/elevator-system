@@ -20,7 +20,7 @@ public class DispatchDecisionBenchmarks
     private DispatchContext _context = null!;
     private readonly LookScheduling _look = new();
 
-    [Params(0, 25, 100, 400)]
+    [Params(0, 25, 100, 400, 1600)]
     public int Backlog { get; set; }
 
     [GlobalSetup]

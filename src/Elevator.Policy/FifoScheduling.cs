@@ -1,3 +1,4 @@
+using System.Numerics;
 using Elevator.Domain;
 
 namespace Elevator.Policy;
@@ -18,11 +19,36 @@ namespace Elevator.Policy;
 /// Pickups passed on the way are NOT served: the mechanics only stop at drop-offs and at the target.
 /// No starvation: drop-offs come only from riders who boarded, and every pickup eventually becomes the oldest.
 /// </summary>
-public sealed class FifoScheduling : ISchedulingPolicy
+public sealed class FifoScheduling : IFastSchedulingPolicy
 {
     public string Name => "fifo";
 
     public PolicyDecision Decide(ElevatorSnapshot s) => new(NextGoal(s));
+
+    /// <summary>The same rules on floor bitmasks (O(1)).</summary>
+    public PolicyDecision Decide(in StopSet s)
+    {
+        if (s.CarCalls != 0)
+        {
+            if (s.CommittedDirection is { } direction)
+            {
+                var ahead = s.CarCalls & (direction == Direction.Up ? StopSet.Above(s.Floor) : StopSet.Below(s.Floor));
+                if (ahead != 0)
+                    return new PolicyDecision(direction == Direction.Up ? 63 - BitOperations.LeadingZeroCount(ahead) : BitOperations.TrailingZeroCount(ahead));
+            }
+
+            // Nearest drop-off, ties to the lower floor: compare the closest below with the closest at or above.
+            var below = s.CarCalls & StopSet.Below(s.Floor);
+            var atOrAbove = s.CarCalls & ~StopSet.Below(s.Floor);
+            int? low = below != 0 ? 63 - BitOperations.LeadingZeroCount(below) : null;
+            int? high = atOrAbove != 0 ? BitOperations.TrailingZeroCount(atOrAbove) : null;
+            if (low is null) return new PolicyDecision(high);
+            if (high is null) return new PolicyDecision(low);
+            return new PolicyDecision(s.Floor - low.Value <= high.Value - s.Floor ? low : high);
+        }
+
+        return s.Pickups.IsEmpty ? PolicyDecision.None : new PolicyDecision(s.Pickups[0].Floor);
+    }
 
     public static int? NextGoal(ElevatorSnapshot s)
     {

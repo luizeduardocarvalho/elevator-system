@@ -121,3 +121,38 @@ public class DispatcherProtocolTests
 
     private static int Elevator(Assign _, int elevator) => elevator;
 }
+
+public class OverloadModeTests
+{
+    private sealed class Fixed(string name, int elevator) : IDispatchPolicy
+    {
+        public string Name => name;
+
+        public DispatchChoice? Choose(DispatchContext c) => new(elevator, 0);
+    }
+
+    [Fact]
+    public void Above_the_threshold_the_fallback_decides_and_every_switch_is_logged()
+    {
+        var d = new DispatcherHandler(new Fixed("primary", 0), 2, ElevatorTiming.Default,
+            new DispatcherOptions(OverloadThreshold: 2), overloadFallback: new Fixed("fallback", 1));
+        var o = new Outbox();
+        foreach (var i in new[] { 0, 1 })
+            d.Handle(new SnapshotPublished(new Elevator(i, 10, ElevatorTiming.Default, TestPolicies.NearestCarCallThenOldestHallCall).Snapshot()), SimTime.Zero, o);
+
+        int AssignedTo(int id)
+        {
+            o.Clear();
+            d.Handle(new SubmitRequest(Request.Create(3, 7, SimTime.Zero, 10, id: id).Value!), SimTime.Zero, o);
+            return o.Messages.Single(m => m.Message is Assign).To.Index;
+        }
+
+        Assert.Equal([0, 0], new[] { AssignedTo(1), AssignedTo(2) }); // 1, 2 in flight: normal
+        Assert.Equal(1, AssignedTo(3));                                // 3 in flight > 2: fallback
+        Assert.Contains(o.Events, e => e is OverloadModeChanged { Active: true, InFlight: 3 });
+
+        foreach (var id in new[] { 1, 2, 3 }) d.Handle(new RequestPickedUp(id, 0), SimTime.Zero, o);
+        Assert.Equal(0, AssignedTo(4));
+        Assert.Contains(o.Events, e => e is OverloadModeChanged { Active: false });
+    }
+}

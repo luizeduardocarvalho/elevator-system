@@ -4,7 +4,9 @@ namespace Elevator.Domain.Control;
 
 /// <param name="DispatchDelayMs">Delay of an Assign message reaching the elevator (dispatcher cycle / network).</param>
 /// <param name="RebalanceIntervalMs">Optional rebalancing period; null = sticky assignments only (ADR-006).</param>
-public sealed record DispatcherOptions(long DispatchDelayMs = 0, long? RebalanceIntervalMs = null)
+/// <param name="OverloadThreshold">Requests in flight above which the dispatcher switches to its cheap fallback policy
+/// (defense in depth, ADR-006); null = never.</param>
+public sealed record DispatcherOptions(long DispatchDelayMs = 0, long? RebalanceIntervalMs = null, int? OverloadThreshold = null)
 {
     public static DispatcherOptions Default { get; } = new();
 }
@@ -35,7 +37,8 @@ public sealed class DispatcherHandler(
     int elevatorCount,
     ElevatorTiming timing,
     DispatcherOptions? options = null,
-    IRebalancePolicy? rebalance = null) : IHandler
+    IRebalancePolicy? rebalance = null,
+    IDispatchPolicy? overloadFallback = null) : IHandler
 {
     private enum Status { Pending, Proposed, Assigned }
 
@@ -60,6 +63,7 @@ public sealed class DispatcherHandler(
     private readonly Dictionary<int, HashSet<int>> _excludedFrom = [];
     private long _sequence;
     private bool _rebalanceScheduled;
+    private bool _overloaded;
 
     public Address Address => Address.Dispatcher;
 
@@ -159,14 +163,25 @@ public sealed class DispatcherHandler(
     {
         if (_snapshots.Count < elevatorCount) return; // not every elevator has reported yet; retried on next snapshot
 
+        // Overload mode: above the threshold of requests in flight, use the cheap fallback so that decision time stays
+        // bounded whatever the burst. Logged on every switch. The threshold sits far above any load in the bench
+        // profiles, so normal results are unaffected.
+        var overloaded = overloadFallback is not null && _options.OverloadThreshold is { } limit && _requests.Count > limit;
+        if (overloaded != _overloaded)
+        {
+            _overloaded = overloaded;
+            outbox.Emit(new OverloadModeChanged(now, overloaded, _requests.Count));
+        }
+        var active = overloaded ? overloadFallback! : policy;
+
         var candidates = _snapshots.Values.Where(s => !t.Excluded.Contains(s.ElevatorId)).ToList();
-        var choice = policy.Choose(new DispatchContext(t.Request, candidates, now, timing, _sequence));
+        var choice = active.Choose(new DispatchContext(t.Request, candidates, now, timing, _sequence));
         var forced = false;
 
         if (choice is null && t.Excluded.Count > 0 && t.OnlyStaleRejections)
         {
             // Everyone eligible said "stale": stop bouncing and force the best one (ADR-006).
-            choice = policy.Choose(new DispatchContext(t.Request, [.. _snapshots.Values], now, timing, _sequence));
+            choice = active.Choose(new DispatchContext(t.Request, [.. _snapshots.Values], now, timing, _sequence));
             forced = choice is not null;
         }
 

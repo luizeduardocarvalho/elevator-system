@@ -32,6 +32,7 @@ public class JsonlEventLogTests
             new DispatchDeferred(t, 5),
             new DuplicateSubmission(t, 5),
             new PassengerLeftBehind(t, 5, 2, 1),
+            new OverloadModeChanged(t, true, 201),
         ];
 
         using var writer = new StringWriter();

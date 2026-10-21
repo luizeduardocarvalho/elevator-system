@@ -64,7 +64,8 @@ public sealed class ElevatorSystem : IAsyncDisposable
         }
         var rebalance = options.Rebalance ? new HysteresisRebalance(scheduling, timing) : null;
         Add(new Actor(new DispatcherHandler(dispatch, options.Elevators, timing,
-            new DispatcherOptions(latency.DispatchMs, rebalance is null ? null : 5_000), rebalance), this, _requests.Reader));
+            new DispatcherOptions(latency.DispatchMs, rebalance is null ? null : 5_000, options.OverloadThreshold), rebalance, new NearestDispatch()),
+            this, _requests.Reader));
         Add(new Actor(new PassengersHandler(options.Capacity), this));
 
         _logWriter = Task.Run(WriteLog);

@@ -18,7 +18,8 @@ public sealed record RuntimeOptions(
     int RequestQueueCapacity = 1_024,
     bool KeepEvents = true,
     ElevatorTiming? Timing = null,
-    MessageLatency? Latency = null)
+    MessageLatency? Latency = null,
+    int? OverloadThreshold = SimEngine.OverloadThreshold)
 {
     public ElevatorTiming EffectiveTiming => Timing ?? ElevatorTiming.Default;
 

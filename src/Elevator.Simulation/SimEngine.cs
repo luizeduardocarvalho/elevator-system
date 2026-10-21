@@ -17,6 +17,12 @@ public sealed record SimulationResult(IReadOnlyList<DomainEvent> Events, int Del
 /// </summary>
 public sealed class SimEngine
 {
+    /// <summary>
+    /// Requests in flight above which the dispatcher falls back to Nearest (ADR-006). The most ever seen in the bench
+    /// profiles is 92 (FIFO saturating at down-peak), so 200 never triggers in normal operation.
+    /// </summary>
+    public const int OverloadThreshold = 200;
+
     private readonly PriorityQueue<Envelope, (long TimeMs, long Seq)> _queue = new();
     private readonly Dictionary<Address, IHandler> _handlers = [];
     private readonly Dictionary<Address, SimTime> _scheduledWakeUps = [];
@@ -47,7 +53,8 @@ public sealed class SimEngine
         }
         var rebalance = strategy.Rebalance ? new HysteresisRebalance(scheduling, scenario.Timing) : null;
         Register(new DispatcherHandler(dispatch, scenario.Elevators, scenario.Timing,
-            new DispatcherOptions(latency.DispatchMs, RebalanceIntervalMs: rebalance is null ? null : 5_000), rebalance));
+            new DispatcherOptions(latency.DispatchMs, RebalanceIntervalMs: rebalance is null ? null : 5_000, OverloadThreshold: OverloadThreshold),
+            rebalance, new NearestDispatch()));
         _passengers = new PassengersHandler(scenario.Capacity);
         Register(_passengers);
 

@@ -28,6 +28,7 @@ internal static class EventFormatter
         DispatchDeferred d => $"no elevator eligible for request {d.RequestId}; waiting",
         DuplicateSubmission d => $"duplicate submission of request {d.RequestId} ignored",
         PassengerLeftBehind p => $"P{p.PassengerId} left behind by full E{p.ElevatorId} at floor {p.Floor}",
+        OverloadModeChanged o => o.Active ? $"OVERLOAD: {o.InFlight} requests in flight, dispatching with Nearest" : $"overload over ({o.InFlight} in flight)",
         _ => e.ToString(),
     };
 

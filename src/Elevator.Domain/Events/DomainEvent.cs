@@ -27,6 +27,7 @@ namespace Elevator.Domain.Events;
 [JsonDerivedType(typeof(DispatchDeferred), nameof(DispatchDeferred))]
 [JsonDerivedType(typeof(DuplicateSubmission), nameof(DuplicateSubmission))]
 [JsonDerivedType(typeof(PassengerLeftBehind), nameof(PassengerLeftBehind))]
+[JsonDerivedType(typeof(OverloadModeChanged), nameof(OverloadModeChanged))]
 public abstract record DomainEvent([property: JsonPropertyName("t"), JsonPropertyOrder(-1)] SimTime At);
 
 public sealed record SimulationStarted(
@@ -87,3 +88,6 @@ public sealed record DuplicateSubmission(SimTime At, int RequestId) : DomainEven
 
 /// <summary>The assigned elevator opened for this passenger but was too full to take them; they press again.</summary>
 public sealed record PassengerLeftBehind(SimTime At, int PassengerId, int ElevatorId, int Floor) : DomainEvent(At);
+
+/// <summary>The dispatcher entered (or left) overload mode: too many requests in flight, so it uses its cheap fallback policy.</summary>
+public sealed record OverloadModeChanged(SimTime At, bool Active, int InFlight) : DomainEvent(At);

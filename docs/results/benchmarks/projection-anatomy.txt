@@ -1,0 +1,6 @@
+Per-passenger projection (oracle, as before the rewrite) vs per-stop projection (now), one cost decision:
+backlog/elevator | oracle Decide calls | oracle stops scanned | per-stop work steps | per-stop µs/decision
+               0 |                  98 |                   78 |                  40 |                 16.9
+              25 |                 677 |                 6668 |                 593 |                274.1
+             100 |                 804 |                15195 |                 788 |                477.3
+             400 |                 848 |                18278 |                 848 |                609.8
