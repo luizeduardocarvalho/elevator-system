@@ -122,12 +122,113 @@ Key properties:
 Sources: [m5-next-trip](results/m5-next-trip.md), [m5-capacity-modes](results/m5-capacity-modes.md);
 the progression is in [docs/results.md](results.md).
 
-## v3: Hard
+## v3: Hard (tag `v3-hard`)
 
-To be written at merge: elevator types, maintenance and emergency stops (with watchdog and fault injection), floor
-restrictions and VIP, and the TUI.
+v3 was built as two parallel branches off `v2-medium`, against a contract frozen on `main` first
+([contract-v3](contract-v3.md)): event types, snapshot fields and the `IFaultInjector` seam. Neither branch could edit
+it, so they could not drift apart:
 
-### TUI note (stage 3; the full v3 section is written at merge)
+```mermaid
+flowchart LR
+    V2["v2-medium"] --> C["contract v3<br/>(frozen on main)"]
+    C --> TUI["stage3-tui<br/>ADR-011"]
+    C --> HARD["stage4-hard<br/>ADR-012, ADR-013"]
+    TUI --> M1["merge TUI"]
+    M1 --> REB["rebase Hard<br/>onto main"]
+    HARD --> REB
+    REB --> M2["merge Hard"]
+    M2 --> W["wire real injector<br/>contract v3.1"]
+    W --> V3["v3-hard"]
+```
+
+| ADR | Decision |
+|---|---|
+| 011 | TUI: a fold over the event log, a fixed-tick pacer, and seeking by re-simulation or re-fold |
+| 012 | elevator types as configuration; access policies as an eligibility pipeline before cost |
+| 013 | maintenance, emergency stop and faults as modes; commands as messages; the watchdog |
+
+### What changed in the shape
+
+```mermaid
+flowchart TB
+    subgraph Pure["Pure core: no threads, clocks or I/O"]
+        direction LR
+        subgraph Domain["Elevator.Domain"]
+            ELEV["Elevator<br/>state machine + ElevatorMode<br/>(Normal · Draining · Maintenance · Emergency · Fault)"]
+            subgraph Control["Control: one message protocol"]
+                EH["ElevatorHandler<br/>accept / reject · ApplyFault"]
+                DH["DispatcherHandler<br/>AccessPipeline → dispatch ·<br/>refuse · watchdog"]
+                PH["PassengersHandler<br/>board in load units · refused"]
+            end
+        end
+        subgraph Policy["Elevator.Policy"]
+            ACC["IAccessPolicy pipeline<br/>served floors · capacity units ·<br/>restricted floors · VIP"]
+            DISP["RoundRobin · Nearest · Cost<br/>(per-type timing in StopProjection)"]
+        end
+        DH --> ACC --> DISP
+        EH --> ELEV
+    end
+
+    subgraph Shells["Shells"]
+        direction LR
+        SIM["SimEngine<br/>priority key for emergency stops"]
+        RT["Elevator.Runtime<br/>priority control channel per actor"]
+        FI["IFaultInjector<br/>SimFaultInjector · RuntimeFaultInjector"]
+    end
+
+    FI -- "ApplyFault messages" --> Control
+    Shells -- "same messages" --> Control
+    Control -- "DomainEvents" --> LOG["Event log (JSONL)"]
+    LOG --> MET["Elevator.Metrics<br/>+ OpsMetrics · per-elevator bypassed_full · VIP wait"]
+    LOG --> FOLD["Elevator.Tui<br/>BuildingState fold → ViewModel → Spectre"]
+    FOLD -. "keys m / e / s" .-> FI
+    CLI["Elevator.Cli<br/>run · tui · replay · bench · perf"] --> SIM
+    CLI --> RT
+```
+
+- **The v2 shape held.** Types, eligibility and faults went into the pure core and the shared handlers, so the
+  deterministic engine and the actor runtime got them at once. The TUI is one more consumer of the log, like Metrics.
+- **The TUI never drives the simulation.** It only advances it in fixed 100 ms ticks, and its fault keys go through
+  the same `IFaultInjector` as the scenario's fault schedule. The fold is shared by live and replay, and it is
+  checked against the engine's own state on default, chaos and typed-fleet runs.
+- **Eligibility comes before cost.** A denied elevator is invisible to every dispatch path; a request no elevator may
+  take is refused (`AccessDenied` with no elevator), never lost.
+- **Out of service is a mode, not a state.** The spec's `ElevatorState` is unchanged; two transition-table edges were
+  added (`EmergencyHalt`, `EmergencyClose`).
+- **The watchdog rides on the dispatcher's snapshot stream** plus a per-floor progress report, with T = 30 s. H3/H4
+  measure the trade-off: lower T detects sooner but false-alarms on long freight dwells.
+
+### Contract v3.1 (at merge)
+
+Both branches hit gaps that only a schema change could close. Since the contract was frozen, they reported them
+instead of patching around them. The amendment adds **optional fields, written only when set**:
+- `PassengerArrived.load / vip / accessLevel`;
+- `SimulationStarted.fleet`.
+
+So default logs are byte-identical. It closes three gaps:
+- the TUI shows load in load units and each elevator's type and capacity;
+- `bypassed_full` uses each elevator's own capacity × threshold;
+- the report splits VIP from non-VIP wait.
+
+### Merge verification
+
+| Check | Result |
+|---|---|
+| All tests (`-warnaserror`) | pass (Domain 175, Policy 84, Simulation 95, Metrics 26, Tui 91, Runtime 9) |
+| Same seed across TUI speeds | lunch, demo, chaos, fleet: identical log hash at 0.5×, 10× and headless; chaos via the CLI at 0.5×, 10×, max |
+| v2 results with faults off | 8 bench files and 4 run logs byte-identical with `v2-medium` (wall time and output path aside) |
+| chaos.yaml in the TUI | M / E / F markers and the ops panel update live; 9 / 9 commands applied, 264 / 264 served |
+
+**Results at v3** (wait avg / p95 in sim seconds, held-out seeds 21–40):
+
+| Question | LOOK + Cost | LOOK + Nearest |
+|---|---|---|
+| chaos schedule vs none, same passengers ([h1](results/h1-chaos.md)) | 13.8 / 38.4 → 19.6 / 58.9 | 21.0 / 78.1 → 25.6 / 87.0 |
+| typed fleet with access policies ([h2](results/h2-fleet.md)) | **14.0 / 39.8** | 22.8 / 81.9 |
+| watchdog T = 5 / 10 / 30 / 60 s: detect ([h3](results/h3-watchdog-timeout.md)) | 6.0 / 11.3 / 31.9 / 61.2 s | – |
+| watchdog false positives, fault-free ([h4](results/h4-watchdog-false-positives.md)) | ≈ 61–65 per run at T = 5 s on the fleet; none at 10 or 30 s | |
+
+### TUI note (stage 3)
 
 `Elevator.Tui` adds `elevator tui <scenario>` (live) and `elevator replay <log.jsonl>` (ADR-011). It is three
 layers, and nothing flows back from the screen to the engine:
