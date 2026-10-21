@@ -202,6 +202,14 @@ public class ViewModelTests
     }
 
     [Fact]
+    public void A_tiny_terminal_is_flagged_too_small()
+    {
+        Assert.True(Build(Fold(), new ViewOptions(Width: 30, Height: 40)).TooSmall);
+        Assert.True(Build(Fold(), new ViewOptions(Width: 120, Height: 8)).TooSmall);
+        Assert.False(Build(Fold(), new ViewOptions(Width: 40, Height: 12)).TooSmall);
+    }
+
+    [Fact]
     public void Short_terminals_show_a_window_of_floors_around_the_selected_elevator()
     {
         var state = Fold(new FloorReached(S(1), 2, 5));

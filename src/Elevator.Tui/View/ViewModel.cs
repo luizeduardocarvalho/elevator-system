@@ -16,6 +16,9 @@ public static class ViewModel
     public const int SidePanelWidth = 48;
     public const int SidePanelMinWidth = 100;
 
+    /// <summary>Below this the screen only says so (Spectre's layout needs room for its regions).</summary>
+    public const int MinWidth = 40, MinHeight = 12;
+
     private const int ShaftCellWidth = 11; // "□↑ 10/10 M" plus a separator
     private const int FloorAndWaitingWidth = 16;
     private const int FixedRows = 2;       // status bar + help line
@@ -47,7 +50,8 @@ public static class ViewModel
             status.ReadOnly
                 ? "space pause · n step · +/- speed · [ ] seek ∓60 s · 0 restart · ←/→ select · q quit"
                 : "space pause · n step · +/- speed · ←/→ select · m maint · e emergency · s stuck 60 s · [ ] seek ∓60 s · q quit",
-            showSide);
+            showSide,
+            options.Width < MinWidth || options.Height < MinHeight);
     }
 
     // ---- Status ---------------------------------------------------------------------------------------

@@ -11,7 +11,8 @@ public sealed record ScreenModel(
     OpsPanel Ops,
     IReadOnlyList<TailLine> Tail,
     string Help,
-    bool ShowSidePanel);
+    bool ShowSidePanel,
+    bool TooSmall = false);
 
 /// <summary>Colour intent; the renderer maps it to a style.</summary>
 public enum Tone { Normal, Dim, Accent, Good, Warn, Bad }
