@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted (v2-medium, 2026-10-21).
+Accepted (v2-medium, 2026-10-21). The full-load part (releasing pickups at the threshold, deferring requests) is
+superseded by [ADR-010](010-next-trip-capacity.md) and survives as capacity mode `defer`. Destination dispatch,
+capacity units, partial boarding and the left-behind rules stand.
 
 ## Context
 

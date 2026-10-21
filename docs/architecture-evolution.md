@@ -53,7 +53,76 @@ Key properties:
 Baseline measured at v1 (`scenarios/v1-poisson.yaml`, seed 42, FIFO): wait avg 77.0 s, p95 193.0 s,
 max 242.0 s; 69/69 served.
 
-## v2: Medium
+## v2: Medium (tag `v2-medium`)
 
-To be written: multiple elevators, actors in `Elevator.Runtime`, a dispatcher, and further strategies compared
-against the v1 baseline.
+Four elevators on 20 floors with destination dispatch, LOOK, cost-based dispatch, capacity, and a real threaded
+runtime next to the deterministic simulator. The ADRs:
+
+| ADR | Decision |
+|---|---|
+| 004 | LOOK per elevator (supersedes 001) |
+| 005 | actors and one shared protocol, not locks |
+| 006 | the cost function, its fast projection, staleness, overlay and overload |
+| 007 | the event log as backbone |
+| 008 | metric definitions and two kinds of time |
+| 009 | destination dispatch and capacity |
+| 010 | next-trip under full load |
+
+```mermaid
+flowchart TB
+    subgraph Pure["Pure core: no threads, clocks or I/O"]
+        direction LR
+        subgraph Domain["Elevator.Domain"]
+            ELEV["Elevator<br/>state machine + mechanics<br/>(TransitionTable)"]
+            subgraph Control["Control: one message protocol"]
+                EH["ElevatorHandler<br/>accept / reject"]
+                DH["DispatcherHandler<br/>assign · retry · overlay ·<br/>overload fallback · rebalance"]
+                PH["PassengersHandler<br/>board · alight · left behind"]
+            end
+        end
+        subgraph Policy["Elevator.Policy"]
+            SCHED["FIFO · LOOK<br/>(list + bitmask Decide)"]
+            DISP["RoundRobin · Nearest · Cost"]
+            PROJ["StopProjection<br/>(RouteProjection = oracle)"]
+        end
+        EH --> ELEV
+        ELEV --> SCHED
+        DH --> DISP --> PROJ --> SCHED
+    end
+
+    subgraph Shells["Shells: deliver messages, keep time, no decisions"]
+        direction LR
+        SIM["SimEngine<br/>priority queue (time, seq)<br/>deterministic"]
+        RT["Elevator.Runtime<br/>actor per elevator, dispatcher on<br/>bounded channel, RealClock"]
+    end
+
+    Shells -- "same messages" --> Control
+    Control -- "DomainEvents" --> LOG["Event log (JSONL)"]
+    LOG --> MET["Elevator.Metrics<br/>report · lifecycle · wait buckets · Student-t CIs"]
+    CLI["Elevator.Cli<br/>run · bench · perf"] --> SIM
+    CLI --> RT
+    MET --> CLI
+```
+
+Key properties:
+- **All decisions are in pure handlers and policies.** The deterministic engine and the actor runtime deliver the same
+  messages to them; a cross-check test runs the same scenario through both.
+- **The dispatcher never shares memory with elevators.** It sees snapshots (possibly stale) plus its own pending
+  proposals (overlay); elevators have the final say (accept / reject).
+- **Every measured claim comes from the event log, with paired CIs on common random numbers.**
+
+**Results at v2** (wait avg / p95 in sim seconds, held-out seeds 21–40, next-trip):
+
+| Profile | FIFO + Nearest (baseline) | LOOK + Nearest | LOOK + Cost (default) |
+|---|---|---|---|
+| up-peak | 26.9 / 103.9 | 20.7 / 59.4 | **15.8 / 37.9** |
+| down-peak | 251.1 / 584.6 (saturated) | 29.3 / 87.7 | **20.6 / 53.2** |
+| lunch | 95.4 / 325.7 | 21.0 / 78.1 | **13.8 / 38.4** |
+
+Sources: [m5-next-trip](results/m5-next-trip.md), [m5-capacity-modes](results/m5-capacity-modes.md);
+the progression is in [docs/results.md](results.md).
+
+## v3: Hard
+
+To be written: elevator types, maintenance and emergency stops (with watchdog and fault injection), floor
+restrictions and VIP, and the TUI.

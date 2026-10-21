@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Elevator.Domain;
 using Elevator.Policy;
 using Elevator.Policy.Dispatch;
@@ -30,9 +29,10 @@ public static class ProjectionAnatomy
 
     public static void Run()
     {
-        Console.WriteLine("Per-passenger projection (oracle, as before the rewrite) vs per-stop projection (now), one cost decision:");
-        Console.WriteLine("backlog/elevator | oracle Decide calls | oracle stops scanned | per-stop work steps | per-stop µs/decision");
-        foreach (var backlog in new[] { 0, 25, 100, 400 })
+        Console.WriteLine("Work for one cost decision (4 elevators, with and without the request): per-passenger oracle vs per-stop projection.");
+        Console.WriteLine("Deterministic counts; for timing see the BenchmarkDotNet reports.");
+        Console.WriteLine("backlog/elevator | oracle Decide calls | oracle stops scanned | per-stop Decide calls");
+        foreach (var backlog in new[] { 0, 25, 100, 400, 1600 })
         {
             var counting = new CountingPolicy(new LookScheduling());
             var rng = new Random(42);
@@ -56,11 +56,7 @@ public static class ProjectionAnatomy
             var fast = new StopProjection(new LookScheduling(), ElevatorTiming.Default);
             var steps = snapshots.Sum(s => fast.Project(s, context.Request, context.Now).Steps + fast.Project(s, null, context.Now).Steps);
 
-            const int reps = 200;
-            for (var i = 0; i < 20; i++) new CostBasedDispatch(new LookScheduling(), ElevatorTiming.Default).Choose(context); // warm
-            var sw = Stopwatch.StartNew();
-            for (var i = 0; i < reps; i++) new CostBasedDispatch(new LookScheduling(), ElevatorTiming.Default).Choose(context);
-            Console.WriteLine($"{backlog,16} | {calls,19} | {scanned,20} | {steps,19} | {sw.Elapsed.TotalMicroseconds / reps,20:0.0}");
+            Console.WriteLine($"{backlog,16} | {calls,19} | {scanned,20} | {steps,21}");
         }
     }
 
