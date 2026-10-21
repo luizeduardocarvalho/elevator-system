@@ -77,9 +77,9 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
         }
 
         outbox.Emit(new AssignmentAccepted(now, request.Id, Elevator.Id));
-        outbox.Send(Address.Dispatcher, new AssignmentAcceptedMsg(request.Id, Elevator.Id));
         outbox.Send(Address.Passengers, new AssignmentAcceptedMsg(request.Id, Elevator.Id)); // before any answer below
         Elevator.AssignPickup(request);
+        outbox.Send(Address.Dispatcher, new AssignmentAcceptedMsg(request.Id, Elevator.Id, Elevator.Version));
     }
 
     private AssignmentReason? RejectionReason(Assign assign, SimTime now)

@@ -1,6 +1,7 @@
 # M2: LOOK vs FIFO
 
 - **Command:** `elevator bench --scheduling fifo,look --dispatch roundrobin,nearest --seeds 20 --out docs/results/m2-look.md --title "M2: LOOK vs FIFO" --capacity-mode defer`
+- **Reproducibility:** produced in capacity mode `defer` before the dispatcher's pending-assignment overlay (ADR-006). The command reproduces this file byte for byte at commit `d5864a0`. Later commits differ by at most 0.1 s in the means and 1.2 s in p95/max, because deferred requests retried mid-instant now also see pickups just accepted elsewhere. No conclusion changes.
 - **Seeds:** 1..20 (20 per strategy)
 - **Baseline:** fifo+nearest
 - **Scenarios:** up-peak (4 elevators, 20 floors, capacity 10, defer), down-peak (4 elevators, 20 floors, capacity 10, defer), lunch (4 elevators, 20 floors, capacity 10, defer)

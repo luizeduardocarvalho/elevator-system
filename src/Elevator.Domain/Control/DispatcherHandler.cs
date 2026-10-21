@@ -61,6 +61,14 @@ public sealed class DispatcherHandler(
     // requests each elevator is currently excluded from.
     private readonly SortedSet<(long CalledAtMs, int Id)> _pending = [];
     private readonly Dictionary<int, HashSet<int>> _excludedFrom = [];
+    // Pending-assignment overlay: what this dispatcher has proposed to each elevator that the elevator's latest
+    // snapshot does not show yet. Without it, a burst of requests is all evaluated against the same snapshot, the
+    // elevator (which does see the earlier ones) rejects as stale, and requests bounce. AcceptedVersion stays
+    // long.MaxValue until the elevator accepts; the entry goes once a snapshot at or after that version arrives.
+    private readonly Dictionary<int, List<(Request Request, long AcceptedVersion)>> _overlay = [];
+    // The overlaid snapshot per elevator, kept between decisions (one merge per proposal) so that it is not rebuilt
+    // per decision and the dispatch policy's per-snapshot caches keep working. Dropped when the base changes.
+    private readonly Dictionary<int, ElevatorSnapshot> _overlaid = [];
     private long _sequence;
     private bool _rebalanceScheduled;
     private bool _overloaded;
@@ -83,18 +91,28 @@ public sealed class DispatcherHandler(
                 break;
             case SnapshotPublished published:
                 _snapshots[published.Snapshot.ElevatorId] = published.Snapshot;
+                if (_overlay.TryGetValue(published.Snapshot.ElevatorId, out var shown))
+                    shown.RemoveAll(o => o.AcceptedVersion <= published.Snapshot.Version);
+                _overlaid.Remove(published.Snapshot.ElevatorId);
                 if (_excludedFrom.Remove(published.Snapshot.ElevatorId, out var excluded))
                     foreach (var id in excluded) Find(id)?.Excluded.Remove(published.Snapshot.ElevatorId);
                 RetryPending(now, outbox);
                 ScheduleRebalance(outbox);
                 break;
             case AssignmentAcceptedMsg accepted when Find(accepted.RequestId) is { } t:
+                if (_overlay.TryGetValue(accepted.ElevatorId, out var proposed))
+                {
+                    var i = proposed.FindIndex(o => o.Request.Id == accepted.RequestId);
+                    if (i >= 0) proposed[i] = (proposed[i].Request, accepted.Version);
+                }
                 SetStatus(t, Status.Assigned);
                 t.Elevator = accepted.ElevatorId;
                 t.Deferred = false;
                 outbox.Send(Address.Client, new RequestAssigned(accepted.RequestId, accepted.ElevatorId));
                 break;
             case AssignmentRejectedMsg rejected when Find(rejected.RequestId) is { } t:
+                if (_overlay.TryGetValue(rejected.ElevatorId, out var bounced)) bounced.RemoveAll(o => o.Request.Id == rejected.RequestId);
+                _overlaid.Remove(rejected.ElevatorId);
                 SetStatus(t, Status.Pending);
                 t.Elevator = null;
                 t.Excluded.Add(rejected.ElevatorId);
@@ -174,14 +192,17 @@ public sealed class DispatcherHandler(
         }
         var active = overloaded ? overloadFallback! : policy;
 
-        var candidates = _snapshots.Values.Where(s => !t.Excluded.Contains(s.ElevatorId)).ToList();
+        // The overlay serves the precise policy. In overload mode the fallback is meant to be cheap, and keeping the
+        // overlay up to date would cost O(proposals ahead of the elevators) per snapshot, so it is skipped.
+        Func<ElevatorSnapshot, ElevatorSnapshot> view = overloaded ? (s => s) : WithOverlay;
+        var candidates = _snapshots.Values.Where(s => !t.Excluded.Contains(s.ElevatorId)).Select(view).ToList();
         var choice = active.Choose(new DispatchContext(t.Request, candidates, now, timing, _sequence));
         var forced = false;
 
         if (choice is null && t.Excluded.Count > 0 && t.OnlyStaleRejections)
         {
             // Everyone eligible said "stale": stop bouncing and force the best one (ADR-006).
-            choice = active.Choose(new DispatchContext(t.Request, [.. _snapshots.Values], now, timing, _sequence));
+            choice = active.Choose(new DispatchContext(t.Request, [.. _snapshots.Values.Select(view)], now, timing, _sequence));
             forced = choice is not null;
         }
 
@@ -195,8 +216,43 @@ public sealed class DispatcherHandler(
         _sequence++;
         SetStatus(t, Status.Proposed);
         t.Elevator = choice.ElevatorId;
+        if (!overloaded)
+        {
+            (_overlay.TryGetValue(choice.ElevatorId, out var list) ? list : _overlay[choice.ElevatorId] = []).Add((t.Request, long.MaxValue));
+            if (_overlaid.TryGetValue(choice.ElevatorId, out var current)) _overlaid[choice.ElevatorId] = Merge(current, t.Request);
+        }
         outbox.Emit(new AssignmentProposed(now, t.Request.Id, choice.ElevatorId, Math.Round(choice.Cost, 3), choice.Eta?.Ms, forced));
         outbox.Send(Address.Elevator(choice.ElevatorId), new Assign(t.Request, choice.Eta, forced), _options.DispatchDelayMs);
+    }
+
+    /// <summary>The elevator's snapshot plus the pickups this dispatcher has sent it that the snapshot does not show yet.</summary>
+    private ElevatorSnapshot WithOverlay(ElevatorSnapshot s)
+    {
+        if (!_overlay.TryGetValue(s.ElevatorId, out var pending) || pending.Count == 0) return s;
+        if (_overlaid.TryGetValue(s.ElevatorId, out var cached)) return cached;
+        var overlaid = s;
+        foreach (var (r, _) in pending) overlaid = Merge(overlaid, r);
+        return _overlaid[s.ElevatorId] = overlaid;
+    }
+
+    /// <summary>Adds one pickup to a snapshot, as Elevator.AssignPickup would (joins its floor-and-direction stop).</summary>
+    private static ElevatorSnapshot Merge(ElevatorSnapshot s, Request r)
+    {
+        var calls = s.HallCalls as System.Collections.Immutable.ImmutableList<HallCall> ?? [.. s.HallCalls];
+        var i = calls.FindIndex(c => c.Floor == r.PickupFloor && c.Direction == r.Direction);
+        if (i >= 0)
+        {
+            var c = calls[i];
+            var requests = c.Requests as System.Collections.Immutable.ImmutableList<Request> ?? [.. c.Requests];
+            return s with { HallCalls = calls.SetItem(i, c with { Requests = requests.Add(r), Totals = c.Totals.Add(r) }) };
+        }
+        return s with
+        {
+            HallCalls = calls.Add(new HallCall(r.PickupFloor, r.Direction, s.At, System.Collections.Immutable.ImmutableList.Create(r))
+            {
+                Totals = DestinationTotals.Empty.Add(r),
+            }),
+        };
     }
 
     private void ScheduleRebalance(Outbox outbox)

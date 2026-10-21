@@ -1,6 +1,7 @@
 # M3: cost weight sweep (λ, μ) under LOOK, vs LOOK+Nearest
 
 - **Command:** `elevator bench --strategies look+nearest,look+cost:0:0,look+cost:0:10,look+cost:0:30,look+cost:0.5:0,look+cost:0.5:10,look+cost:0.5:30,look+cost:1:0,look+cost:1:10,look+cost:1:30,look+cost:2:0,look+cost:2:10,look+cost:2:30 --baseline look+nearest --seeds 20 --out docs/results/m3-cost-weights.md --title "M3: cost weight sweep (λ, μ) under LOOK, vs LOOK+Nearest" --capacity-mode defer`
+- **Reproducibility:** produced in capacity mode `defer` before the dispatcher's pending-assignment overlay (ADR-006). The command reproduces this file byte for byte at commit `d5864a0`. Later commits differ by at most 0.1 s in the means and 1.2 s in p95/max, because deferred requests retried mid-instant now also see pickups just accepted elsewhere. No conclusion changes.
 - **Seeds:** 1..20 (20 per strategy)
 - **Baseline:** look+nearest
 - **Scenarios:** up-peak (4 elevators, 20 floors, capacity 10, defer), down-peak (4 elevators, 20 floors, capacity 10, defer), lunch (4 elevators, 20 floors, capacity 10, defer)

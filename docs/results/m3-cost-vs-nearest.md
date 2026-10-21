@@ -1,6 +1,7 @@
 # M3: LOOK+Cost vs LOOK+Nearest (held-out seeds 21-40)
 
 - **Command:** `elevator bench --strategies look+nearest,look+cost --baseline look+nearest --seeds 20 --first-seed 21 --out docs/results/m3-cost-vs-nearest.md --title "M3: LOOK+Cost vs LOOK+Nearest (held-out seeds 21-40)" --capacity-mode defer`
+- **Reproducibility:** produced in capacity mode `defer` before the dispatcher's pending-assignment overlay (ADR-006). The command reproduces this file byte for byte at commit `d5864a0`. Later commits differ by at most 0.1 s in the means and 1.2 s in p95/max, because deferred requests retried mid-instant now also see pickups just accepted elsewhere. No conclusion changes.
 - **Seeds:** 21..40 (20 per strategy)
 - **Baseline:** look+nearest
 - **Scenarios:** up-peak (4 elevators, 20 floors, capacity 10, defer), down-peak (4 elevators, 20 floors, capacity 10, defer), lunch (4 elevators, 20 floors, capacity 10, defer)

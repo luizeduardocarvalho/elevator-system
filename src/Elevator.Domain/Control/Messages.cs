@@ -54,7 +54,8 @@ public sealed record SubmitRequest(Request Request) : Message;
 
 public sealed record SnapshotPublished(ElevatorSnapshot Snapshot) : Message;
 
-public sealed record AssignmentAcceptedMsg(int RequestId, int ElevatorId) : Message;
+/// <param name="Version">The elevator's version right after accepting: any snapshot at or after it includes the pickup.</param>
+public sealed record AssignmentAcceptedMsg(int RequestId, int ElevatorId, long Version = 0) : Message;
 
 public sealed record AssignmentRejectedMsg(int RequestId, int ElevatorId, AssignmentReason Reason) : Message;
 
