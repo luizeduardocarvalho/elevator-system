@@ -33,6 +33,10 @@ internal sealed class RunCommand : Command<RunCommand.Settings>
         [Description("next-trip (default) or defer (ADR-010).")]
         public string? CapacityMode { get; init; }
 
+        [CommandOption("--no-faults")]
+        [Description("Ignore the scenario's fault schedule (ADR-013).")]
+        public bool NoFaults { get; init; }
+
         [CommandOption("--rebalance")]
         [Description("Enable optional rebalancing of sticky assignments (ADR-006).")]
         public bool Rebalance { get; init; }
@@ -92,6 +96,7 @@ internal sealed class RunCommand : Command<RunCommand.Settings>
             }
         }
 
+        if (settings.NoFaults) scenario = scenario with { Faults = [] };
         var result = ScenarioRunner.Run(scenario, new Strategy(scenario.Scheduling, scenario.Dispatch, settings.Rebalance));
 
         var logPath = settings.Log ?? Path.Combine("out", $"{scenario.Name}-seed{scenario.Seed}.jsonl");
@@ -144,6 +149,30 @@ internal sealed class RunCommand : Command<RunCommand.Settings>
         table.AddRow("[grey]Wait breakdown (avg per passenger)[/]", "");
         foreach (var (bucket, seconds) in r.WaitBreakdown.Where(kv => kv.Value > 0))
             table.AddRow($"  {BenchAnalysis.BucketName(bucket)}", S(seconds));
+        if (r.Ops.Any) AddOps(table, r.Ops);
         return table;
+    }
+
+    /// <summary>Operations (ADR-013): only shown when something operational happened, so plain runs print as before.</summary>
+    private static void AddOps(Table table, OpsReport o)
+    {
+        static string S(double? seconds) => seconds is { } s ? s.ToString("0.0", CultureInfo.InvariantCulture) + " s" : "–";
+        static string N(int n) => n.ToString(CultureInfo.InvariantCulture);
+
+        table.AddEmptyRow();
+        table.AddRow("[grey]Operations[/]", "");
+        table.AddRow("  Commands applied", N(o.CommandsApplied));
+        table.AddRow("  Maintenance (count / time)", $"{N(o.Maintenances)} / {S(o.MaintenanceS)}");
+        table.AddRow("  Emergency stops (count / time)", $"{N(o.EmergencyStops)} / {S(o.EmergencyS)}");
+        table.AddRow("  Faults detected", N(o.Faults));
+        table.AddRow("  Time to detect (avg / max)", $"{S(o.TimeToDetect.Avg)} / {S(o.TimeToDetect.Max)}");
+        table.AddRow("  Time to recover (avg / max)", $"{S(o.TimeToRecover.Avg)} / {S(o.TimeToRecover.Max)}");
+        table.AddRow("  Pickups handed back (out of service)", N(o.OutOfServiceReleases));
+        table.AddRow("  Passengers affected", N(o.AffectedPassengers));
+        table.AddRow("  Wait penalty: reassignment / blocked", $"{S(o.ReassignmentWaitS)} / {S(o.BlockedWaitS)}");
+        table.AddRow("  Access denials / refused", $"{N(o.AccessDenials)} / {N(o.RefusedByPolicy)}");
+        foreach (var e in o.Elevators.Where(e => e.MaintenanceS > 0 || e.EmergencyStops > 0 || e.Faults > 0 || e.StuckS > 0))
+            table.AddRow($"  E{e.ElevatorId}",
+                $"maint {S(e.MaintenanceS)} (drain {S(e.DrainS)}) · emerg {N(e.EmergencyStops)}× {S(e.EmergencyS)} · stuck {S(e.StuckS)} · faults {N(e.Faults)}");
     }
 }

@@ -48,4 +48,7 @@ public sealed record RunReport(
     /// <summary>Passengers whose request every elevator's access policies refused (ADR-012). Not in <see cref="Unserved"/>:
     /// refused by design, not lost.</summary>
     public int RefusedByPolicy { get; init; }
+
+    /// <summary>Operations metrics: maintenance, emergency stops, faults, reassignments and their wait penalty (ADR-013).</summary>
+    public OpsReport Ops { get; init; } = OpsReport.Empty;
 }

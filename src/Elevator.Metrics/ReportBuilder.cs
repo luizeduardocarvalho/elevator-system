@@ -41,6 +41,12 @@ public static class ReportBuilder
             Rejections = records.Sum(r => r.Rejections),
             WaitBreakdown = breakdown,
             RefusedByPolicy = refused,
+            Ops = OpsMetrics.Build(list) with
+            {
+                AffectedPassengers = OpsMetrics.AffectedPassengers(list),
+                ReassignmentWaitS = delivered.Sum(r => r.WaitBuckets[WaitBucket.Reassignment]),
+                BlockedWaitS = delivered.Sum(r => r.WaitBuckets[WaitBucket.Blocked]),
+            },
         };
     }
 }
