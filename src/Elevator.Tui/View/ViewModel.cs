@@ -213,7 +213,7 @@ public static class ViewModel
             s.AccessDenials.ToString(Inv));
     }
 
-    private static string Seconds1(double s) => s.ToString("0.0", Inv) + " s";
+    private static string Seconds1(double s) => s.ToString("0.0", Inv);
 
     private static string Seconds0(long ms) => (ms / 1000.0).ToString("0", Inv) + " s";
 

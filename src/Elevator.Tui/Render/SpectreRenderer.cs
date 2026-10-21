@@ -68,7 +68,7 @@ public static class SpectreRenderer
         var table = new Table().Border(TableBorder.Rounded).BorderColor(Color.Grey);
         table.AddColumn(new TableColumn(floorHeader).RightAligned().NoWrap());
         table.AddColumn(new TableColumn("Waiting").NoWrap());
-        foreach (var h in g.ShaftHeaders) table.AddColumn(new TableColumn(Markup.Escape(h)).Centered().NoWrap());
+        foreach (var h in g.ShaftHeaders) table.AddColumn(new TableColumn(Markup.Escape(h)).Centered().NoWrap().Width(g.Compact ? 3 : 9));
 
         foreach (var row in g.Rows)
         {
@@ -112,13 +112,13 @@ public static class SpectreRenderer
 
     private static Panel Metrics(MetricsPanel m)
     {
-        var grid = new Grid().AddColumn().AddColumn();
-        grid.AddRow("[grey]wait avg / p95 / max[/]", Markup.Escape($"{m.WaitAvg} / {m.WaitP95} / {m.WaitMax}"));
-        grid.AddRow("[grey]long waits (> 60 s)[/]", Markup.Escape(m.LongWaits));
+        var grid = new Grid().AddColumn(new GridColumn().NoWrap()).AddColumn(new GridColumn().NoWrap());
+        grid.AddRow("[grey]wait avg/p95/max[/]", Markup.Escape($"{m.WaitAvg} / {m.WaitP95} / {m.WaitMax} s"));
+        grid.AddRow("[grey]long waits >60 s[/]", Markup.Escape(m.LongWaits));
         grid.AddRow("[grey]served[/]", Markup.Escape(m.Served));
         grid.AddRow("[grey]active[/]", Markup.Escape(m.Active));
 
-        var table = new Table().Border(TableBorder.Simple).BorderColor(Color.Grey)
+        var table = new Table().Border(TableBorder.None)
             .AddColumn("").AddColumn("state").AddColumn(new TableColumn("load").RightAligned()).AddColumn(new TableColumn("util").RightAligned());
         foreach (var e in m.Elevators)
         {
@@ -134,7 +134,7 @@ public static class SpectreRenderer
         grid.AddRow("[grey]elev[/]", "[grey]maint[/]", "[grey]emerg (time)[/]", "[grey]faults (time)[/]");
         foreach (var r in o.Elevators)
             grid.AddRow(Markup.Escape(r.Name), Markup.Escape(r.MaintenanceTime), Markup.Escape(r.Emergency), Markup.Escape(r.Faults));
-        var totals = new Grid().AddColumn().AddColumn();
+        var totals = new Grid().AddColumn(new GridColumn().NoWrap()).AddColumn(new GridColumn().NoWrap());
         totals.AddRow("[grey]reassignments[/]", Markup.Escape(o.Reassignments));
         totals.AddRow("[grey]commands / denials[/]", Markup.Escape($"{o.Commands} / {o.Denials}"));
         return new Panel(new Rows(grid, totals)).Header("Ops").BorderColor(Color.Grey).Expand();

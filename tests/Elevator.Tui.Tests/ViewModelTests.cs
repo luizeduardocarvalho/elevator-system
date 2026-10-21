@@ -147,7 +147,7 @@ public class ViewModelTests
         events.Add(new PassengerArrived(S(71), 9, 2, 5));
         events.Add(new PassengerAlighted(S(80), 1, 0, 5));
         var m = Build(Fold([.. events]));
-        Assert.Equal(("32.5 s", "70.0 s", "70.0 s", "25.0 % (1)"), (m.Metrics.WaitAvg, m.Metrics.WaitP95, m.Metrics.WaitMax, m.Metrics.LongWaits));
+        Assert.Equal(("32.5", "70.0", "70.0", "25.0 % (1)"), (m.Metrics.WaitAvg, m.Metrics.WaitP95, m.Metrics.WaitMax, m.Metrics.LongWaits));
         Assert.Equal(("1 / 10", "4 (1 waiting, 3 riding)"), (m.Metrics.Served, m.Metrics.Active));
     }
 

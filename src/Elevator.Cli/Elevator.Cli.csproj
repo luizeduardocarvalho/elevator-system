@@ -9,6 +9,7 @@
     <ProjectReference Include="..\Elevator.Runtime\Elevator.Runtime.csproj" />
     <ProjectReference Include="..\Elevator.Simulation\Elevator.Simulation.csproj" />
     <ProjectReference Include="..\Elevator.Metrics\Elevator.Metrics.csproj" />
+    <ProjectReference Include="..\Elevator.Tui\Elevator.Tui.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Spectre.Console" />
