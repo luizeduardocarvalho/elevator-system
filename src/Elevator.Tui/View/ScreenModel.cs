@@ -31,7 +31,6 @@ public sealed record StatusBar(
     bool Paused,
     bool Finished,
     string Injector,
-    bool InjectorNoOp,
     string Selected,
     string? Message);
 
@@ -74,13 +73,12 @@ public sealed record TailLine(string Time, string Kind, string Text, Tone Tone, 
 
 public sealed record CostCell(string Elevator, string Cost, bool Winner);
 
-/// <summary>What the loop knows that the event log does not: speeds, pause, the injector, the last key's message.</summary>
+/// <summary>What the loop knows that the event log does not: speeds, pause, the last key's message.</summary>
 public sealed record StatusInfo(
     string Source = "LIVE",
     string TargetSpeed = "1×",
     double? Achieved = null,
     bool Paused = false,
-    bool InjectorNoOp = true,
     string? Message = null,
     bool ReadOnly = false);
 

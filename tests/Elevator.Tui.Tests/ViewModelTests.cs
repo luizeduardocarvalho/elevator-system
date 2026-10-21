@@ -182,13 +182,13 @@ public class ViewModelTests
     }
 
     [Fact]
-    public void Status_bar_shows_no_op_injector_speed_and_pause()
+    public void Status_bar_shows_faults_or_read_only_speed_and_pause()
     {
-        var status = new StatusInfo("LIVE", "10×", 9.84, Paused: true, InjectorNoOp: true, Message: "m: maintenance-on E1");
+        var status = new StatusInfo("LIVE", "10×", 9.84, Paused: true, Message: "m: maintenance-on E1");
         var bar = Build(Fold(), new ViewOptions(Status: status, Selected: 1)).Status;
         Assert.Equal(("LIVE", "unit · look+cost · seed 3", "10×", "9.8×", true), (bar.Source, bar.Title, bar.TargetSpeed, bar.AchievedSpeed, bar.Paused));
-        Assert.Equal(("faults (no-op)", "E1", "m: maintenance-on E1"), (bar.Injector, bar.Selected, bar.Message));
-        Assert.Equal("faults", Build(Fold(), new ViewOptions(Status: status with { InjectorNoOp = false })).Status.Injector);
+        Assert.Equal(("faults", "E1", "m: maintenance-on E1"), (bar.Injector, bar.Selected, bar.Message));
+        Assert.Equal("read-only", Build(Fold(), new ViewOptions(Status: status with { ReadOnly = true })).Status.Injector);
     }
 
     [Fact]

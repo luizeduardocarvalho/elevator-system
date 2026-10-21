@@ -116,9 +116,9 @@ internal sealed class TuiCommand : AsyncCommand<TuiCommand.Settings>
             scenario = scenario with { Dispatch = dispatch.ToLowerInvariant() };
         }
 
-        // The injector is the engine's default (NoOpFaultInjector until the Hard stage wires one in): the status bar
-        // says "(no-op)" while it is.
-        var session = new LiveSession(scenario);
+        // Keys m / e / s inject maintenance, emergency stops and stuck faults through the real SimFaultInjector
+        // (LiveSession's default), in sim time, so a live run stays deterministic and can be replayed.
+        var session = new LiveSession(scenario, faultInjector: SimFaultInjector.Factory);
         var code = await settings.RunAsync(session, cancellationToken).ConfigureAwait(false);
         if (code == 0 && settings.Log is { } logPath)
         {

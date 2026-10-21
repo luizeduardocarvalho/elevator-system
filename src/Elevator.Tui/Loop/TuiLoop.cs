@@ -88,7 +88,7 @@ public sealed class TuiLoop(ISession session, Pacer pacer, IFrameClock clock, IK
     public ScreenModel BuildScreen()
     {
         var (width, height) = presenter.Size;
-        var status = new StatusInfo(session.Source, pacer.SpeedLabel, _meter.Achieved, pacer.Paused, session.InjectorNoOp, _message, session.ReadOnly);
+        var status = new StatusInfo(session.Source, pacer.SpeedLabel, _meter.Achieved, pacer.Paused, _message, session.ReadOnly);
         return ViewModel.Build(session.State, new ViewOptions(width, height, Selected, status));
     }
 

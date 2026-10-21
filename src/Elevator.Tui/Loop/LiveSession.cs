@@ -24,12 +24,13 @@ public sealed class LiveSession : ISession
     private readonly List<FaultCommand> _commands = [];
     private int _folded;
 
-    /// <param name="faultInjector">Builds the engine's injector (the Hard stage's SimFaultInjector); null = no-op.</param>
+    /// <param name="faultInjector">Builds the engine's injector; null = the real <see cref="SimFaultInjector"/> (keys m / e / s
+    /// act on the simulation). Tests pass their own.</param>
     public LiveSession(Scenario scenario, Strategy? strategy = null, Func<SimEngine, IFaultInjector>? faultInjector = null)
     {
         _scenario = scenario;
         _strategy = strategy;
-        _injector = faultInjector;
+        _injector = faultInjector ?? SimFaultInjector.Factory;
         (Engine, State) = Fresh();
         Fold(); // SimulationStarted is logged at Create: the first frame already shows the building
     }
@@ -46,8 +47,6 @@ public sealed class LiveSession : ISession
     public bool AtEnd => Engine.Finished;
 
     public bool ReadOnly => false;
-
-    public bool InjectorNoOp => Engine.FaultInjector.IsNoOp;
 
     /// <summary>Operator commands injected so far, in order (re-applied on a backward seek).</summary>
     public IReadOnlyList<FaultCommand> Commands => _commands;
@@ -107,7 +106,7 @@ public sealed class LiveSession : ISession
         };
         if (command is null) return "";
         Inject(command);
-        return $"{FaultKinds.Name(command.Kind)} E{elevator} at {View.ViewModel.Clock(command.At)}{(InjectorNoOp ? " (no-op)" : "")}";
+        return $"{FaultKinds.Name(command.Kind)} E{elevator} at {View.ViewModel.Clock(command.At)}";
     }
 
     private void Inject(FaultCommand command)

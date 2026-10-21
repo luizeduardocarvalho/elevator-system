@@ -36,9 +36,9 @@ public class RendererTests
     [Fact]
     public void A_full_size_frame_shows_the_building_metrics_and_the_assign_line()
     {
-        var model = ViewModel.Build(MidLunch(), new ViewOptions(160, 50, Status: new StatusInfo(InjectorNoOp: true)));
+        var model = ViewModel.Build(MidLunch(), new ViewOptions(160, 50, Status: new StatusInfo()));
         var text = SpectreRenderer.RenderToString(model, 160, 50);
-        foreach (var expected in new[] { "E0", "E3", "Metrics", "Ops", "Events", "ASSIGN", "(no-op)", "wait avg" })
+        foreach (var expected in new[] { "E0", "E3", "Metrics", "Ops", "Events", "ASSIGN", "faults", "wait avg" })
             Assert.Contains(expected, text, StringComparison.Ordinal);
     }
 }

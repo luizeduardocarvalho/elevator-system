@@ -172,7 +172,8 @@ public class ReplayAndSeekTests
         StepTo(fresh, 450_000);
         Assert.Equal(Repo.ToJsonl(fresh.Log), Repo.ToJsonl(seeked.Log));
         Assert.Contains(seeked.Log, e => e is PassengerArrived { PassengerId: 10_000, At.Ms: 300_000 });
-        Assert.False(seeked.InjectorNoOp);
+        Assert.IsType<PostingInjector>(seeked.Engine.FaultInjector); // the re-created engine keeps the injector
+        Assert.IsType<SimFaultInjector>(new LiveSession(scenario).Engine.FaultInjector); // and the default is the real one
 
         StepTo(seeked, 700_000);
         StepTo(fresh, 700_000);

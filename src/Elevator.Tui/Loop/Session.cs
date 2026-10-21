@@ -25,8 +25,6 @@ public interface ISession
     /// <summary>Operator commands are not possible (replay).</summary>
     bool ReadOnly { get; }
 
-    bool InjectorNoOp { get; }
-
     /// <summary>Advances one fixed tick (<see cref="Pacer.TickMs"/>).</summary>
     void Step();
 

@@ -130,20 +130,27 @@ public class LoopTests
     }
 
     [Fact]
-    public async Task Fault_keys_reach_the_injector_and_the_status_bar_says_no_op()
+    public async Task Fault_keys_reach_the_real_injector_and_take_effect_in_the_simulation()
     {
+        // m on E1, e on E2, s on E3 (one elevator each: a parked elevator ignores an emergency stop, by design).
         var session = new LiveSession(Repo.Load("lunch.yaml"));
         var presenter = new CapturingPresenter();
         var loop = new TuiLoop(session, new Pacer(10), new FakeClock(),
-            new ScriptedKeys((2, TuiKey.SelectNext), (3, TuiKey.Maintenance), (4, TuiKey.Emergency), (5, TuiKey.Stuck)), presenter, new LoopOptions(MaxFrames: 7));
+            new ScriptedKeys((2, TuiKey.SelectNext), (3, TuiKey.Maintenance), (4, TuiKey.SelectNext), (5, TuiKey.Emergency),
+                (6, TuiKey.SelectNext), (7, TuiKey.Stuck)), presenter, new LoopOptions(MaxFrames: 9));
         await loop.RunAsync();
-        Assert.Equal([Domain.Faults.FaultKind.MaintenanceOn, Domain.Faults.FaultKind.EmergencyStop, Domain.Faults.FaultKind.Stuck],
-            session.Commands.Select(c => c.Kind));
-        Assert.All(session.Commands, c => Assert.Equal(1, c.ElevatorId));
+        Assert.Equal([(1, Domain.Faults.FaultKind.MaintenanceOn), (2, Domain.Faults.FaultKind.EmergencyStop), (3, Domain.Faults.FaultKind.Stuck)],
+            session.Commands.Select(c => (c.ElevatorId, c.Kind)));
         Assert.Equal(60_000, session.Commands[2].DurationMs);
         var status = presenter.Last!.Status;
-        Assert.Equal("faults (no-op)", status.Injector);
-        Assert.EndsWith("(no-op)", status.Message, StringComparison.Ordinal);
+        Assert.Equal("faults", status.Injector);
+        Assert.DoesNotContain("no-op", status.Message, StringComparison.Ordinal);
+
+        // The real SimFaultInjector applied all three: the log shows each command and its effect.
+        Assert.Equal([(1, Domain.Faults.FaultKind.MaintenanceOn), (2, Domain.Faults.FaultKind.EmergencyStop), (3, Domain.Faults.FaultKind.Stuck)],
+            session.Log.OfType<Domain.Events.FaultCommandApplied>().Select(f => (f.ElevatorId, f.Kind)));
+        Assert.Contains(session.Log, e => e is Domain.Events.MaintenanceRequested { ElevatorId: 1 });
+        Assert.Contains(session.Log, e => e is Domain.Events.EmergencyStopped { ElevatorId: 2 });
     }
 
     [Fact]

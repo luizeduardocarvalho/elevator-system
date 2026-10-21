@@ -64,8 +64,7 @@ public static class ViewModel
         info.Achieved is { } a ? a.ToString("0.0", Inv) + "×" : "–",
         info.Paused,
         s.Ended,
-        info.ReadOnly ? "read-only" : info.InjectorNoOp ? "faults (no-op)" : "faults",
-        info.InjectorNoOp,
+        info.ReadOnly ? "read-only" : "faults",
         $"E{selected}",
         info.Message);
 

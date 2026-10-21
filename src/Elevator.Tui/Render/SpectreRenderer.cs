@@ -57,7 +57,7 @@ public static class SpectreRenderer
         if (s.Paused) parts.Add("[yellow]⏸ PAUSED[/]");
         if (s.Finished) parts.Add("[aqua]FINISHED[/]");
         parts.Add($"sel [bold]{Markup.Escape(s.Selected)}[/]");
-        parts.Add(s.InjectorNoOp ? $"[grey]{Markup.Escape(s.Injector)}[/]" : Markup.Escape(s.Injector));
+        parts.Add(Markup.Escape(s.Injector));
         if (s.Message is { } msg) parts.Add($"[italic]{Markup.Escape(msg)}[/]");
         return new Markup(string.Join(" · ", parts)) { Overflow = Overflow.Ellipsis };
     }

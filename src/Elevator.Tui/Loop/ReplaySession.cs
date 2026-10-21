@@ -37,8 +37,6 @@ public sealed class ReplaySession : ISession
 
     public bool ReadOnly => true;
 
-    public bool InjectorNoOp => true;
-
     public void Step() => FoldTo(SimTime.Min(Now.AddMs(Pacer.TickMs), End));
 
     public void SeekTo(SimTime target)
