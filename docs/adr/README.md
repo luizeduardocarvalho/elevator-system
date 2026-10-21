@@ -12,7 +12,7 @@
 | [008](008-metrics-and-two-kinds-of-time.md) | Metric definitions and the two kinds of time | Accepted |
 | [009](009-destination-dispatch-and-capacity.md) | Destination dispatch and the capacity model | Accepted; full-load part superseded by 010 |
 | [010](010-next-trip-capacity.md) | Next-trip assignment under full load | Accepted |
-| 011 | TUI: choice, renderer decoupling, timestep and accumulator, seek by re-simulation | Reserved for Stage 3 |
+| [011](011-tui.md) | TUI: choice, renderer decoupling, timestep and accumulator, seek by re-simulation | Accepted |
 | 012 | Eligibility policies and elevator types | Reserved for Stage 4 |
 | 013 | Maintenance, emergency, watchdog and reassignment | Reserved for Stage 4 |
 
