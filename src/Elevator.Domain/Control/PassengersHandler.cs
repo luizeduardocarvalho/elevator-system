@@ -93,7 +93,10 @@ public sealed class PassengersHandler : IHandler
         (_waiting.TryGetValue(key, out var list) ? list : _waiting[key] = []).Add(p);
         _byId.Add(request.Id, p);
         Arrived++;
-        outbox.Emit(new PassengerArrived(now, request.Id, request.PickupFloor, request.DestinationFloor));
+        outbox.Emit(new PassengerArrived(now, request.Id, request.PickupFloor, request.DestinationFloor,
+            Load: request.Load != 1 ? request.Load : null,           // v3.1: written only when set, so default logs
+            Vip: request.Vip ? true : null,                          // stay byte-identical
+            AccessLevel: request.AccessLevel > 0 ? request.AccessLevel : null));
     }
 
     private void GetOff(DoorsOpened opened, SimTime now, Outbox outbox)

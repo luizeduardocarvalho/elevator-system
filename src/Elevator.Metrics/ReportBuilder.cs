@@ -14,6 +14,7 @@ public static class ReportBuilder
         var delivered = records.Where(r => r.Delivered && r.BoardedAt is not null).ToList();
         var passengers = started?.Passengers ?? records.Count;
         var refused = list.Count(e => e is AccessDenied { ElevatorId: null });
+        var vips = list.OfType<PassengerArrived>().Where(a => a.IsVip).Select(a => a.PassengerId).ToHashSet(); // v3.1
 
         var breakdown = Enum.GetValues<WaitBucket>().ToDictionary(
             b => b,
@@ -41,6 +42,8 @@ public static class ReportBuilder
             Rejections = records.Sum(r => r.Rejections),
             WaitBreakdown = breakdown,
             RefusedByPolicy = refused,
+            VipWait = vips.Count == 0 ? null : DurationStats.From(delivered.Where(r => vips.Contains(r.Id)).Select(r => r.WaitS!.Value).ToList()),
+            NonVipWait = vips.Count == 0 ? null : DurationStats.From(delivered.Where(r => !vips.Contains(r.Id)).Select(r => r.WaitS!.Value).ToList()),
             Ops = OpsMetrics.Build(list) with
             {
                 AffectedPassengers = OpsMetrics.AffectedPassengers(list),

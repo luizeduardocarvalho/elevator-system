@@ -74,6 +74,7 @@ public static class PassengerLifecycle
 
     private sealed class ElevatorView
     {
+        /// <summary>Load units on board (persons count 1; v3.1 PassengerArrived.Load otherwise).</summary>
         public int Riders;
         public ElevatorState State = ElevatorState.Idle;
         public int Floor = Floors.Lowest;
@@ -105,7 +106,9 @@ public static class PassengerLifecycle
         var passengers = new Dictionary<int, Tracker>();
         var waiting = new List<Tracker>();
         long lastMs = 0;
-        var fullAt = double.PositiveInfinity; // riders at which an elevator bypasses pickups (persons: load 1 each)
+        var fullAt = double.PositiveInfinity; // load at which an elevator bypasses pickups (building-wide)
+        var fleetFullAt = new Dictionary<int, double>(); // per elevator, when the log describes a typed fleet (v3.1)
+        var loads = new Dictionary<int, int>();         // passenger → load units (v3.1)
 
         ElevatorView View(int id) => elevators.TryGetValue(id, out var v) ? v : elevators[id] = new ElevatorView();
 
@@ -118,7 +121,7 @@ public static class PassengerLifecycle
                 foreach (var v in elevators.Values)
                     if (v.StuckUntilMs > lastMs && v.StuckUntilMs < until) until = v.StuckUntilMs;
                 var span = until - lastMs;
-                foreach (var p in waiting) p.Buckets[(int)BucketOf(p, p.Elevator is { } id ? View(id) : null, fullAt, lastMs)] += span;
+                foreach (var p in waiting) p.Buckets[(int)BucketOf(p, p.Elevator is { } id ? View(id) : null, p.Elevator is { } eid && fleetFullAt.TryGetValue(eid, out var own) ? own : fullAt, lastMs)] += span;
                 lastMs = until;
             }
 
@@ -126,8 +129,10 @@ public static class PassengerLifecycle
             {
                 case SimulationStarted started:
                     fullAt = started.Capacity == int.MaxValue ? double.PositiveInfinity : started.BypassThreshold * started.Capacity;
+                    foreach (var f in started.Fleet ?? []) fleetFullAt[f.ElevatorId] = f.Capacity * f.BypassThreshold;
                     break;
                 case PassengerArrived a:
+                    loads[a.PassengerId] = a.LoadUnits;
                     var t = new Tracker(a.PassengerId, a.From, a.To, a.At);
                     passengers[a.PassengerId] = t;
                     waiting.Add(t);
@@ -161,7 +166,7 @@ public static class PassengerLifecycle
                     p.Elevator = null;
                     break;
                 case PassengerBoarded b when passengers.GetValueOrDefault(b.PassengerId) is { } p:
-                    View(b.ElevatorId).Riders++;
+                    View(b.ElevatorId).Riders += loads.GetValueOrDefault(b.PassengerId, 1);
                     p.BoardedAt = b.At;
                     p.Elevator = b.ElevatorId;
                     var arrival = View(b.ElevatorId).LastArrival;
@@ -169,7 +174,7 @@ public static class PassengerLifecycle
                     waiting.Remove(p);
                     break;
                 case PassengerAlighted al when passengers.GetValueOrDefault(al.PassengerId) is { } p:
-                    View(al.ElevatorId).Riders--;
+                    View(al.ElevatorId).Riders -= loads.GetValueOrDefault(al.PassengerId, 1);
                     p.AlightedAt = al.At;
                     break;
                 case StateChanged sc:

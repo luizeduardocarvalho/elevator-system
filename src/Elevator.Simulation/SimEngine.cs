@@ -99,7 +99,9 @@ public sealed class SimEngine
         _expectedPassengers = passengers.Count;
         Log.Add(new SimulationStarted(SimTime.Zero, scenario.Name, scenario.Seed, scenario.Floors, scheduling.Name, passengers.Count,
             scenario.Elevators, dispatch.Name + (rebalance is null ? "" : "+rebalance"), scenario.Capacity,
-            scenario.BypassThreshold, CapacityModes.Name(capacityMode)));
+            scenario.BypassThreshold, CapacityModes.Name(capacityMode),
+            // v3.1: the per-elevator description, only for a configured (typed) fleet; null keeps default logs unchanged.
+            scenario.Fleet is null ? null : [.. fleet.Select((t, i) => new FleetEntry(i, t.Name, t.Capacity, scenario.BypassThreshold, t.ServedFloors))]));
 
         Register(new FaultScheduler());
 
