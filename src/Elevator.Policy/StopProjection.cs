@@ -117,6 +117,8 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
         public Request? Extra { get; set; }
         public bool HasRequests => Call.Requests.Count > 0 || Extra is not null;
         public HallCall PolicyView { get; } = new(call.Floor, call.Direction, call.RegisteredAt);
+        /// <summary>The heaviest load waiting here (as <see cref="HallCall.MaxLoad"/>, including the new request).</summary>
+        public int MaxLoad => Extra is { } x ? Math.Max(Call.MaxLoad, x.Load) : Call.MaxLoad;
     }
 
     /// <summary>
@@ -132,6 +134,7 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
         private readonly double _threshold;
         private readonly bool _nextTrip;
         private bool _viewBypassing;
+        private long _viewRoom = long.MinValue; // room left when the policy view was built (pickups that do not fit are hidden)
         private readonly Request? _extra;
         private readonly bool[] _carCalls;
         private readonly List<Pickup> _pickups = [];
@@ -153,6 +156,7 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
         private readonly IFastSchedulingPolicy? _fast;
         private ulong _carMask, _upMask, _downMask;
         private PickupRef[] _pickupRefs = [];
+        private int _visiblePickups;
         private bool _pickupsDirty = true;
         private int? _target;                // policy target since the last change
         private bool _targetValid;
@@ -387,15 +391,20 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
             }
             else
             {
-                // Not everyone fits: walk the arrival order (as the passengers do), skipping whoever does not fit.
-                // Stops once the elevator is full, so at most about `capacity` requests are looked at.
+                // Not everyone fits: walk the arrival order (as the passengers do) until the first who does not fit;
+                // they and everyone behind them are left behind. So those who board are always a prefix of the arrival
+                // order, which is what makes the per-group ΔD exact. At most about `capacity` requests are looked at.
+                var blocked = false;
                 foreach (var r in stop.Call.Requests)
                 {
-                    if (_load >= _capacity) break;
-                    if (_load + r.Load > _capacity) continue;
+                    if (_load + r.Load > _capacity)
+                    {
+                        blocked = true;
+                        break;
+                    }
                     Board(stop.Source, r.DestinationFloor, 1, r.Load);
                 }
-                if (stop.Extra is { } x && _load + x.Load <= _capacity) BoardExtra(x);
+                if (!blocked && stop.Extra is { } x && _load + x.Load <= _capacity) BoardExtra(x);
             }
 
             if (!_nextTrip && _load >= _threshold * _capacity) ReleaseAll(); // Defer mode: hand pickups back
@@ -459,6 +468,7 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
             var hereInDoorCycle = r.PickupFloor == _floor && _state is ElevatorState.DoorOpening or ElevatorState.DoorOpen or ElevatorState.DoorClosing;
             if (!hereInDoorCycle) return;
             if (Bypassing) return; // full: served on a later trip
+            if (_load + r.Load > _capacity) return; // as the elevator: a load that cannot fit now is not answered at the door
             _dir ??= r.Direction;
             Changed();
             if (_dir != r.Direction) return;
@@ -486,6 +496,14 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
                 _view = null;
                 _pickupsDirty = true;
             }
+            // As the elevator: a pickup where someone would not fit in the room left is bypassed too (heavy loads, ADR-012).
+            var room = (long)_capacity - _load;
+            if (room != _viewRoom)
+            {
+                _viewRoom = room;
+                _view = null;
+                _pickupsDirty = true;
+            }
             if (_fast is not null)
             {
                 if (bypassing)
@@ -494,16 +512,17 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
                 {
                     _upMask = _downMask = 0;
                     if (_pickupRefs.Length < _pickups.Count) _pickupRefs = new PickupRef[_floors * 2 + 2];
-                    for (var i = 0; i < _pickups.Count; i++)
+                    _visiblePickups = 0;
+                    foreach (var p in _pickups)
                     {
-                        var p = _pickups[i];
-                        _pickupRefs[i] = new PickupRef(p.Floor, p.Direction, p.RegisteredAt.Ms);
+                        if (p.MaxLoad > room) continue;
+                        _pickupRefs[_visiblePickups++] = new PickupRef(p.Floor, p.Direction, p.RegisteredAt.Ms);
                         if (p.Direction == Direction.Up) _upMask |= StopSet.Bit(p.Floor);
                         else _downMask |= StopSet.Bit(p.Floor);
                     }
                     _pickupsDirty = false;
                 }
-                return _fast.Decide(new StopSet(_floor, _state, _dir, _carMask, _upMask, _downMask, _pickupRefs.AsSpan(0, _pickups.Count)));
+                return _fast.Decide(new StopSet(_floor, _state, _dir, _carMask, _upMask, _downMask, _pickupRefs.AsSpan(0, _visiblePickups)));
             }
 
             if (_view is null)
@@ -512,7 +531,7 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
                 _viewCarCalls.Clear();
                 for (var f = 1; f <= _floors; f++) if (_carCalls[f]) _viewCarCalls.Add(f);
                 _viewPickups.Clear();
-                if (!bypassing) foreach (var p in _pickups) _viewPickups.Add(p.PolicyView);
+                if (!bypassing) foreach (var p in _pickups) if (p.MaxLoad <= room) _viewPickups.Add(p.PolicyView);
                 _view = ElevatorSnapshot.ForPolicy(_floor, _state, _dir, _viewCarCalls, _viewPickups, _floors, _id);
             }
             else if (_view.CurrentFloor != _floor)

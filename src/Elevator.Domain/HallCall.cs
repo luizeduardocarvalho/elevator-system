@@ -8,6 +8,7 @@ namespace Elevator.Domain;
 public sealed record HallCall(int Floor, Direction Direction, SimTime RegisteredAt, IReadOnlyList<Request> Requests)
 {
     private DestinationTotals? _totals;
+    private int? _maxLoad;
 
     public HallCall(int floor, Direction direction, SimTime registeredAt) : this(floor, direction, registeredAt, []) { }
 
@@ -18,6 +19,7 @@ public sealed record HallCall(int Floor, Direction Direction, SimTime Registered
         {
             field = value;
             _totals = null; // any change of requests invalidates the totals unless they are set alongside
+            _maxLoad = null;
         }
     } = Requests;
 
@@ -29,6 +31,10 @@ public sealed record HallCall(int Floor, Direction Direction, SimTime Registered
     }
 
     public int Load => Totals.TotalLoad;
+
+    /// <summary>The heaviest load waiting at this stop (0 for a plain lit button). When it fits, whoever is first in the
+    /// queue fits, so a stop here always boards someone (ADR-012).</summary>
+    public int MaxLoad => _maxLoad ??= Requests.Count == 0 ? 0 : Requests.Max(r => r.Load);
 
     // Value equality on the data, not on the cached totals.
     public bool Equals(HallCall? other) =>

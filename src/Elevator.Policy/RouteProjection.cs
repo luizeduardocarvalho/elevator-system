@@ -87,7 +87,7 @@ public sealed class RouteProjection(ISchedulingPolicy scheduling, ElevatorTiming
                         case HallCallAnswered answered when _waiting.Remove((answered.Floor, answered.Direction), out var boarding):
                             foreach (var r in boarding)
                             {
-                                if (e.Load + r.Load > snapshot.Capacity) continue; // left behind: not this elevator's to finish
+                                if (e.Load + r.Load > snapshot.Capacity) break; // left behind, with everyone behind them: not this elevator's to finish
                                 if (r.Id == extra?.Id)
                                 {
                                     PickupAt = answered.At;
