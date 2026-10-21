@@ -95,6 +95,9 @@ public class MultiElevatorProperties
             }
         }
 
+        // No fault was injected, so the watchdog (on by default, T = 30 s) never fires (ADR-013).
+        Assert.DoesNotContain(result.Events, e => e is FaultDetected);
+
         // Wait attribution: every passenger's buckets sum exactly to their wait.
         foreach (var r in PassengerLifecycle.Analyze(result.Events))
             Assert.Equal(r.WaitS!.Value, r.WaitBuckets.Values.Sum(), 6);

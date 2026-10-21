@@ -39,6 +39,7 @@ public sealed class Elevator
     private SimTime? _deadline;       // end of the current timed phase; null in Idle/Maintenance, and while stuck
     private bool _maintenanceRequested; // draining, then parked (ADR-013)
     private bool _emergency;          // emergency stop in effect (ADR-013)
+    private bool _faulted;            // declared faulty by the watchdog, until it moves again (ADR-013)
     private bool _stuck;              // the drive is stuck (fault injection, ADR-013): no phase completes
     private long? _frozenMs;          // while stuck: what is left of the current phase
     private SimTime _closingStartedAt; // used to compute how long a reopen takes
@@ -127,12 +128,13 @@ public sealed class Elevator
 
     /// <summary>
     /// Operating mode (ADR-013), alongside the spec's state: Emergency while an emergency stop is in effect (it wins
-    /// over everything), Maintenance once parked, Draining while maintenance is requested and riders are still on board.
-    /// Only a Normal elevator takes new assignments.
+    /// over everything), Maintenance once parked, Fault from the watchdog's declaration until it moves again, Draining
+    /// while maintenance is requested and riders are still on board. Only a Normal elevator takes new assignments.
     /// </summary>
     public ElevatorMode Mode =>
         _emergency ? ElevatorMode.Emergency
         : State == ElevatorState.Maintenance ? ElevatorMode.Maintenance
+        : _faulted ? ElevatorMode.Fault
         : _maintenanceRequested ? ElevatorMode.Draining
         : ElevatorMode.Normal;
 
@@ -194,6 +196,7 @@ public sealed class Elevator
         {
             Now = deadline;
             _deadline = null;
+            if (_faulted) Recover(); // a timed phase completed: it moves again
             OnPhaseEnded();
         }
         Now = now;
@@ -621,7 +624,43 @@ public sealed class Elevator
         if (State != ElevatorState.Idle) return true; // still moving or closing: carries on normally
         if (_riders.Any(r => r.DestinationFloor == CurrentFloor)) OpenDoor();
         else DecideFromIdle();
+        RecoverIfHealthy();
         return true;
+    }
+
+    // ---- Fault (watchdog, ADR-013) -----------------------------------------------------------------------
+
+    /// <summary>
+    /// The dispatcher's watchdog saw no progress for <paramref name="silentForMs"/> while this elevator had work. It goes
+    /// into Fault mode: logged (<see cref="FaultDetected"/>), every pending pickup handed back (reason Fault) so other
+    /// elevators serve them, no new assignment. Riders stay on board; it still tries to deliver them, and it recovers
+    /// (<see cref="FaultRecovered"/>) as soon as it moves again: a timed phase completes, or, with nothing to do, as soon
+    /// as the drive is no longer stuck.
+    /// </summary>
+    /// <returns>False if already faulty or parked for maintenance. Always acknowledged with a new version, so the
+    /// dispatcher gets a fresh snapshot either way.</returns>
+    public bool DeclareFault(long silentForMs)
+    {
+        Version++;
+        if (_faulted || State == ElevatorState.Maintenance) return false;
+        _faulted = true;
+        Emit(new FaultDetected(Now, Id, CurrentFloor, silentForMs));
+        ReleaseAllPickups(AssignmentReason.Fault);
+        RecoverIfHealthy();
+        return true;
+    }
+
+    private void Recover()
+    {
+        _faulted = false;
+        Version++;
+        Emit(new FaultRecovered(Now, Id));
+    }
+
+    /// <summary>Faulty but able to move and with nothing in progress (idle, not stuck, not stopped by an emergency): recovered.</summary>
+    private void RecoverIfHealthy()
+    {
+        if (_faulted && !_stuck && !_emergency && _deadline is null && State is ElevatorState.Idle or ElevatorState.Maintenance) Recover();
     }
 
     // ---- Stuck drive (fault injection, ADR-013) ---------------------------------------------------------
@@ -662,6 +701,7 @@ public sealed class Elevator
             if (State == ElevatorState.DoorClosing) _closingStartedAt = Now.AddMs(left - _timing.DoorClosingMs);
         }
         Version++;
+        RecoverIfHealthy();
         return true;
     }
 

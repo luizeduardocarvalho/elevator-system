@@ -15,6 +15,12 @@ public sealed record DispatcherOptions(long DispatchDelayMs = 0, long? Rebalance
 
     /// <summary>Access policies applied before the dispatch policy (ADR-012). Default: allow everything.</summary>
     public AccessPipeline Access { get; init; } = AccessPipeline.AllowAll;
+
+    /// <summary>
+    /// Watchdog (ADR-013): an elevator with work that shows no progress for this long (sim ms) is declared faulty.
+    /// Null = no watchdog. The shells set 30 s by default.
+    /// </summary>
+    public long? WatchdogTimeoutMs { get; init; }
 }
 
 /// <summary>Decides, for an assigned request, whether moving it elsewhere is worth it (optional, ADR-006).</summary>
@@ -83,6 +89,18 @@ public sealed class DispatcherHandler(
     // The overlaid snapshot per elevator, kept between decisions (one merge per proposal) so that it is not rebuilt
     // per decision and the dispatch policy's per-snapshot caches keep working. Dropped when the base changes.
     private readonly Dictionary<int, ElevatorSnapshot> _overlaid = [];
+    // Watchdog (ADR-013): per elevator, what its last snapshot showed and since when it has shown no progress.
+    private sealed class Watch
+    {
+        public (int Floor, ElevatorState State, SimTime? PhaseEndsAt) Progress;
+        public SimTime Since;
+        public bool Watching;
+        /// <summary>Declared faulty when its latest snapshot had this version; cleared by any newer snapshot.</summary>
+        public long? DeclaredAtVersion;
+    }
+
+    private readonly Dictionary<int, Watch> _watch = [];
+    private bool _watchdogScheduled;
     private long _sequence;
     private bool _rebalanceScheduled;
     private bool _overloaded;
@@ -110,8 +128,16 @@ public sealed class DispatcherHandler(
                 _overlaid.Remove(published.Snapshot.ElevatorId);
                 if (_excludedFrom.Remove(published.Snapshot.ElevatorId, out var excluded))
                     foreach (var id in excluded) Find(id)?.Excluded.Remove(published.Snapshot.ElevatorId);
+                Observe(published.Snapshot, now, outbox);
                 RetryPending(now, outbox);
                 ScheduleRebalance(outbox);
+                break;
+            case WatchdogTimer:
+                _watchdogScheduled = false;
+                CheckWatchdog(now, outbox);
+                break;
+            case ProgressReported progress when _watch.TryGetValue(progress.ElevatorId, out var watched) && watched.Watching:
+                if (progress.At > watched.Since) watched.Since = progress.At;
                 break;
             case AssignmentAcceptedMsg accepted when Find(accepted.RequestId) is { } t:
                 if (_overlay.TryGetValue(accepted.ElevatorId, out var proposed))
@@ -259,11 +285,77 @@ public sealed class DispatcherHandler(
         outbox.Send(Address.Elevator(choice.ElevatorId), new Assign(t.Request, choice.Eta, forced), _options.DispatchDelayMs);
     }
 
-    /// <summary>In service: only Normal-mode elevators take new assignments (ADR-013).</summary>
-    private static bool InService(ElevatorSnapshot s) => s.Mode == ElevatorMode.Normal;
+    /// <summary>
+    /// In service: only Normal-mode elevators take new assignments (ADR-013), and not one the watchdog has just declared
+    /// faulty whose answer (a snapshot in Fault mode) has not arrived yet.
+    /// </summary>
+    private bool InService(ElevatorSnapshot s) =>
+        s.Mode == ElevatorMode.Normal && !(_watch.Count > 0 && _watch.TryGetValue(s.ElevatorId, out var w) && w.DeclaredAtVersion is not null);
 
     /// <summary>May <paramref name="s"/> be given <paramref name="t"/>: allowed by the access pipeline and in service.</summary>
-    private static bool Available(Tracked t, ElevatorSnapshot s) => InService(s) && !t.Denied!.ContainsKey(s.ElevatorId);
+    private bool Available(Tracked t, ElevatorSnapshot s) => InService(s) && !t.Denied!.ContainsKey(s.ElevatorId);
+
+    // ---- Watchdog (ADR-013) -------------------------------------------------------------------------------
+    //
+    // It runs on the snapshot stream the dispatcher already receives, plus a progress report per floor reached (passing
+    // a floor without stopping publishes no snapshot). An elevator is watched while its snapshot shows work (moving,
+    // doors in a cycle, or stops pending) and it is in service or draining. Progress = a floor reached, or its state or
+    // current phase end changed (a door dwell extended for a newcomer counts: it is working). One timer at a time, for
+    // the earliest deadline, and only while something is watched: a run where every elevator keeps moving sends a
+    // timer about once per T and logs nothing. None of this ever triggers a dispatch decision.
+
+    private void Observe(ElevatorSnapshot s, SimTime now, Outbox outbox)
+    {
+        if (_options.WatchdogTimeoutMs is not { } limit) return;
+        if (!_watch.TryGetValue(s.ElevatorId, out var w)) _watch[s.ElevatorId] = w = new Watch();
+
+        if (w.DeclaredAtVersion is { } declared && s.Version > declared) w.DeclaredAtVersion = null; // it has answered
+        var progress = (s.CurrentFloor, s.State, s.PhaseEndsAt);
+        var hasWork = s.Mode is ElevatorMode.Normal or ElevatorMode.Draining
+                      && (s.State is not (ElevatorState.Idle or ElevatorState.Maintenance) || s.CarCalls.Count > 0 || s.HallCalls.Count > 0);
+        if (!hasWork || w.DeclaredAtVersion is not null)
+        {
+            w.Watching = false;
+            w.Progress = progress;
+            return;
+        }
+        if (!w.Watching || progress != w.Progress)
+        {
+            w.Progress = progress;
+            w.Since = s.At;
+        }
+        w.Watching = true;
+        ScheduleWatchdog(w.Since.AddMs(limit), now, outbox);
+    }
+
+    private void ScheduleWatchdog(SimTime due, SimTime now, Outbox outbox)
+    {
+        if (_watchdogScheduled) return; // the pending check is never later than this one; it re-arms itself
+        _watchdogScheduled = true;
+        outbox.Send(Address.Dispatcher, new WatchdogTimer(), Math.Max(0, due.Ms - now.Ms));
+    }
+
+    private void CheckWatchdog(SimTime now, Outbox outbox)
+    {
+        if (_options.WatchdogTimeoutMs is not { } limit) return;
+        SimTime? next = null;
+        foreach (var (id, w) in _watch.OrderBy(kv => kv.Key))
+        {
+            if (!w.Watching) continue;
+            var due = w.Since.AddMs(limit);
+            if (due > now)
+            {
+                next = next is { } n && n <= due ? n : due;
+                continue;
+            }
+            // No progress for at least T with work to do: declare it faulty. It answers in Fault mode and hands its
+            // pickups back; until then it is excluded from dispatch here.
+            w.Watching = false;
+            w.DeclaredAtVersion = _snapshots[id].Version;
+            outbox.Send(Address.Elevator(id), new FaultDeclared(now.Ms - w.Since.Ms));
+        }
+        if (next is { } at) ScheduleWatchdog(at, now, outbox);
+    }
 
     /// <summary>
     /// Evaluates the access pipeline for <paramref name="t"/> against every elevator, once (ADR-012). Each denial is

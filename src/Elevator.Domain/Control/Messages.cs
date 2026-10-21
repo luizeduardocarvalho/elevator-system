@@ -54,6 +54,9 @@ public sealed record Alighted(int RequestId) : Message;
 /// <summary>A fault or operator command for this elevator, taking effect now (ADR-013).</summary>
 public sealed record ApplyFault(Faults.FaultCommand Command) : Message;
 
+/// <summary>The dispatcher's watchdog saw no progress for <paramref name="SilentForMs"/> while this elevator had work (ADR-013).</summary>
+public sealed record FaultDeclared(long SilentForMs) : Message;
+
 // ---- To the dispatcher -----------------------------------------------------------------------------------
 public sealed record SubmitRequest(Request Request) : Message;
 
@@ -72,6 +75,16 @@ public sealed record ReRegister(int RequestId, AssignmentReason Reason) : Messag
 public sealed record RequestPickedUp(int RequestId, int ElevatorId) : Message;
 
 public sealed record RebalanceTimer : Message;
+
+/// <summary>The watchdog's check is due (ADR-013). Scheduled only while some elevator has work.</summary>
+public sealed record WatchdogTimer : Message;
+
+/// <summary>
+/// The elevator reached <paramref name="Floor"/> at <paramref name="At"/> (ADR-013): progress for the watchdog. Passing a
+/// floor without stopping changes nothing a snapshot shows, so without this a long run between stops looks silent.
+/// Only the watchdog reads it; it never triggers a dispatch decision.
+/// </summary>
+public sealed record ProgressReported(int ElevatorId, int Floor, SimTime At) : Message;
 
 /// <summary>Spec's findBestElevator(): which elevator would the dispatcher choose now? Answered, nothing assigned.</summary>
 public sealed record FindBestQuery(int QueryId, Request Request) : Message;

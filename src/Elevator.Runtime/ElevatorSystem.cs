@@ -77,11 +77,16 @@ public sealed class ElevatorSystem : IAsyncDisposable
         for (var i = 0; i < options.Elevators; i++)
         {
             var elevator = Building.CreateElevator(i, options.Floors, fleet[i], scheduling, options.BypassThreshold, options.CapacityMode);
-            Add(new Actor(new ElevatorHandler(elevator, new ElevatorHandlerOptions(SnapshotDelayMs: latency.SnapshotMs), estimator), this));
+            var handlerOptions = new ElevatorHandlerOptions(SnapshotDelayMs: latency.SnapshotMs, ReportProgress: options.WatchdogTimeoutMs is not null);
+            Add(new Actor(new ElevatorHandler(elevator, handlerOptions, estimator), this));
         }
         var rebalance = options.Rebalance ? new HysteresisRebalance(scheduling, timing) : null;
         Add(new Actor(new DispatcherHandler(dispatch, options.Elevators, timing,
-            new DispatcherOptions(latency.DispatchMs, rebalance is null ? null : 5_000, options.OverloadThreshold) { Access = Building.CreateAccess(options.Access) },
+            new DispatcherOptions(latency.DispatchMs, rebalance is null ? null : 5_000, options.OverloadThreshold)
+            {
+                Access = Building.CreateAccess(options.Access),
+                WatchdogTimeoutMs = options.WatchdogTimeoutMs,
+            },
             rebalance, new NearestDispatch()),
             this, _requests.Reader));
         Add(new Actor(new PassengersHandler([.. fleet.Select(t => t.Capacity)]), this));

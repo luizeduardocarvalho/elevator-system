@@ -78,14 +78,19 @@ public sealed class SimEngine
         for (var i = 0; i < scenario.Elevators; i++)
         {
             var elevator = Building.CreateElevator(i, scenario.Floors, fleet[i], scheduling, scenario.BypassThreshold, capacityMode);
-            var handler = new ElevatorHandler(elevator, new ElevatorHandlerOptions(SnapshotDelayMs: latency.SnapshotMs), estimator);
+            var handler = new ElevatorHandler(elevator,
+                new ElevatorHandlerOptions(SnapshotDelayMs: latency.SnapshotMs, ReportProgress: scenario.WatchdogTimeoutMs is not null), estimator);
             _elevators.Add(handler);
             Register(handler);
         }
         var rebalance = strategy.Rebalance ? new HysteresisRebalance(scheduling, scenario.Timing) : null;
         Register(new DispatcherHandler(dispatch, scenario.Elevators, scenario.Timing,
             new DispatcherOptions(latency.DispatchMs, RebalanceIntervalMs: rebalance is null ? null : 5_000, OverloadThreshold: OverloadThreshold,
-                EmitDispatchEvaluations: options.EmitDispatchEvaluations) { Access = Building.CreateAccess(scenario.Access) },
+                EmitDispatchEvaluations: options.EmitDispatchEvaluations)
+            {
+                Access = Building.CreateAccess(scenario.Access),
+                WatchdogTimeoutMs = scenario.WatchdogTimeoutMs,
+            },
             rebalance, new NearestDispatch()));
         _passengers = new PassengersHandler([.. fleet.Select(t => t.Capacity)]);
         Register(_passengers);
