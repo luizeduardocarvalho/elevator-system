@@ -1,13 +1,17 @@
 namespace Elevator.Domain;
 
 /// <summary>
-/// A passenger request (spec, Medium level): from a pickup floor to a destination floor.
-/// The direction is derived, so a valid request can never carry an inconsistent direction.
+/// A passenger request (spec, Medium level): from a pickup floor to a destination floor. In multi-elevator mode this
+/// is a destination-dispatch request: the destination is entered at the hall, so the dispatcher and the assigned
+/// elevator know it before pickup (ADR-009). The direction is derived, so it can never be inconsistent.
 /// </summary>
-public sealed record Request(int PickupFloor, int DestinationFloor, Direction Direction, SimTime Timestamp)
+/// <param name="Timestamp">t_call: when the passenger first pressed. Kept across re-registrations (left behind, released).</param>
+/// <param name="Id">Unique per passenger; submissions are idempotent by id.</param>
+/// <param name="Load">Load units (a person is 1), so freight can be modelled later.</param>
+public sealed record Request(int PickupFloor, int DestinationFloor, Direction Direction, SimTime Timestamp, int Id = 0, int Load = 1)
 {
     /// <param name="declared">Direction the caller claims (e.g. from an input file); must match pickup→destination.</param>
-    public static Result<Request> Create(int pickup, int destination, SimTime timestamp, int floors, Direction? declared = null)
+    public static Result<Request> Create(int pickup, int destination, SimTime timestamp, int floors, Direction? declared = null, int id = 0, int load = 1)
     {
         if (Floors.Check(pickup, floors) is { } pickupError) return Result<Request>.Fail($"pickup: {pickupError}");
         if (Floors.Check(destination, floors) is { } destError) return Result<Request>.Fail($"destination: {destError}");
@@ -17,7 +21,9 @@ public sealed record Request(int PickupFloor, int DestinationFloor, Direction Di
         if (declared is { } d && d != direction)
             return Result<Request>.Fail($"direction {d} is inconsistent with {pickup}→{destination}");
 
-        return Result<Request>.Ok(new Request(pickup, destination, direction, timestamp));
+        if (load <= 0) return Result<Request>.Fail($"load must be > 0 (got {load})");
+
+        return Result<Request>.Ok(new Request(pickup, destination, direction, timestamp, id, load));
     }
 }
 

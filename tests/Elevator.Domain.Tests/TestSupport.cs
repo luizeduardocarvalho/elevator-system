@@ -6,7 +6,7 @@ internal sealed class StubPolicy(Func<ElevatorSnapshot, int?> nextGoal) : ISched
 {
     public string Name => "stub";
 
-    public int? NextGoal(ElevatorSnapshot snapshot) => nextGoal(snapshot);
+    public PolicyDecision Decide(ElevatorSnapshot snapshot) => new(nextGoal(snapshot));
 }
 
 internal static class TestPolicies
