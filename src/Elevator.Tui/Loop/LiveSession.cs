@@ -58,7 +58,11 @@ public sealed class LiveSession : ISession
     private (SimEngine, BuildingState) Fresh()
     {
         _folded = 0;
-        return (SimEngine.Create(_scenario, _strategy, new SimEngineOptions(EmitDispatchEvaluations: true, _injector)), new BuildingState());
+        var engine = SimEngine.Create(_scenario, _strategy, new SimEngineOptions(EmitDispatchEvaluations: true, _injector));
+        // Deliver what is due at t = 0 (passengers arriving at once), so the screen at 0:00:00.0 shows exactly the
+        // events stamped 0, as a replay at that time does. A zero step: the log is step-independent.
+        engine.AdvanceTo(SimTime.Zero);
+        return (engine, new BuildingState());
     }
 
     public void Step()
