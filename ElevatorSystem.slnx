@@ -11,6 +11,7 @@
     <Project Path="tests/Elevator.Domain.Tests/Elevator.Domain.Tests.csproj" />
     <Project Path="tests/Elevator.Metrics.Tests/Elevator.Metrics.Tests.csproj" />
     <Project Path="tests/Elevator.Policy.Tests/Elevator.Policy.Tests.csproj" />
+    <Project Path="tests/Elevator.Runtime.Tests/Elevator.Runtime.Tests.csproj" />
     <Project Path="tests/Elevator.Simulation.Tests/Elevator.Simulation.Tests.csproj" />
   </Folder>
 </Solution>

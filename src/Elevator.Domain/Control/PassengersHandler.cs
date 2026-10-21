@@ -38,12 +38,11 @@ public sealed class PassengersHandler(int capacity) : IHandler
         switch (message)
         {
             case PassengerArrives arrives:
-                var p = new Passenger(arrives.Request);
-                _waiting.Add(p);
-                _byId.Add(p.Request.Id, p);
-                Arrived++;
-                outbox.Emit(new PassengerArrived(now, p.Request.Id, p.Request.PickupFloor, p.Request.DestinationFloor));
-                outbox.Send(Address.Dispatcher, new SubmitRequest(p.Request));
+                Arrive(arrives.Request, now, outbox);
+                outbox.Send(Address.Dispatcher, new SubmitRequest(arrives.Request));
+                break;
+            case PassengerWaiting waiting:
+                Arrive(waiting.Request, now, outbox);
                 break;
             case AssignmentAcceptedMsg accepted when _byId.GetValueOrDefault(accepted.RequestId) is { RidingOn: null } waiting:
                 waiting.AssignedTo = accepted.ElevatorId;
@@ -59,6 +58,15 @@ public sealed class PassengersHandler(int capacity) : IHandler
                 GetOn(answered, now, outbox);
                 break;
         }
+    }
+
+    private void Arrive(Request request, SimTime now, Outbox outbox)
+    {
+        var p = new Passenger(request);
+        _waiting.Add(p);
+        _byId.Add(request.Id, p);
+        Arrived++;
+        outbox.Emit(new PassengerArrived(now, request.Id, request.PickupFloor, request.DestinationFloor));
     }
 
     private void GetOff(DoorsOpened opened, SimTime now, Outbox outbox)

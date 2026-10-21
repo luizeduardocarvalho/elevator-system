@@ -21,3 +21,21 @@ public sealed class SimClock : IClock
 
     public void Advance(long ms) => AdvanceTo(Now.AddMs(ms));
 }
+
+/// <summary>
+/// Sim time driven by the wall clock: one wall second is <c>speed</c> sim seconds. Used by the actor runtime
+/// (perf, stress tests, a live system). Monotonic, because it reads a <see cref="System.Diagnostics.Stopwatch"/>.
+/// </summary>
+public sealed class RealClock(double speed = 1.0) : IClock
+{
+    private readonly System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+    public double Speed { get; } = speed > 0 ? speed : throw new ArgumentOutOfRangeException(nameof(speed));
+
+    public SimTime Now => new((long)(_stopwatch.Elapsed.TotalMilliseconds * Speed));
+
+    /// <summary>Wall time until <paramref name="time"/> is reached (zero if it already has).</summary>
+    public TimeSpan WallUntil(SimTime time) => TimeSpan.FromMilliseconds(Math.Max(0, (time.Ms - Now.Ms) / Speed));
+
+    public TimeSpan WallFor(long simMs) => TimeSpan.FromMilliseconds(Math.Max(0, simMs / Speed));
+}

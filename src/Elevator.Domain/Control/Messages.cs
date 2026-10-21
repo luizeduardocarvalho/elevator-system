@@ -68,7 +68,14 @@ public sealed record RequestPickedUp(int RequestId, int ElevatorId) : Message;
 public sealed record RebalanceTimer : Message;
 
 // ---- To passengers ---------------------------------------------------------------------------------------
+/// <summary>A passenger arrives and enters their destination; the passengers handler submits the request.</summary>
 public sealed record PassengerArrives(Request Request) : Message;
+
+/// <summary>
+/// A passenger whose request was submitted by someone else (the actor runtime's AssignRequest). Must be posted
+/// before the submission, so that every later notice about this request reaches the passengers handler after it.
+/// </summary>
+public sealed record PassengerWaiting(Request Request) : Message;
 
 /// <summary>Something passengers can see: doors opening (to get off) or a lantern answering their call (to get on).</summary>
 public sealed record ElevatorNotice(DomainEvent Event) : Message;
