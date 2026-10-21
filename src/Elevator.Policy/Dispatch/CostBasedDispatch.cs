@@ -36,7 +36,7 @@ public sealed class CostBasedDispatch(ISchedulingPolicy scheduling, ElevatorTimi
 {
     private readonly RouteProjection _projection = new(scheduling, timing);
     private readonly CostWeights _weights = weights ?? CostWeights.Default;
-    private readonly Dictionary<(int Id, long Version, long AtMs), RouteProjection.Result> _baselines = [];
+    private readonly Dictionary<int, (long Version, long AtMs, RouteProjection.Result Result)> _baselines = []; // latest per elevator
 
     public string Name => name;
 
@@ -79,9 +79,10 @@ public sealed class CostBasedDispatch(ISchedulingPolicy scheduling, ElevatorTimi
     /// </summary>
     private RouteProjection.Result Baseline(ElevatorSnapshot s, SimTime now)
     {
-        var key = (s.ElevatorId, s.Version, s.At.Ms);
-        if (_baselines.TryGetValue(key, out var cached)) return cached;
-        if (_baselines.Count > 4_096) _baselines.Clear();
-        return _baselines[key] = _projection.Project(s, null, now);
+        // One entry per elevator (its latest snapshot): bounded memory however long the system runs.
+        if (_baselines.TryGetValue(s.ElevatorId, out var cached) && cached.Version == s.Version && cached.AtMs == s.At.Ms) return cached.Result;
+        var result = _projection.Project(s, null, now);
+        _baselines[s.ElevatorId] = (s.Version, s.At.Ms, result);
+        return result;
     }
 }

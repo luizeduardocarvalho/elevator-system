@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Elevator.Domain.Events;
 
 namespace Elevator.Domain;
@@ -26,9 +27,12 @@ public sealed class Elevator
 {
     private readonly ElevatorTiming _timing;
     private readonly ISchedulingPolicy _policy;
-    private readonly SortedSet<int> _carCalls = [];
-    private readonly List<HallCall> _hallCalls = []; // registration order = FIFO order
-    private readonly List<Request> _riders = [];
+    // Persistent immutable collections: a snapshot shares them instead of copying, so publishing a snapshot on every
+    // change costs O(1) however many stops are queued (this mattered for perf under large backlogs, ADR-005).
+    private ImmutableSortedSet<int> _carCalls = [];
+    private ImmutableList<HallCall> _hallCalls = []; // registration order = FIFO order
+    private ImmutableList<Request> _riders = [];
+    private int _load;
     private readonly List<DomainEvent> _outbox = [];
 
     private SimTime? _deadline;       // end of the current timed phase; null in Idle/Maintenance
@@ -70,9 +74,10 @@ public sealed class Elevator
             _closingStartedAt = s.ClosingStartedAt,
             _levelWithFloor = !s.IsMoving,
         };
-        e._carCalls.UnionWith(s.CarCalls);
-        e._hallCalls.AddRange(s.HallCalls);
-        e._riders.AddRange(s.Riders);
+        e._carCalls = s.CarCalls as ImmutableSortedSet<int> ?? [.. s.CarCalls];
+        e._hallCalls = s.HallCalls as ImmutableList<HallCall> ?? [.. s.HallCalls];
+        e._riders = s.Riders as ImmutableList<Request> ?? [.. s.Riders];
+        e._load = e._riders.Sum(r => r.Load);
         return e;
     }
 
@@ -106,7 +111,7 @@ public sealed class Elevator
 
     public IReadOnlyList<Request> Riders => _riders;
 
-    public int Load => _riders.Sum(r => r.Load);
+    public int Load => _load;
 
     public bool IsFull => Load >= BypassThreshold * Capacity;
 
@@ -114,7 +119,7 @@ public sealed class Elevator
     public IReadOnlyList<int> TargetFloors => _carCalls.Concat(_hallCalls.Select(c => c.Floor)).Distinct().ToList();
 
     public ElevatorSnapshot Snapshot() =>
-        new(Id, CurrentFloor, State, CommittedDirection, [.. _carCalls], [.. _hallCalls], FloorCount, [.. _riders],
+        new(Id, CurrentFloor, State, CommittedDirection, _carCalls, _hallCalls, FloorCount, _riders,
             Capacity, BypassThreshold, Now, _deadline, _closingStartedAt, Version);
 
     /// <summary>Returns and clears the events produced since the last call.</summary>
@@ -231,7 +236,7 @@ public sealed class Elevator
 
         if (!_levelWithFloor) throw new InvalidOperationException("cannot open the doors between floors");
 
-        _carCalls.Remove(CurrentFloor);
+        _carCalls = _carCalls.Remove(CurrentFloor);
         var lantern = LanternForStop();
         Fire(Trigger.ArriveAndOpen);
         CommittedDirection = lantern;
@@ -277,13 +282,13 @@ public sealed class Elevator
             // Already a stop here in this direction (lit button / dedup): the request just joins it.
             if (request is not null)
             {
-                _hallCalls[index] = _hallCalls[index] with { Requests = [.. _hallCalls[index].Requests, request] };
+                _hallCalls = _hallCalls.SetItem(index, _hallCalls[index] with { Requests = [.. _hallCalls[index].Requests, request] });
                 Version++;
             }
             return;
         }
 
-        _hallCalls.Add(new HallCall(floor, direction, Now, request is null ? [] : [request]));
+        _hallCalls = _hallCalls.Add(new HallCall(floor, direction, Now, request is null ? [] : [request]));
         Version++;
         Emit(new HallCallRegistered(Now, floor, direction, Id));
 
@@ -318,7 +323,8 @@ public sealed class Elevator
     {
         if (Floors.Check(floor, FloorCount) is { } error) throw new ArgumentOutOfRangeException(nameof(floor), error);
         if (floor == CurrentFloor && _levelWithFloor) return; // already here
-        if (!_carCalls.Add(floor)) return;
+        if (_carCalls.Contains(floor)) return;
+        _carCalls = _carCalls.Add(floor);
 
         Version++;
         Emit(new CarCallRegistered(Now, Id, floor));
@@ -331,7 +337,8 @@ public sealed class Elevator
     /// </summary>
     public void Board(Request rider)
     {
-        _riders.Add(rider);
+        _riders = _riders.Add(rider);
+        _load += rider.Load;
         Version++;
         AddRequest(rider.DestinationFloor);
         if (IsFull) ReleaseAllPickups(AssignmentReason.BypassedFull);
@@ -340,7 +347,11 @@ public sealed class Elevator
     /// <summary>Load sensor: the rider with <paramref name="requestId"/> stepped out.</summary>
     public void Alight(int requestId)
     {
-        if (_riders.RemoveAll(r => r.Id == requestId) > 0) Version++;
+        var index = _riders.FindIndex(r => r.Id == requestId);
+        if (index < 0) return;
+        _load -= _riders[index].Load;
+        _riders = _riders.RemoveAt(index);
+        Version++;
     }
 
     /// <summary>Removes a not-yet-picked-up request (rebalancing). False if it is no longer pending here.</summary>
@@ -351,8 +362,7 @@ public sealed class Elevator
 
         var call = _hallCalls[index];
         var remaining = call.Requests.Where(r => r.Id != requestId).ToArray();
-        if (remaining.Length == 0) _hallCalls.RemoveAt(index);
-        else _hallCalls[index] = call with { Requests = remaining };
+        _hallCalls = remaining.Length == 0 ? _hallCalls.RemoveAt(index) : _hallCalls.SetItem(index, call with { Requests = remaining });
         Version++;
         return true;
     }
@@ -362,7 +372,7 @@ public sealed class Elevator
         foreach (var call in _hallCalls)
         foreach (var request in call.Requests)
             Emit(new AssignmentReleased(Now, request.Id, Id, reason));
-        _hallCalls.RemoveAll(c => c.Requests.Count > 0);
+        _hallCalls = _hallCalls.RemoveAll(c => c.Requests.Count > 0);
         Version++;
     }
 
@@ -397,7 +407,7 @@ public sealed class Elevator
         if (index < 0) return;
 
         var call = _hallCalls[index];
-        _hallCalls.RemoveAt(index);
+        _hallCalls = _hallCalls.RemoveAt(index);
         Version++;
         Emit(new HallCallAnswered(Now, Id, call.Floor, call.Direction));
     }

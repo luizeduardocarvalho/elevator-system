@@ -12,5 +12,8 @@ app.Configure(config =>
     config.AddCommand<BenchCommand>("bench")
         .WithDescription("Compare strategies across seeds (paired, with 95% CIs) and write a markdown results file.")
         .WithExample("bench", "--scheduling", "fifo", "--dispatch", "roundrobin,nearest", "--seeds", "20");
+    config.AddCommand<PerfCommand>("perf")
+        .WithDescription("Real clock, real threads: assignment latency, lost/duplicated, memory soak; PASS/FAIL against the spec SLOs.")
+        .WithExample("perf", "--levels", "100,1000,10000");
 });
 return app.Run(args);

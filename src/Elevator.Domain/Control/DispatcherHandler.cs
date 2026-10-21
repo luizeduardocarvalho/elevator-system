@@ -43,6 +43,7 @@ public sealed class DispatcherHandler(
     {
         public Request Request { get; } = request;
         public Status Status { get; set; } = Status.Pending;
+        public (long, int) Key => (Request.Timestamp.Ms, Request.Id);
         public int? Elevator { get; set; }
         public HashSet<int> Excluded { get; } = [];
         public bool OnlyStaleRejections { get; set; } = true;
@@ -53,6 +54,10 @@ public sealed class DispatcherHandler(
     private readonly DispatcherOptions _options = options ?? DispatcherOptions.Default;
     private readonly Dictionary<int, Tracked> _requests = [];
     private readonly SortedDictionary<int, ElevatorSnapshot> _snapshots = [];
+    // Indexes so that no message costs O(requests in flight): pending requests oldest-first (aging order), and which
+    // requests each elevator is currently excluded from.
+    private readonly SortedSet<(long CalledAtMs, int Id)> _pending = [];
+    private readonly Dictionary<int, HashSet<int>> _excludedFrom = [];
     private long _sequence;
     private bool _rebalanceScheduled;
 
@@ -74,20 +79,22 @@ public sealed class DispatcherHandler(
                 break;
             case SnapshotPublished published:
                 _snapshots[published.Snapshot.ElevatorId] = published.Snapshot;
-                foreach (var t in _requests.Values) t.Excluded.Remove(published.Snapshot.ElevatorId);
+                if (_excludedFrom.Remove(published.Snapshot.ElevatorId, out var excluded))
+                    foreach (var id in excluded) Find(id)?.Excluded.Remove(published.Snapshot.ElevatorId);
                 RetryPending(now, outbox);
                 ScheduleRebalance(outbox);
                 break;
             case AssignmentAcceptedMsg accepted when Find(accepted.RequestId) is { } t:
-                t.Status = Status.Assigned;
+                SetStatus(t, Status.Assigned);
                 t.Elevator = accepted.ElevatorId;
                 t.Deferred = false;
                 outbox.Send(Address.Client, new RequestAssigned(accepted.RequestId, accepted.ElevatorId));
                 break;
             case AssignmentRejectedMsg rejected when Find(rejected.RequestId) is { } t:
-                t.Status = Status.Pending;
+                SetStatus(t, Status.Pending);
                 t.Elevator = null;
                 t.Excluded.Add(rejected.ElevatorId);
+                (_excludedFrom.TryGetValue(rejected.ElevatorId, out var set) ? set : _excludedFrom[rejected.ElevatorId] = []).Add(t.Request.Id);
                 if (rejected.Reason != AssignmentReason.Stale) t.OnlyStaleRejections = false;
                 TryDispatch(t, now, outbox);
                 break;
@@ -100,7 +107,7 @@ public sealed class DispatcherHandler(
                 TryDispatch(t, now, outbox);
                 break;
             case RequestPickedUp picked:
-                _requests.Remove(picked.RequestId);
+                if (_requests.Remove(picked.RequestId, out var done)) _pending.Remove(done.Key);
                 break;
             case RebalanceTimer:
                 _rebalanceScheduled = false;
@@ -122,13 +129,21 @@ public sealed class DispatcherHandler(
 
         var t = new Tracked(request);
         _requests.Add(request.Id, t);
+        _pending.Add(t.Key);
         outbox.Emit(new RequestSubmitted(now, request.Id, request.PickupFloor, request.DestinationFloor));
         TryDispatch(t, now, outbox);
     }
 
-    private static void BackToPending(Tracked t)
+    private void SetStatus(Tracked t, Status status)
     {
-        t.Status = Status.Pending;
+        t.Status = status;
+        if (status == Status.Pending) _pending.Add(t.Key);
+        else _pending.Remove(t.Key);
+    }
+
+    private void BackToPending(Tracked t)
+    {
+        SetStatus(t, Status.Pending);
         t.Elevator = null;
         t.Excluded.Clear();
         t.OnlyStaleRejections = true;
@@ -136,11 +151,8 @@ public sealed class DispatcherHandler(
 
     private void RetryPending(SimTime now, Outbox outbox)
     {
-        var pending = _requests.Values
-            .Where(t => t.Status == Status.Pending)
-            .OrderBy(t => t.Request.Timestamp).ThenBy(t => t.Request.Id) // oldest first: aging order
-            .ToList();
-        foreach (var t in pending) TryDispatch(t, now, outbox);
+        foreach (var (_, id) in _pending.ToList()) // oldest first: aging order
+            if (Find(id) is { Status: Status.Pending } t) TryDispatch(t, now, outbox);
     }
 
     private void TryDispatch(Tracked t, SimTime now, Outbox outbox)
@@ -166,7 +178,7 @@ public sealed class DispatcherHandler(
         }
 
         _sequence++;
-        t.Status = Status.Proposed;
+        SetStatus(t, Status.Proposed);
         t.Elevator = choice.ElevatorId;
         outbox.Emit(new AssignmentProposed(now, t.Request.Id, choice.ElevatorId, Math.Round(choice.Cost, 3), choice.Eta?.Ms, forced));
         outbox.Send(Address.Elevator(choice.ElevatorId), new Assign(t.Request, choice.Eta, forced), _options.DispatchDelayMs);

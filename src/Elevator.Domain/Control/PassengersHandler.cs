@@ -19,7 +19,7 @@ public sealed class PassengersHandler(int capacity) : IHandler
         public int? RidingOn { get; set; }
     }
 
-    private readonly List<Passenger> _waiting = []; // arrival order
+    private readonly Dictionary<(int Floor, Direction Direction), List<Passenger>> _waiting = []; // per floor and direction, arrival order
     private readonly Dictionary<int, Passenger> _byId = [];
     private readonly Dictionary<int, List<Passenger>> _riding = [];
 
@@ -63,7 +63,8 @@ public sealed class PassengersHandler(int capacity) : IHandler
     private void Arrive(Request request, SimTime now, Outbox outbox)
     {
         var p = new Passenger(request);
-        _waiting.Add(p);
+        var key = (request.PickupFloor, request.Direction);
+        (_waiting.TryGetValue(key, out var list) ? list : _waiting[key] = []).Add(p);
         _byId.Add(request.Id, p);
         Arrived++;
         outbox.Emit(new PassengerArrived(now, request.Id, request.PickupFloor, request.DestinationFloor));
@@ -84,9 +85,8 @@ public sealed class PassengersHandler(int capacity) : IHandler
 
     private void GetOn(HallCallAnswered answered, SimTime now, Outbox outbox)
     {
-        var candidates = _waiting
-            .Where(p => p.AssignedTo == answered.ElevatorId && p.Request.PickupFloor == answered.Floor && p.Request.Direction == answered.Direction)
-            .ToList(); // arrival order
+        if (!_waiting.TryGetValue((answered.Floor, answered.Direction), out var here)) return;
+        var candidates = here.Where(p => p.AssignedTo == answered.ElevatorId).ToList(); // arrival order
         if (candidates.Count == 0) return;
 
         var riders = _riding.TryGetValue(answered.ElevatorId, out var list) ? list : _riding[answered.ElevatorId] = [];
@@ -96,7 +96,7 @@ public sealed class PassengersHandler(int capacity) : IHandler
             if (load + p.Request.Load <= capacity)
             {
                 load += p.Request.Load;
-                _waiting.Remove(p);
+                here.Remove(p);
                 p.RidingOn = answered.ElevatorId;
                 riders.Add(p);
                 outbox.Emit(new PassengerBoarded(now, p.Request.Id, answered.ElevatorId, answered.Floor));
