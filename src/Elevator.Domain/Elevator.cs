@@ -38,6 +38,7 @@ public sealed class Elevator
 
     private SimTime? _deadline;       // end of the current timed phase; null in Idle/Maintenance, and while stuck
     private bool _maintenanceRequested; // draining, then parked (ADR-013)
+    private bool _emergency;          // emergency stop in effect (ADR-013)
     private bool _stuck;              // the drive is stuck (fault injection, ADR-013): no phase completes
     private long? _frozenMs;          // while stuck: what is left of the current phase
     private SimTime _closingStartedAt; // used to compute how long a reopen takes
@@ -125,11 +126,13 @@ public sealed class Elevator
     public ElevatorState State { get; private set; } = ElevatorState.Idle;
 
     /// <summary>
-    /// Operating mode (ADR-013), alongside the spec's state: Draining while maintenance is requested and riders are
-    /// still on board, Maintenance once parked. Only a Normal elevator takes new assignments.
+    /// Operating mode (ADR-013), alongside the spec's state: Emergency while an emergency stop is in effect (it wins
+    /// over everything), Maintenance once parked, Draining while maintenance is requested and riders are still on board.
+    /// Only a Normal elevator takes new assignments.
     /// </summary>
     public ElevatorMode Mode =>
-        State == ElevatorState.Maintenance ? ElevatorMode.Maintenance
+        _emergency ? ElevatorMode.Emergency
+        : State == ElevatorState.Maintenance ? ElevatorMode.Maintenance
         : _maintenanceRequested ? ElevatorMode.Draining
         : ElevatorMode.Normal;
 
@@ -228,6 +231,13 @@ public sealed class Elevator
         Emit(new FloorReached(Now, Id, CurrentFloor));
 
         _levelWithFloor = true;
+        if (_emergency)
+        {
+            // The next safe point: stopped level with a floor, doors closed. Riders stay inside until it is cleared.
+            Fire(Trigger.EmergencyHalt);
+            CommittedDirection = null;
+            return;
+        }
         if (ShouldStopHere(direction))
         {
             OpenDoor();
@@ -360,7 +370,7 @@ public sealed class Elevator
             floor == CurrentFloor && State is ElevatorState.DoorOpening or ElevatorState.DoorOpen or ElevatorState.DoorClosing;
         if (!standingHereWithDoorsInCycle) return;
 
-        if (Bypassing) return; // full: served on a later trip
+        if (Bypassing || _emergency) return; // full: served on a later trip; emergency: doors stay closed
         CommittedDirection ??= direction; // stopped with no work: adopt the caller's direction
         if (CommittedDirection != direction) return; // served later, when the elevator comes back for it
 
@@ -450,6 +460,11 @@ public sealed class Elevator
     private void DecideFromIdle()
     {
         if (State != ElevatorState.Idle) return;
+        if (_emergency)
+        {
+            CommittedDirection = null; // stays put, doors closed, until cleared
+            return;
+        }
 
         var target = _policy.Decide(PolicyView()).Target;
         if (target is null)
@@ -540,9 +555,73 @@ public sealed class Elevator
     /// <summary>Draining, idle and nobody on board: park here (the table's Idle → Maintenance edge).</summary>
     private void ParkIfDrained()
     {
-        if (!_maintenanceRequested || State != ElevatorState.Idle || _riders.Count > 0) return;
+        if (!_maintenanceRequested || _emergency || State != ElevatorState.Idle || _riders.Count > 0) return;
         Fire(Trigger.EnterMaintenance);
         Emit(new MaintenanceEntered(Now, Id, CurrentFloor));
+    }
+
+    // ---- Emergency stop (ADR-013) ------------------------------------------------------------------------
+
+    /// <summary>
+    /// Emergency stop. Takes effect now (logged with the floor it is at, or last passed) and stops the elevator at the
+    /// next safe point:
+    /// <list type="bullet">
+    /// <item>moving: it finishes the floor segment it is in (it cannot stop between floors) and halts level with the
+    /// next floor, doors closed (<see cref="Trigger.EmergencyHalt"/>);</item>
+    /// <item>doors open: they close now; doors opening: they reverse and close, taking as long as they had opened
+    /// (<see cref="Trigger.EmergencyClose"/>); doors closing: they finish closing;</item>
+    /// <item>idle: it stays.</item>
+    /// </list>
+    /// The doors never open in an emergency: riders stay inside, protected. Pending pickups are handed back (reason
+    /// Emergency) so other elevators serve them, and no new phase starts until <see cref="ClearEmergency"/>.
+    /// </summary>
+    /// <returns>False if already in an emergency, or parked for maintenance (already stopped, doors closed).</returns>
+    public bool EmergencyStop()
+    {
+        if (_emergency || State == ElevatorState.Maintenance) return false;
+        _emergency = true;
+        Version++;
+        Emit(new EmergencyStopped(Now, Id, CurrentFloor));
+        ReleaseAllPickups(AssignmentReason.Emergency);
+        switch (State)
+        {
+            case ElevatorState.DoorOpen:
+                Fire(Trigger.EmergencyClose);
+                _closingStartedAt = Now;
+                StartPhase(_timing.DoorClosingMs);
+                break;
+            case ElevatorState.DoorOpening:
+                // Reverse from where the doors are: open for x ms, they need x·(closing/opening) ms to close.
+                var openingLeft = _stuck ? _frozenMs ?? 0 : _deadline!.Value.Ms - Now.Ms;
+                var closing = (_timing.DoorOpeningMs - openingLeft) * _timing.DoorClosingMs / _timing.DoorOpeningMs;
+                Fire(Trigger.EmergencyClose);
+                _closingStartedAt = Now.AddMs(closing - _timing.DoorClosingMs); // as if closing had started that long ago
+                StartPhase(closing);
+                break;
+            case ElevatorState.Idle:
+                CommittedDirection = null;
+                break;
+            // Moving: halts at the next floor (OnFloorReached). Closing: finishes, then stays (DecideFromIdle).
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Clears the emergency stop: normal decisions resume (draining resumes if maintenance was requested). If riders
+    /// are headed for the floor where it stopped (it halted there, or its doors had not finished opening), the doors
+    /// open here first.
+    /// </summary>
+    /// <returns>False if there was no emergency.</returns>
+    public bool ClearEmergency()
+    {
+        if (!_emergency) return false;
+        _emergency = false;
+        Version++;
+        Emit(new EmergencyCleared(Now, Id));
+        if (State != ElevatorState.Idle) return true; // still moving or closing: carries on normally
+        if (_riders.Any(r => r.DestinationFloor == CurrentFloor)) OpenDoor();
+        else DecideFromIdle();
+        return true;
     }
 
     // ---- Stuck drive (fault injection, ADR-013) ---------------------------------------------------------

@@ -88,9 +88,18 @@ public sealed class ElevatorSystem : IAsyncDisposable
 
         FaultInjector = new RuntimeFaultInjector(this);
         _logWriter = Task.Run(WriteLog);
-        foreach (var actor in _actors.Values) _loops.Add(actor.Start(_stop.Token));
         for (var i = 0; i < options.Elevators; i++) _actors[Address.Elevator(i)].Mailbox.Writer.TryWrite(new Start());
+        if (!options.StartPaused) Resume();
     }
+
+    /// <summary>Starts the actor loops of a system created with <see cref="RuntimeOptions.StartPaused"/>. Idempotent.</summary>
+    public void Resume()
+    {
+        if (Interlocked.Exchange(ref _started, 1) == 1) return;
+        foreach (var actor in _actors.Values) _loops.Add(actor.Start(_stop.Token));
+    }
+
+    private int _started;
 
     public static ElevatorSystem Start(RuntimeOptions options, Action<long, DomainEvent>? sink = null) => new(options, sink);
 
@@ -153,9 +162,16 @@ public sealed class ElevatorSystem : IAsyncDisposable
 
     /// <summary>
     /// Delivers <paramref name="message"/> to the actor at <paramref name="to"/> (shared v3 contract: the injection seam
-    /// for fault and operator commands, as <c>SimEngine.Post</c> in the simulator).
+    /// for fault and operator commands, as <c>SimEngine.Post</c> in the simulator). An emergency stop goes to the actor's
+    /// priority control channel, ahead of its mailbox (ADR-013).
     /// </summary>
-    public void Post(Address to, Message message) => _actors[to].Mailbox.Writer.TryWrite(message);
+    public void Post(Address to, Message message)
+    {
+        var actor = _actors[to];
+        // Emergency stops preempt: the priority control channel is read before the mailbox (ADR-013).
+        var channel = message is ApplyFault { Command.Kind: FaultKind.EmergencyStop } ? actor.Control : actor.Mailbox;
+        channel.Writer.TryWrite(message);
+    }
 
     /// <summary>Spec's <c>requestQueue</c>: submissions waiting in the bounded request channel.</summary>
     public int RequestQueueLength => _requests.Reader.Count;

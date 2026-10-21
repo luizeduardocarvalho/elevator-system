@@ -93,7 +93,9 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
             FaultKind.Unstick => Unstick(),
             FaultKind.MaintenanceOn => Elevator.RequestMaintenance(),
             FaultKind.MaintenanceOff => Elevator.EndMaintenance(),
-            _ => false,
+            FaultKind.EmergencyStop => Elevator.EmergencyStop(),
+            FaultKind.EmergencyClear => Elevator.ClearEmergency(),
+            _ => throw new ArgumentOutOfRangeException(nameof(command), command.Kind, "unknown fault kind"),
         };
         if (!applied) return;
         outbox.Emit(new FaultCommandApplied(now, Elevator.Id, command.Kind, command.DurationMs));

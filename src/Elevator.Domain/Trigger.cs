@@ -14,4 +14,8 @@ public enum Trigger
     Reopen,
     EnterMaintenance,
     ExitMaintenance,
+    /// <summary>Emergency stop while moving: stop level with the next floor, doors staying closed (ADR-013).</summary>
+    EmergencyHalt,
+    /// <summary>Emergency stop during a door cycle: the doors close (reversing if still opening) and stay closed (ADR-013).</summary>
+    EmergencyClose,
 }
