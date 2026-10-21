@@ -10,33 +10,55 @@ namespace Elevator.Policy.Tests;
 /// <summary>
 /// Differential test: the per-stop <see cref="StopProjection"/> must give exactly the same pickup time, load at pickup
 /// and added delay as the per-passenger <see cref="RouteProjection"/> (the oracle, which runs the real elevator), on
-/// random elevators. That is what makes the dispatcher's decisions, and so the bench, byte-identical.
+/// random elevators of random types (timing, served floors). That is what makes the dispatcher's decisions, and so the
+/// bench, byte-identical.
 /// </summary>
 public class StopProjectionEquivalenceTests
 {
+    /// <param name="Timing">The elevator type's timing (ADR-012); the projections are built with the default and must
+    /// take the snapshot's own.</param>
+    /// <param name="Served">The floors the elevator's type serves; every trip starts and ends on one of them.</param>
     public sealed record Case(string Policy, int Capacity, double Threshold, int Start, (int From, int To, long AtMs)[] Assigned,
-        int Boarded, long SnapshotAtMs, long NowDelayMs, (int From, int To) Extra, CapacityMode Mode);
+        int Boarded, long SnapshotAtMs, long NowDelayMs, (int From, int To) Extra, CapacityMode Mode, ElevatorTiming Timing, int[] Served);
 
     private const int Floors = 12;
 
-    private static Gen<(int, int)> Trip =>
-        from f in Gen.Choose(1, Floors)
-        from o in Gen.Choose(1, Floors - 1)
-        select (f, (f - 1 + o) % Floors + 1);
+    // Elevator types: every floor; an express (lobby + top half); odd floors only; a low-rise local.
+    private static readonly int[][] ServedSets =
+    [
+        [.. Enumerable.Range(1, Floors)],
+        [1, 7, 8, 9, 10, 11, 12],
+        [1, 3, 5, 7, 9, 11],
+        [1, 2, 3, 4, 5, 6],
+    ];
+
+    private static readonly ElevatorTiming[] Timings =
+    [
+        ElevatorTiming.Default,
+        new(FloorTravelMs: 1_000, DoorOpeningMs: 800, DoorDwellMs: 2_000, DoorClosingMs: 800),  // express
+        new(FloorTravelMs: 3_000, DoorOpeningMs: 2_000, DoorDwellMs: 6_000, DoorClosingMs: 2_500), // freight
+    ];
+
+    private static Gen<(int, int)> TripIn(int[] floors) =>
+        from i in Gen.Choose(0, floors.Length - 1)
+        from o in Gen.Choose(1, floors.Length - 1)
+        select (floors[i], floors[(i + o) % floors.Length]);
 
     private static Gen<Case> Cases =>
         from policy in Gen.Elements("look", "fifo")
         from capacity in Gen.Elements(1, 2, 4, 10, 1000)
         from threshold in Gen.Elements(0.5, 0.8, 1.0)
-        from start in Gen.Choose(1, Floors)
+        from served in Gen.Elements(ServedSets)
+        from timing in Gen.Elements(Timings)
+        from start in Gen.Elements(served)
         from n in Gen.Choose(0, 25)
-        from assigned in Gen.ArrayOf(from t in Trip from at in Gen.Choose(0, 40_000) select (t.Item1, t.Item2, (long)at), n)
+        from assigned in Gen.ArrayOf(from t in TripIn(served) from at in Gen.Choose(0, 40_000) select (t.Item1, t.Item2, (long)at), n)
         from boarded in Gen.Choose(0, 6)
         from at in Gen.Choose(0, 90_000)
         from delay in Gen.Elements(0L, 0L, 1_500L, 9_000L)
-        from extra in Trip
+        from extra in TripIn(served)
         from mode in Gen.Elements(CapacityMode.NextTrip, CapacityMode.Defer)
-        select new Case(policy, capacity, threshold, start, assigned, boarded, at, delay, extra, mode);
+        select new Case(policy, capacity, threshold, start, assigned, boarded, at, delay, extra, mode, timing, served);
 
     [Property(MaxTest = 1500)]
     public Property Per_stop_projection_equals_the_per_passenger_oracle() => Prop.ForAll(Cases.ToArbitrary(), c =>
@@ -80,7 +102,7 @@ public class StopProjectionEquivalenceTests
     /// <summary>A real elevator driven to a random state: assignments over time, some riders boarding, mid-route.</summary>
     private static ElevatorSnapshot BuildSnapshot(Case c, ISchedulingPolicy policy)
     {
-        var e = new ElevatorUnit(0, Floors, ElevatorTiming.Default, policy, c.Start, c.Capacity, c.Threshold, c.Mode);
+        var e = new ElevatorUnit(0, Floors, c.Timing, policy, c.Start, c.Capacity, c.Threshold, c.Mode, FloorMask.Of(c.Served), "typed");
         var id = 0;
         var boardedSoFar = 0;
         foreach (var (from, to, at) in c.Assigned.OrderBy(a => a.AtMs))

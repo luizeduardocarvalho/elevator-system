@@ -10,8 +10,20 @@ namespace Elevator.Domain.Control;
 /// hall panel), only when its lantern shows their direction, in arrival order per floor, while there is room
 /// (hard capacity). Anyone who does not fit is left behind and presses again (same request id and t_call).
 /// </summary>
-public sealed class PassengersHandler(int capacity) : IHandler
+public sealed class PassengersHandler : IHandler
 {
+    private readonly Func<int, int> _capacityOf;
+
+    /// <param name="capacity">Every elevator's capacity (load units).</param>
+    public PassengersHandler(int capacity) => _capacityOf = _ => capacity;
+
+    /// <param name="capacities">Each elevator's capacity by id (elevator types, ADR-012).</param>
+    public PassengersHandler(IReadOnlyList<int> capacities)
+    {
+        var copy = capacities.ToArray();
+        _capacityOf = id => copy[id];
+    }
+
     private sealed class Passenger(Request request)
     {
         public Request Request { get; } = request;
@@ -95,6 +107,7 @@ public sealed class PassengersHandler(int capacity) : IHandler
 
         var riders = _riding.TryGetValue(answered.ElevatorId, out var list) ? list : _riding[answered.ElevatorId] = [];
         var load = riders.Sum(r => r.Request.Load);
+        var capacity = _capacityOf(answered.ElevatorId);
         foreach (var p in candidates)
         {
             if (load + p.Request.Load <= capacity)

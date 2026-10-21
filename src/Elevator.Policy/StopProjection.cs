@@ -119,11 +119,15 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
         public HallCall PolicyView { get; } = new(call.Floor, call.Direction, call.RegisteredAt);
     }
 
-    /// <summary>The elevator's mechanics (see <see cref="Domain.Elevator"/>) replayed over the compact state.</summary>
+    /// <summary>
+    /// The elevator's mechanics (see <see cref="Domain.Elevator"/>) replayed over the compact state, with the elevator's
+    /// own type: its timing and the floors it serves (ADR-012).
+    /// </summary>
     private sealed class Run
     {
         private readonly ISchedulingPolicy _policy;
         private readonly ElevatorTiming _t;
+        private readonly ulong _served;
         private readonly int _floors, _capacity, _id;
         private readonly double _threshold;
         private readonly bool _nextTrip;
@@ -160,7 +164,8 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
             Result = new Outcome(s.HallCalls.Count + 1, s.Floors);
             _policy = policy;
             _fast = s.Floors <= StopSet.MaxFloors ? policy as IFastSchedulingPolicy : null;
-            _t = timing;
+            _t = s.Timing ?? timing; // the elevator's own type timing (ADR-012)
+            _served = s.ServedFloors;
             _floors = s.Floors;
             _capacity = s.Capacity;
             _threshold = s.BypassThreshold;
@@ -268,6 +273,7 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
         {
             if (_carCalls[_floor]) return true;
             if (_floor == Floors.Lowest || _floor == _floors) return true;
+            if (!FloorMask.Contains(_served, _floor)) return false; // as the elevator: unserved floors are passed
             if (!_targetValid)
             {
                 _target = Decide().Target;

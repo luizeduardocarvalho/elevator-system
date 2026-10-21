@@ -50,6 +50,12 @@ public sealed record ElevatorSnapshot(
 
     public CapacityMode CapacityMode { get; init; } = CapacityMode.NextTrip;
 
+    /// <summary>
+    /// The elevator's own timing (its type's speed and door times, ADR-012). Null in hand-built snapshots: projections
+    /// then use the building's default timing.
+    /// </summary>
+    public ElevatorTiming? Timing { get; init; }
+
     // ---- Shared v3 contract (docs/contract-v3.md) ----
 
     /// <summary>Operating mode (maintenance, emergency, fault). Always Normal until the Hard stage sets it.</summary>
