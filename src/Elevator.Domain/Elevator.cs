@@ -40,17 +40,24 @@ public sealed class Elevator
     private SimTime _closingStartedAt; // used to compute how long a reopen takes
     private bool _levelWithFloor;     // true while stopped, or at the instant a moving elevator reaches a floor
 
+    /// <param name="servedFloors">Floors this elevator serves (its type, ADR-012): it never stops at any other.</param>
+    /// <param name="typeName">Its type's name (Local, Express, Freight...).</param>
     public Elevator(int id, int floors, ElevatorTiming timing, ISchedulingPolicy policy, int startFloor = Floors.Lowest,
-        int capacity = int.MaxValue, double bypassThreshold = 1.0, CapacityMode capacityMode = CapacityMode.NextTrip)
+        int capacity = int.MaxValue, double bypassThreshold = 1.0, CapacityMode capacityMode = CapacityMode.NextTrip,
+        ulong servedFloors = FloorMask.All, string typeName = ElevatorType.StandardName)
     {
         if (floors < 2) throw new ArgumentOutOfRangeException(nameof(floors), "need at least two floors");
         if (Floors.Check(startFloor, floors) is { } error) throw new ArgumentOutOfRangeException(nameof(startFloor), error);
+        if (!FloorMask.Contains(servedFloors, startFloor))
+            throw new ArgumentOutOfRangeException(nameof(startFloor), $"floor {startFloor} is not served by this elevator");
         if (timing.Validate() is [var first, ..]) throw new ArgumentException(first, nameof(timing));
         if (capacity <= 0) throw new ArgumentOutOfRangeException(nameof(capacity));
         if (bypassThreshold is <= 0 or > 1) throw new ArgumentOutOfRangeException(nameof(bypassThreshold), "must be in (0, 1]");
 
         Id = id;
         FloorCount = floors;
+        ServedFloors = servedFloors;
+        TypeName = typeName;
         Capacity = capacity;
         BypassThreshold = bypassThreshold;
         CapacityMode = capacityMode;
@@ -66,8 +73,12 @@ public sealed class Elevator
     /// </summary>
     public static Elevator FromSnapshot(ElevatorSnapshot s, ElevatorTiming timing, ISchedulingPolicy policy)
     {
-        var e = new Elevator(s.ElevatorId, s.Floors, timing, policy, s.CurrentFloor, s.Capacity, s.BypassThreshold, s.CapacityMode)
+        // Built at a served floor, then placed where the snapshot says: mid-route it may be passing an unserved one.
+        var anyServed = Enumerable.Range(Floors.Lowest, s.Floors).First(f => FloorMask.Contains(s.ServedFloors, f));
+        var e = new Elevator(s.ElevatorId, s.Floors, s.Timing ?? timing, policy, anyServed, s.Capacity, s.BypassThreshold, s.CapacityMode,
+            s.ServedFloors, s.TypeName)
         {
+            CurrentFloor = s.CurrentFloor,
             State = s.State,
             CommittedDirection = s.CommittedDirection,
             Now = s.At,
@@ -86,6 +97,15 @@ public sealed class Elevator
     public int Id { get; }
 
     public int FloorCount { get; }
+
+    /// <summary>Floors this elevator serves (<see cref="FloorMask"/>). It passes the others without stopping.</summary>
+    public ulong ServedFloors { get; }
+
+    public string TypeName { get; }
+
+    public ElevatorTiming Timing => _timing;
+
+    public bool Serves(int floor) => FloorMask.Contains(ServedFloors, floor);
 
     public int Capacity { get; }
 
@@ -127,7 +147,14 @@ public sealed class Elevator
 
     public ElevatorSnapshot Snapshot() =>
         new(Id, CurrentFloor, State, CommittedDirection, _carCalls, _hallCalls, FloorCount, _riders,
-            Capacity, BypassThreshold, Now, _deadline, _closingStartedAt, Version) { RiderTotals = _riderTotals, CapacityMode = CapacityMode };
+            Capacity, BypassThreshold, Now, _deadline, _closingStartedAt, Version)
+        {
+            RiderTotals = _riderTotals,
+            CapacityMode = CapacityMode,
+            Timing = _timing,
+            TypeName = TypeName,
+            ServedFloors = ServedFloors,
+        };
 
     /// <summary>What the scheduling policy sees: while bypassing, only the drop-offs.</summary>
     private ElevatorSnapshot PolicyView() => Bypassing ? Snapshot() with { HallCalls = [] } : Snapshot();
@@ -201,11 +228,14 @@ public sealed class Elevator
     /// Stop for a drop-off here (always), at the policy's target, or when the target is no longer ahead.
     /// The last case only arises from a car call pressed behind the elevator while it moves: a real elevator
     /// cannot reverse in mid-flight, so it stops at the next floor and decides again from there.
+    /// A floor it does not serve (an express passing the local floors) is never a stop: it carries on to the next
+    /// served floor and decides there. Every stop it can have is a served floor, so one always lies ahead.
     /// </summary>
     private bool ShouldStopHere(Direction direction)
     {
         if (_carCalls.Contains(CurrentFloor)) return true;
         if (CurrentFloor == Floors.Lowest || CurrentFloor == FloorCount) return true;
+        if (!Serves(CurrentFloor)) return false;
         var target = _policy.Decide(PolicyView()).Target;
         return target is null || target == CurrentFloor || !direction.IsAhead(CurrentFloor, target.Value);
     }
@@ -285,6 +315,7 @@ public sealed class Elevator
     private void AddPickup(int floor, Direction direction, Request? request)
     {
         if (Floors.CheckHallButton(floor, direction, FloorCount) is { } error) throw new ArgumentOutOfRangeException(nameof(floor), error);
+        if (!Serves(floor)) throw new ArgumentOutOfRangeException(nameof(floor), NotServed(floor));
 
         var index = _hallCalls.FindIndex(c => c.Floor == floor && c.Direction == direction);
         if (index >= 0)
@@ -337,6 +368,7 @@ public sealed class Elevator
     public void AddRequest(int floor)
     {
         if (Floors.Check(floor, FloorCount) is { } error) throw new ArgumentOutOfRangeException(nameof(floor), error);
+        if (!Serves(floor)) throw new ArgumentOutOfRangeException(nameof(floor), NotServed(floor)); // access policies prevent this
         if (floor == CurrentFloor && _levelWithFloor) return; // already here
         if (_carCalls.Contains(floor)) return;
         _carCalls = _carCalls.Add(floor);
@@ -448,4 +480,6 @@ public sealed class Elevator
     }
 
     private void Emit(DomainEvent e) => _outbox.Add(e);
+
+    private string NotServed(int floor) => $"elevator {Id} ({TypeName}) does not serve floor {floor}";
 }

@@ -61,16 +61,19 @@ public sealed class ElevatorSystem : IAsyncDisposable
         var latency = options.Latency ?? MessageLatency.None;
         var estimator = new StopProjection(scheduling, timing);
 
+        var fleet = options.EffectiveFleet;
+        if (fleet.Count != options.Elevators)
+            throw new ArgumentException($"the fleet has {fleet.Count} elevators but the options say {options.Elevators}", nameof(options));
         for (var i = 0; i < options.Elevators; i++)
         {
-            var elevator = new Domain.Elevator(i, options.Floors, timing, scheduling, Floors.Lowest, options.Capacity, options.BypassThreshold, options.CapacityMode);
+            var elevator = Building.CreateElevator(i, options.Floors, fleet[i], scheduling, options.BypassThreshold, options.CapacityMode);
             Add(new Actor(new ElevatorHandler(elevator, new ElevatorHandlerOptions(SnapshotDelayMs: latency.SnapshotMs), estimator), this));
         }
         var rebalance = options.Rebalance ? new HysteresisRebalance(scheduling, timing) : null;
         Add(new Actor(new DispatcherHandler(dispatch, options.Elevators, timing,
             new DispatcherOptions(latency.DispatchMs, rebalance is null ? null : 5_000, options.OverloadThreshold), rebalance, new NearestDispatch()),
             this, _requests.Reader));
-        Add(new Actor(new PassengersHandler(options.Capacity), this));
+        Add(new Actor(new PassengersHandler([.. fleet.Select(t => t.Capacity)]), this));
 
         _logWriter = Task.Run(WriteLog);
         foreach (var actor in _actors.Values) _loops.Add(actor.Start(_stop.Token));

@@ -24,7 +24,16 @@ public sealed record RuntimeOptions(
 {
     public ElevatorTiming EffectiveTiming => Timing ?? ElevatorTiming.Default;
 
+    /// <summary>Each elevator's type (ADR-012); null = <see cref="Elevators"/> standard elevators.</summary>
+    public IReadOnlyList<ElevatorType>? Fleet { get; init; }
+
+    public IReadOnlyList<ElevatorType> EffectiveFleet =>
+        Fleet ?? [.. Enumerable.Repeat(ElevatorType.Standard(EffectiveTiming, Capacity), Elevators)];
+
     public static RuntimeOptions From(Scenario s, double speed) =>
         new(s.Floors, s.Elevators, s.Capacity, s.BypassThreshold, s.Scheduling, s.Dispatch, Speed: speed, Timing: s.Timing, Latency: s.Latency,
-            CapacityMode: s.CapacityMode);
+            CapacityMode: s.CapacityMode)
+        {
+            Fleet = s.Fleet,
+        };
 }

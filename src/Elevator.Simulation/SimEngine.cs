@@ -70,9 +70,12 @@ public sealed class SimEngine
         var estimator = new StopProjection(scheduling, scenario.Timing); // each elevator's own view, for the staleness check
 
         var capacityMode = strategy.Capacity ?? scenario.CapacityMode;
+        var fleet = scenario.EffectiveFleet;
+        if (fleet.Count != scenario.Elevators)
+            throw new ArgumentException($"the fleet has {fleet.Count} elevators but the scenario says {scenario.Elevators}", nameof(scenario));
         for (var i = 0; i < scenario.Elevators; i++)
         {
-            var elevator = new ElevatorUnit(i, scenario.Floors, scenario.Timing, scheduling, Floors.Lowest, scenario.Capacity, scenario.BypassThreshold, capacityMode);
+            var elevator = Building.CreateElevator(i, scenario.Floors, fleet[i], scheduling, scenario.BypassThreshold, capacityMode);
             var handler = new ElevatorHandler(elevator, new ElevatorHandlerOptions(SnapshotDelayMs: latency.SnapshotMs), estimator);
             _elevators.Add(handler);
             Register(handler);
@@ -82,7 +85,7 @@ public sealed class SimEngine
             new DispatcherOptions(latency.DispatchMs, RebalanceIntervalMs: rebalance is null ? null : 5_000, OverloadThreshold: OverloadThreshold,
                 EmitDispatchEvaluations: options.EmitDispatchEvaluations),
             rebalance, new NearestDispatch()));
-        _passengers = new PassengersHandler(scenario.Capacity);
+        _passengers = new PassengersHandler([.. fleet.Select(t => t.Capacity)]);
         Register(_passengers);
 
         var passengers = ScenarioRunner.BuildPassengers(scenario);
