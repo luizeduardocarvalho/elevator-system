@@ -91,7 +91,7 @@ public static class ViewModel
             for (var i = 0; i < shafts.Length; i++)
             {
                 var e = s.Elevators[i];
-                shafts[i] = e.Floor == floor ? Cell(e, s.Capacity, compact, i == selected) : ShaftCell.Empty;
+                shafts[i] = e.Floor == floor ? Cell(e, e.Capacity ?? s.Capacity, compact, i == selected) : ShaftCell.Empty;
             }
             rows.Add(new FloorRow(floor,
                 s.Waiting.GetValueOrDefault((floor, Direction.Up)),
@@ -174,9 +174,9 @@ public static class ViewModel
         var waiting = s.Waiting.Values.Sum();
         var active = s.Arrived - s.Delivered;
         var rows = s.Elevators.Select(e => new ElevatorRow(
-            $"E{e.Id}",
+            e.TypeName == "standard" ? $"E{e.Id}" : $"E{e.Id} {e.TypeName}",
             JsonNamingPolicy.SnakeCaseUpper.ConvertName(e.State.ToString()),
-            Load(e.Riders, s.Capacity),
+            Load(e.Riders, e.Capacity ?? s.Capacity),
             string.Create(Inv, $"{Math.Round(100 * e.Utilization(s.Now)):0} %"),
             Marker(e.Mode),
             e.Id == selected)).ToList();

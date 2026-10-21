@@ -161,6 +161,7 @@ public class BuildingStateTests
     public static TheoryData<string, string> Runs => new()
     {
         { "lunch.yaml", "cost" }, { "up-peak.yaml", "nearest" }, { "down-peak.yaml", "roundrobin" }, { "v1-basic.yaml", "cost" }, { "demo.yaml", "cost" },
+        { "fleet.yaml", "cost" }, // typed fleet with freight loads (v3.1: load units, per-elevator capacity and type)
     };
 
     /// <summary>
@@ -183,8 +184,8 @@ public class BuildingStateTests
             state.AdvanceTo(engine.Now);
             samples++;
 
-            var expected = engine.Elevators.Select(e => (e.ElevatorId, e.CurrentFloor, e.State, ShownFrom(e), e.Riders.Count, e.Mode));
-            var actual = state.Elevators.Select(e => (e.Id, e.Floor, e.State, e.ShownDirection, e.Riders, e.Mode));
+            var expected = engine.Elevators.Select(e => (e.ElevatorId, e.CurrentFloor, e.State, ShownFrom(e), e.Load, e.Mode, e.Capacity, e.TypeName));
+            var actual = state.Elevators.Select(e => (e.Id, e.Floor, e.State, e.ShownDirection, e.Riders, e.Mode, e.Capacity ?? state.Capacity, e.TypeName));
             Assert.Equal(expected, actual);
             Assert.Equal(engine.Waiting.OrderBy(kv => kv.Key), state.Waiting.OrderBy(kv => kv.Key));
             Assert.Equal(engine.Delivered, state.Delivered);

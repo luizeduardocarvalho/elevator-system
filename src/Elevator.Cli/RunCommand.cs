@@ -137,6 +137,11 @@ internal sealed class RunCommand : Command<RunCommand.Settings>
         table.AddRow("Wait avg", S(r.Wait.Avg));
         table.AddRow("Wait p95", S(r.Wait.P95));
         table.AddRow("Wait max", S(r.Wait.Max));
+        if (r.VipWait is { } vip && r.NonVipWait is { } other) // only when the run had VIPs (v3.1)
+        {
+            table.AddRow("VIP wait avg / p95", $"{S(vip.Avg)} / {S(vip.P95)} ({vip.Count})");
+            table.AddRow("Non-VIP wait avg / p95", $"{S(other.Avg)} / {S(other.P95)} ({other.Count})");
+        }
         table.AddRow("Ride avg", S(r.Ride.Avg));
         table.AddRow("Ride max", S(r.Ride.Max));
         table.AddRow("Journey avg", S(r.Journey.Avg));
