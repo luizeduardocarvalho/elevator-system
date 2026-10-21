@@ -33,6 +33,8 @@ public class LoopTests
     [Theory]
     [InlineData("lunch.yaml")]
     [InlineData("demo.yaml")]
+    [InlineData("chaos.yaml")] // scheduled faults, maintenance and emergency stops (ADR-013)
+    [InlineData("fleet.yaml")] // typed elevators and access policies (ADR-012)
     public async Task Same_seed_gives_the_same_event_log_hash_at_half_speed_ten_times_and_headless(string name)
     {
         var scenario = Repo.Load(name);
