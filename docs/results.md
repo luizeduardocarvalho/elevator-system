@@ -25,6 +25,17 @@ Supporting files:
 
 M1–M4 were produced in capacity mode `defer` (ADR-010) and say so in their headers.
 
+### Hard stage (types, access, faults; held-out seeds 21–40)
+
+| Question | File | Answer |
+|---|---|---|
+| What does the chaos schedule cost (same passengers, paired)? | [h1-chaos](results/h1-chaos.md) | LOOK + Cost: wait 13.8 → 19.6 s (+5.8 ± 0.8), p95 +20.5 ± 3.3 s, 100 % served; half the pickups handed back of LOOK + Nearest |
+| Does cost dispatch use elevator types? | [h2-fleet](results/h2-fleet.md) | typed fleet: Cost 14.0 / 39.8 vs Nearest 22.8 / 81.9 (Δ −8.8 ± 1.0 s avg) |
+| Watchdog timeout T: detection vs penalty | [h3-watchdog-timeout](results/h3-watchdog-timeout.md) | detection ≈ T; penalty 9.5 → 129 s per run from T = 5 to 60 s; average wait flat |
+| Watchdog false positives on fault-free runs | [h4-watchdog-false-positives](results/h4-watchdog-false-positives.md) | ≈ 61–65 per run at T = 5 s on the typed fleet (6 s freight dwell); none at 10 or 30 s |
+
+The v2 results above regenerate byte-identically with the Hard stage in place (faults off, default config).
+
 ## 2. The cost of a dispatch decision (BenchmarkDotNet)
 
 One cost-based decision for 4 elevators on 20 floors, each holding N requests not yet picked up. Every call builds a
