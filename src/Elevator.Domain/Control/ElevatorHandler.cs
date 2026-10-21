@@ -1,4 +1,5 @@
 using Elevator.Domain.Events;
+using Elevator.Domain.Faults;
 
 namespace Elevator.Domain.Control;
 
@@ -28,20 +29,30 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
 {
     private readonly ElevatorHandlerOptions _options = options ?? ElevatorHandlerOptions.Default;
     private long _publishedVersion = -1;
+    private SimTime? _unstickAt; // a timed Stuck command ends here
 
     public Elevator Elevator { get; } = elevator;
 
     public Address Address => Address.Elevator(Elevator.Id);
 
-    public SimTime? NextWakeUp => Elevator.NextDeadline;
+    public SimTime? NextWakeUp => _unstickAt is { } at && (Elevator.NextDeadline is not { } d || at < d) ? at : Elevator.NextDeadline;
 
     public void Handle(Message message, SimTime now, Outbox outbox)
     {
+        if (_unstickAt is { } unstickAt && unstickAt <= now)
+        {
+            Elevator.Tick(unstickAt); // the stuck command ends exactly on time, whenever we are woken
+            _unstickAt = null;
+            Elevator.Unstick();
+        }
         Elevator.Tick(now);
         Flush(outbox);
 
         switch (message)
         {
+            case ApplyFault fault:
+                ApplyCommand(fault.Command, now, outbox);
+                break;
             case Assign assign:
                 OnAssign(assign, now, outbox);
                 break;
@@ -58,11 +69,47 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
         }
 
         Flush(outbox);
-        if (Elevator.Version != _publishedVersion)
+        Publish(outbox);
+    }
+
+    private void Publish(Outbox outbox)
+    {
+        if (Elevator.Version == _publishedVersion) return;
+        _publishedVersion = Elevator.Version;
+        outbox.Send(Address.Dispatcher, new SnapshotPublished(Elevator.Snapshot()), _options.SnapshotDelayMs);
+    }
+
+    /// <summary>
+    /// Applies a fault or operator command (ADR-013). Only a command that changes something is logged, as
+    /// <see cref="FaultCommandApplied"/>, before whatever it causes. The new snapshot is published before the pickups it
+    /// hands back, so the dispatcher already sees the elevator out of service when it reassigns them.
+    /// </summary>
+    private void ApplyCommand(FaultCommand command, SimTime now, Outbox outbox)
+    {
+        var applied = command.Kind switch
         {
-            _publishedVersion = Elevator.Version;
-            outbox.Send(Address.Dispatcher, new SnapshotPublished(Elevator.Snapshot()), _options.SnapshotDelayMs);
-        }
+            FaultKind.Stuck => Stick(command, now),
+            FaultKind.Unstick => Unstick(),
+            _ => false,
+        };
+        if (!applied) return;
+        outbox.Emit(new FaultCommandApplied(now, Elevator.Id, command.Kind, command.DurationMs));
+        Publish(outbox);
+        Flush(outbox);
+    }
+
+    /// <summary>Stuck for DurationMs, or until Unstick; a new Stuck command replaces the previous one's end.</summary>
+    private bool Stick(FaultCommand command, SimTime now)
+    {
+        Elevator.Stick();
+        _unstickAt = command.DurationMs is { } ms ? now.AddMs(ms) : null;
+        return true;
+    }
+
+    private bool Unstick()
+    {
+        _unstickAt = null;
+        return Elevator.Unstick();
     }
 
     private void OnAssign(Assign assign, SimTime now, Outbox outbox)

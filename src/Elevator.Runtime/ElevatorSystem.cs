@@ -4,6 +4,7 @@ using System.Threading.Channels;
 using Elevator.Domain;
 using Elevator.Domain.Control;
 using Elevator.Domain.Events;
+using Elevator.Domain.Faults;
 using Elevator.Metrics;
 using Elevator.Policy;
 using Elevator.Policy.Dispatch;
@@ -85,6 +86,7 @@ public sealed class ElevatorSystem : IAsyncDisposable
             this, _requests.Reader));
         Add(new Actor(new PassengersHandler([.. fleet.Select(t => t.Capacity)]), this));
 
+        FaultInjector = new RuntimeFaultInjector(this);
         _logWriter = Task.Run(WriteLog);
         foreach (var actor in _actors.Values) _loops.Add(actor.Start(_stop.Token));
         for (var i = 0; i < options.Elevators; i++) _actors[Address.Elevator(i)].Mailbox.Writer.TryWrite(new Start());
@@ -93,6 +95,13 @@ public sealed class ElevatorSystem : IAsyncDisposable
     public static ElevatorSystem Start(RuntimeOptions options, Action<long, DomainEvent>? sink = null) => new(options, sink);
 
     public RealClock Clock { get; }
+
+    public int ElevatorCount => _options.Elevators;
+
+    /// <summary>Injects maintenance, emergency stops and faults (ADR-013), at their sim time on <see cref="Clock"/>.</summary>
+    public IFaultInjector FaultInjector { get; }
+
+    internal CancellationToken Stopping => _stop.Token;
 
     public string DispatchPolicy { get; }
 

@@ -32,7 +32,9 @@ public sealed class SimEngine
     /// </summary>
     public const int OverloadThreshold = 200;
 
-    private readonly PriorityQueue<Envelope, (long TimeMs, long Seq)> _queue = new();
+    // Ordered by (sim time, priority, sequence). Priority 0 is only for emergency stops (ADR-013): they take effect
+    // before anything else due at the same instant, as the actor runtime's priority control channel does.
+    private readonly PriorityQueue<Envelope, (long TimeMs, int Priority, long Seq)> _queue = new();
     private readonly Dictionary<Address, IHandler> _handlers = [];
     private readonly Dictionary<Address, SimTime> _scheduledWakeUps = [];
     private readonly List<ElevatorHandler> _elevators = [];
@@ -94,8 +96,17 @@ public sealed class SimEngine
             scenario.Elevators, dispatch.Name + (rebalance is null ? "" : "+rebalance"), scenario.Capacity,
             scenario.BypassThreshold, CapacityModes.Name(capacityMode)));
 
+        Register(new FaultScheduler());
+
         foreach (var e in _elevators) Enqueue(SimTime.Zero, new Envelope(e.Address, new Start()));
         foreach (var p in passengers) Enqueue(SimTime.Zero, new Envelope(Address.Passengers, new PassengerArrives(p.ToRequest()), p.ArrivesAt.Ms));
+        // The scenario's fault schedule (ADR-013): each command reaches its elevator at its sim time.
+        foreach (var f in scenario.FaultSchedule)
+        {
+            if (f.ElevatorId < 0 || f.ElevatorId >= scenario.Elevators)
+                throw new ArgumentException($"fault schedule: elevator {f.ElevatorId} does not exist (0..{scenario.Elevators - 1})", nameof(scenario));
+            Enqueue(SimTime.Zero, new Envelope(Address.Elevator(f.ElevatorId), new ApplyFault(f), f.At.Ms));
+        }
 
         FaultInjector = options.FaultInjector?.Invoke(this) ?? NoOpFaultInjector.Instance;
     }
@@ -156,7 +167,8 @@ public sealed class SimEngine
 
     /// <summary>
     /// Delivers <paramref name="message"/> to <paramref name="to"/> at <see cref="Now"/>, after anything already due
-    /// at <see cref="Now"/>. The injection seam for fault and operator commands (shared v3 contract).
+    /// at <see cref="Now"/>. The injection seam for fault and operator commands (shared v3 contract). Emergency stops
+    /// are the one exception: they go ahead of what is due at the same instant (ADR-013).
     /// </summary>
     public void Post(Address to, Message message) => Enqueue(Now, new Envelope(to, message));
 
@@ -178,8 +190,16 @@ public sealed class SimEngine
     private void Enqueue(SimTime now, Envelope envelope)
     {
         if (envelope.To.Kind == ActorKind.Client) return; // nobody waits on acks in a simulation
-        _queue.Enqueue(envelope, (now.Ms + envelope.DelayMs, _seq++));
+        _queue.Enqueue(envelope, (now.Ms + envelope.DelayMs, PriorityOf(envelope.Message), _seq++));
     }
+
+    /// <summary>
+    /// Emergency stops, on their way to the elevator (via the fault scheduler or directly), jump ahead of messages due
+    /// at the same instant: the simulator's equivalent of the actor runtime's priority channel (ADR-013). Every other
+    /// message keeps the (time, sequence) order, so <see cref="Post"/> delivers after what is already due.
+    /// </summary>
+    private static int PriorityOf(Message message) =>
+        message is ApplyFault { Command.Kind: FaultKind.EmergencyStop } or ScheduleFault { Command.Kind: FaultKind.EmergencyStop } ? 0 : 1;
 
     private bool AllDone =>
         _passengers.Arrived == _expectedPassengers && _passengers.Delivered + _passengers.Refused == _expectedPassengers
@@ -204,7 +224,7 @@ public sealed class SimEngine
             if (handler.NextWakeUp is { } wake && (!_scheduledWakeUps.TryGetValue(handler.Address, out var scheduled) || scheduled != wake))
             {
                 _scheduledWakeUps[handler.Address] = wake;
-                _queue.Enqueue(new Envelope(handler.Address, new WakeUp()), (wake.Ms, _seq++));
+                _queue.Enqueue(new Envelope(handler.Address, new WakeUp()), (wake.Ms, 1, _seq++));
             }
 
             if (AllDone) return now;

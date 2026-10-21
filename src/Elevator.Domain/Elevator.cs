@@ -36,7 +36,9 @@ public sealed class Elevator
     private DestinationTotals _riderTotals = DestinationTotals.Empty;
     private readonly List<DomainEvent> _outbox = [];
 
-    private SimTime? _deadline;       // end of the current timed phase; null in Idle/Maintenance
+    private SimTime? _deadline;       // end of the current timed phase; null in Idle/Maintenance, and while stuck
+    private bool _stuck;              // the drive is stuck (fault injection, ADR-013): no phase completes
+    private long? _frozenMs;          // while stuck: what is left of the current phase
     private SimTime _closingStartedAt; // used to compute how long a reopen takes
     private bool _levelWithFloor;     // true while stopped, or at the instant a moving elevator reaches a floor
 
@@ -196,7 +198,7 @@ public sealed class Elevator
                 CommittedDirection ??= _hallCalls.FirstOrDefault(c => c.Floor == CurrentFloor)?.Direction;
                 Emit(new DoorsOpened(Now, Id, CurrentFloor, CommittedDirection));
                 AnswerHallCallHere();
-                _deadline = Now.AddMs(_timing.DoorDwellMs);
+                StartPhase(_timing.DoorDwellMs);
                 break;
             case ElevatorState.DoorOpen:
                 CloseDoor();
@@ -221,7 +223,7 @@ public sealed class Elevator
             return;
         }
         _levelWithFloor = false;
-        _deadline = Now.AddMs(_timing.FloorTravelMs);
+        StartPhase(_timing.FloorTravelMs);
     }
 
     /// <summary>
@@ -256,7 +258,7 @@ public sealed class Elevator
         Fire(trigger);
         CommittedDirection = direction;
         _levelWithFloor = false;
-        _deadline = Now.AddMs(_timing.FloorTravelMs);
+        StartPhase(_timing.FloorTravelMs);
     }
 
     /// <summary>
@@ -269,8 +271,8 @@ public sealed class Elevator
         {
             Fire(Trigger.Reopen);
             // Doors reverse from where they are: having closed for x ms, they need x·(opening/closing) ms to be open again.
-            var closedFor = Now.Ms - _closingStartedAt.Ms;
-            _deadline = Now.AddMs(closedFor * _timing.DoorOpeningMs / _timing.DoorClosingMs);
+            var closedFor = _stuck ? _timing.DoorClosingMs - (_frozenMs ?? 0) : Now.Ms - _closingStartedAt.Ms;
+            StartPhase(closedFor * _timing.DoorOpeningMs / _timing.DoorClosingMs);
             return;
         }
 
@@ -280,14 +282,14 @@ public sealed class Elevator
         var lantern = LanternForStop();
         Fire(Trigger.ArriveAndOpen);
         CommittedDirection = lantern;
-        _deadline = Now.AddMs(_timing.DoorOpeningMs);
+        StartPhase(_timing.DoorOpeningMs);
     }
 
     public void CloseDoor()
     {
         Fire(Trigger.StartClosing);
         _closingStartedAt = Now;
-        _deadline = Now.AddMs(_timing.DoorClosingMs);
+        StartPhase(_timing.DoorClosingMs);
     }
 
     public void EnterMaintenance() => Fire(Trigger.EnterMaintenance);
@@ -355,7 +357,7 @@ public sealed class Elevator
         {
             case ElevatorState.DoorOpen:
                 AnswerHallCallHere();
-                _deadline = Now.AddMs(_timing.DoorDwellMs); // give the newcomer a full dwell
+                StartPhase(_timing.DoorDwellMs); // give the newcomer a full dwell
                 break;
             case ElevatorState.DoorClosing:
                 OpenDoor(); // reopen; answered when fully open
@@ -402,7 +404,7 @@ public sealed class Elevator
 
         // Riders getting off can make room while the doors are open: a bypassed pickup here is answered now.
         if (CapacityMode == CapacityMode.NextTrip && State == ElevatorState.DoorOpen && !IsFull && AnswerHallCallHere())
-            _deadline = Now.AddMs(_timing.DoorDwellMs);
+            StartPhase(_timing.DoorDwellMs);
         // Idle and no longer full: the bypassed pickups are visible to the policy again.
         if (State == ElevatorState.Idle) DecideFromIdle();
     }
@@ -480,6 +482,54 @@ public sealed class Elevator
     }
 
     private void Emit(DomainEvent e) => _outbox.Add(e);
+
+    /// <summary>Starts a timed phase of <paramref name="ms"/>; while stuck it is frozen with all its time left.</summary>
+    private void StartPhase(long ms)
+    {
+        if (_stuck) _frozenMs = ms;
+        else _deadline = Now.AddMs(ms);
+    }
+
+    // ---- Stuck drive (fault injection, ADR-013) ---------------------------------------------------------
+
+    /// <summary>True while the drive is stuck.</summary>
+    public bool IsStuck => _stuck;
+
+    /// <summary>
+    /// The drive gets stuck: the current timed phase (travel or a door phase) stops progressing, and so does any phase
+    /// started meanwhile. The controller keeps working (it takes messages and decides), but nothing physical happens.
+    /// The snapshot shows no phase end while stuck. Not a state change: the state machine stays where it was.
+    /// </summary>
+    /// <returns>False if it was already stuck.</returns>
+    public bool Stick()
+    {
+        if (_stuck) return false;
+        _stuck = true;
+        if (_deadline is { } d)
+        {
+            _frozenMs = d.Ms - Now.Ms;
+            _deadline = null;
+        }
+        Version++;
+        return true;
+    }
+
+    /// <summary>The drive works again: the frozen phase resumes with the time it had left.</summary>
+    /// <returns>False if it was not stuck.</returns>
+    public bool Unstick()
+    {
+        if (!_stuck) return false;
+        _stuck = false;
+        if (_frozenMs is { } left)
+        {
+            _deadline = Now.AddMs(left);
+            _frozenMs = null;
+            // Keep "phase end = closing start + closing time" true, so a reopen (and a projection) computes the doors' position right.
+            if (State == ElevatorState.DoorClosing) _closingStartedAt = Now.AddMs(left - _timing.DoorClosingMs);
+        }
+        Version++;
+        return true;
+    }
 
     private string NotServed(int floor) => $"elevator {Id} ({TypeName}) does not serve floor {floor}";
 }
