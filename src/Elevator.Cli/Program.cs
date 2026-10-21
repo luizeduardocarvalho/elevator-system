@@ -1,7 +1,6 @@
 using Elevator.Cli;
 using Spectre.Console.Cli;
 
-// `tui` and `replay` arrive in a later stage.
 var app = new CommandApp();
 app.Configure(config =>
 {
@@ -15,5 +14,11 @@ app.Configure(config =>
     config.AddCommand<PerfCommand>("perf")
         .WithDescription("Real clock, real threads: assignment latency, lost/duplicated, memory soak; PASS/FAIL against the spec SLOs.")
         .WithExample("perf", "--levels", "100,1000,10000");
+    config.AddCommand<TuiCommand>("tui")
+        .WithDescription("Live terminal UI: building, metrics, ops and event tail. space pause · n step · +/- speed · ←/→ select · m/e/s faults · [ ] seek · q quit.")
+        .WithExample("tui", "scenarios/lunch.yaml", "--seed", "3", "--dispatch", "nearest");
+    config.AddCommand<ReplayCommand>("replay")
+        .WithDescription("The same view driven from a JSONL event log; seeking re-folds the log.")
+        .WithExample("replay", "out/lunch-seed1.jsonl", "--speed", "50");
 });
 return app.Run(args);

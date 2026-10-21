@@ -126,3 +126,21 @@ the progression is in [docs/results.md](results.md).
 
 To be written: elevator types, maintenance and emergency stops (with watchdog and fault injection), floor
 restrictions and VIP, and the TUI.
+
+### TUI note (stage 3; the full v3 section is written at merge)
+
+`Elevator.Tui` adds `elevator tui <scenario>` (live) and `elevator replay <log.jsonl>` (ADR-011). It is three
+layers, and nothing flows back from the screen to the engine:
+
+```mermaid
+flowchart LR
+    ENG["SimEngine<br/>AdvanceTo in fixed 100 ms ticks"] -- "new log entries" --> FOLD
+    FILE["JSONL log"] -- "LogReader (tolerant)" --> FOLD
+    FOLD["BuildingState<br/>fold over events"] --> VM["ViewModel.Build<br/>pure → ScreenModel"] --> R["SpectreRenderer<br/>Live + Layout, ~20 fps"]
+    LOOP["TuiLoop<br/>Pacer: accumulator, cap, budget"] -- "Step / SeekTo / m e s" --> ENG
+    LOOP -. "keys, frame clock (injected)" .- R
+```
+
+- **One fold for live and replay**, checked against `SimEngine.Elevators` / `Waiting`.
+- **Speed cannot change results:** 0.5×, 10× and headless give the same log hash.
+- **Seeking:** live re-simulates, re-applying the operator commands it recorded; replay re-folds the log.

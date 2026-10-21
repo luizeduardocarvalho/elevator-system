@@ -9,6 +9,7 @@
     <Project Path="src/Elevator.Policy/Elevator.Policy.csproj" />
     <Project Path="src/Elevator.Runtime/Elevator.Runtime.csproj" />
     <Project Path="src/Elevator.Simulation/Elevator.Simulation.csproj" />
+    <Project Path="src/Elevator.Tui/Elevator.Tui.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Elevator.Domain.Tests/Elevator.Domain.Tests.csproj" />
@@ -16,5 +17,6 @@
     <Project Path="tests/Elevator.Policy.Tests/Elevator.Policy.Tests.csproj" />
     <Project Path="tests/Elevator.Runtime.Tests/Elevator.Runtime.Tests.csproj" />
     <Project Path="tests/Elevator.Simulation.Tests/Elevator.Simulation.Tests.csproj" />
+    <Project Path="tests/Elevator.Tui.Tests/Elevator.Tui.Tests.csproj" />
   </Folder>
 </Solution>

@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The terminal UI (ADR-011). Three layers: BuildingState (a fold over the event log), ScreenModel (a pure view
+    model, no Spectre types) and the Spectre renderer. The renderer never drives or mutates the engine.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Elevator.Domain\Elevator.Domain.csproj" />
+    <ProjectReference Include="..\Elevator.Simulation\Elevator.Simulation.csproj" />
+    <ProjectReference Include="..\Elevator.Metrics\Elevator.Metrics.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Spectre.Console" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Elevator.Tui.Tests" />
+  </ItemGroup>
+</Project>
