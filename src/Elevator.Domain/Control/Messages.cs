@@ -9,6 +9,8 @@ public enum ActorKind
     Passengers,
     /// <summary>Whoever submitted a request and waits for its assignment (the actor runtime's callers).</summary>
     Client,
+    /// <summary>The simulator's fault scheduler: holds injected commands until their sim time (ADR-013).</summary>
+    FaultScheduler,
 }
 
 public readonly record struct Address(ActorKind Kind, int Index = 0)
@@ -48,6 +50,9 @@ public sealed record Unassign(int RequestId) : Message;
 public sealed record Boarded(Request Rider) : Message;
 
 public sealed record Alighted(int RequestId) : Message;
+
+/// <summary>A fault or operator command for this elevator, taking effect now (ADR-013).</summary>
+public sealed record ApplyFault(Faults.FaultCommand Command) : Message;
 
 // ---- To the dispatcher -----------------------------------------------------------------------------------
 public sealed record SubmitRequest(Request Request) : Message;
@@ -92,6 +97,10 @@ public sealed record PassengerWaiting(Request Request) : Message;
 
 /// <summary>Something passengers can see: doors opening (to get off) or a lantern answering their call (to get on).</summary>
 public sealed record ElevatorNotice(DomainEvent Event) : Message;
+
+// ---- To the simulator's fault scheduler -------------------------------------------------------------------
+/// <summary>Deliver <paramref name="Command"/> to its elevator at max(Command.At, now), as <see cref="ApplyFault"/>.</summary>
+public sealed record ScheduleFault(Faults.FaultCommand Command) : Message;
 
 // ---- To clients ------------------------------------------------------------------------------------------
 public sealed record RequestAssigned(int RequestId, int ElevatorId) : Message;
