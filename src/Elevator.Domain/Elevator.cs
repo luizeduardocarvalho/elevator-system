@@ -174,8 +174,21 @@ public sealed class Elevator
             Mode = Mode,
         };
 
-    /// <summary>What the scheduling policy sees: while bypassing, only the drop-offs.</summary>
-    private ElevatorSnapshot PolicyView() => Bypassing ? Snapshot() with { HallCalls = [] } : Snapshot();
+    /// <summary>
+    /// What the scheduling policy sees: while bypassing, only the drop-offs. Otherwise every pickup, except those where
+    /// someone would not fit in the room left (a heavy load, ADR-012): they are bypassed the same way until riders get
+    /// off. Passengers board in strict arrival order, so when every load at a stop fits, the first in line does and a stop
+    /// there always boards someone; without this, a policy that serves "a pickup right here" first would reopen for a
+    /// load that never fits, forever. Once empty, every load fits (the capacity access policy sees to it). With one-unit
+    /// loads this never hides anything: no room at all means full, which bypasses every pickup already.
+    /// </summary>
+    private ElevatorSnapshot PolicyView()
+    {
+        if (Bypassing) return Snapshot() with { HallCalls = [] };
+        var room = (long)Capacity - Load;
+        if (!_hallCalls.Any(c => c.MaxLoad > room)) return Snapshot();
+        return Snapshot() with { HallCalls = [.. _hallCalls.Where(c => c.MaxLoad <= room)] };
+    }
 
     /// <summary>Returns and clears the events produced since the last call.</summary>
     public IReadOnlyList<DomainEvent> DrainEvents()
@@ -374,6 +387,10 @@ public sealed class Elevator
         if (!standingHereWithDoorsInCycle) return;
 
         if (Bypassing || _emergency) return; // full: served on a later trip; emergency: doors stay closed
+        // A load that cannot fit now (freight, ADR-012) is not answered at the open door: it would be left behind and,
+        // re-dispatched to this same elevator, answered again at the same instant, forever. It waits for a later trip.
+        // With one-unit loads this never applies: not fitting means full, which bypasses above.
+        if (request is not null && Load + request.Load > Capacity) return;
         CommittedDirection ??= direction; // stopped with no work: adopt the caller's direction
         if (CommittedDirection != direction) return; // served later, when the elevator comes back for it
 

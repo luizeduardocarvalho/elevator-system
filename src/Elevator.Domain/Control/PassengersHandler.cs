@@ -8,7 +8,9 @@ namespace Elevator.Domain.Control;
 ///
 /// Real behaviour: a passenger boards only the elevator they were assigned to (destination dispatch shows it on the
 /// hall panel), only when its lantern shows their direction, in arrival order per floor, while there is room
-/// (hard capacity). Anyone who does not fit is left behind and presses again (same request id and t_call).
+/// (hard capacity). Anyone who does not fit is left behind and presses again (same request id and t_call), and so is
+/// everyone behind them: nobody overtakes in the queue, also when a heavy load does not fit but a lighter one would
+/// (ADR-012). With one-unit loads that is the same thing.
 /// </summary>
 public sealed class PassengersHandler : IHandler
 {
@@ -116,9 +118,10 @@ public sealed class PassengersHandler : IHandler
         var riders = _riding.TryGetValue(answered.ElevatorId, out var list) ? list : _riding[answered.ElevatorId] = [];
         var load = riders.Sum(r => r.Request.Load);
         var capacity = _capacityOf(answered.ElevatorId);
+        var blocked = false; // strict arrival order: once someone does not fit, nobody behind them overtakes (ADR-012)
         foreach (var p in candidates)
         {
-            if (load + p.Request.Load <= capacity)
+            if (!blocked && load + p.Request.Load <= capacity)
             {
                 load += p.Request.Load;
                 here.Remove(p);
@@ -130,6 +133,7 @@ public sealed class PassengersHandler : IHandler
             }
             else
             {
+                blocked = true;
                 p.AssignedTo = null;
                 outbox.Emit(new PassengerLeftBehind(now, p.Request.Id, answered.ElevatorId, answered.Floor));
                 outbox.Send(Address.Dispatcher, new ReRegister(p.Request.Id, AssignmentReason.LeftBehind));

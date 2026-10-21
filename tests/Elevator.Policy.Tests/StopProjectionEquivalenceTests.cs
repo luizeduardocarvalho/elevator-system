@@ -19,7 +19,8 @@ public class StopProjectionEquivalenceTests
     /// take the snapshot's own.</param>
     /// <param name="Served">The floors the elevator's type serves; every trip starts and ends on one of them.</param>
     public sealed record Case(string Policy, int Capacity, double Threshold, int Start, (int From, int To, long AtMs)[] Assigned,
-        int Boarded, long SnapshotAtMs, long NowDelayMs, (int From, int To) Extra, CapacityMode Mode, ElevatorTiming Timing, int[] Served);
+        int Boarded, long SnapshotAtMs, long NowDelayMs, (int From, int To) Extra, CapacityMode Mode, ElevatorTiming Timing, int[] Served,
+        int[] Loads, int ExtraLoad);
 
     private const int Floors = 12;
 
@@ -58,7 +59,10 @@ public class StopProjectionEquivalenceTests
         from delay in Gen.Elements(0L, 0L, 1_500L, 9_000L)
         from extra in TripIn(served)
         from mode in Gen.Elements(CapacityMode.NextTrip, CapacityMode.Defer)
-        select new Case(policy, capacity, threshold, start, assigned, boarded, at, delay, extra, mode, timing, served);
+        from heavy in Gen.Elements(false, false, true) // loads above one unit (freight, ADR-012)
+        from loads in Gen.ArrayOf(heavy ? Gen.Elements(1, 1, 2, 3, 6) : Gen.Constant(1), n)
+        from extraLoad in heavy ? Gen.Elements(1, 2, 4) : Gen.Constant(1)
+        select new Case(policy, capacity, threshold, start, assigned, boarded, at, delay, extra, mode, timing, served, loads, extraLoad);
 
     [Property(MaxTest = 1500)]
     public Property Per_stop_projection_equals_the_per_passenger_oracle() => Prop.ForAll(Cases.ToArbitrary(), c =>
@@ -66,7 +70,7 @@ public class StopProjectionEquivalenceTests
         var policy = SchedulingPolicies.Create(c.Policy);
         var snapshot = BuildSnapshot(c, policy);
         var now = snapshot.At.AddMs(c.NowDelayMs);
-        var extra = Request.Create(c.Extra.From, c.Extra.To, now, Floors, id: 99_999).Value!;
+        var extra = Request.Create(c.Extra.From, c.Extra.To, now, Floors, id: 99_999, load: c.ExtraLoad).Value!;
 
         var oracle = new RouteProjection(policy, ElevatorTiming.Default, StopProjection.DefaultHorizonMs); // same horizon
         var fast = new StopProjection(policy, ElevatorTiming.Default);
@@ -105,11 +109,11 @@ public class StopProjectionEquivalenceTests
         var e = new ElevatorUnit(0, Floors, c.Timing, policy, c.Start, c.Capacity, c.Threshold, c.Mode, FloorMask.Of(c.Served), "typed");
         var id = 0;
         var boardedSoFar = 0;
-        foreach (var (from, to, at) in c.Assigned.OrderBy(a => a.AtMs))
+        foreach (var (from, to, at, load) in c.Assigned.Zip(c.Loads, (a, l) => (a.From, a.To, a.AtMs, l)).OrderBy(a => a.AtMs))
         {
             if (at > e.Now.Ms) Advance(e, at, c.Boarded, ref boardedSoFar);
             if ((c.Mode == CapacityMode.Defer && e.IsFull) || e.State == ElevatorState.Maintenance) continue;
-            e.AssignPickup(Request.Create(from, to, new SimTime(at), Floors, id: ++id).Value!);
+            e.AssignPickup(Request.Create(from, to, new SimTime(at), Floors, id: ++id, load: load).Value!);
             e.DrainEvents();
         }
         Advance(e, Math.Max(e.Now.Ms, c.SnapshotAtMs), c.Boarded, ref boardedSoFar);
@@ -131,6 +135,7 @@ public class StopProjectionEquivalenceTests
                     foreach (var r in list)
                     {
                         if (boarded >= maxBoard || e.IsFull) break;
+                        if (e.Load + r.Load > e.Capacity) break; // does not fit: left behind with everyone behind, as the passengers do
                         e.Board(r);
                         boarded++;
                     }
