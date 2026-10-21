@@ -1,0 +1,38 @@
+# Chaos: the lunch profile (same building, same traffic for a given seed) plus a fault schedule mixing maintenance,
+# emergency stops and stuck drives (ADR-013). Compare with and without the schedule on the same seeds:
+#   elevator bench --scenarios chaos --strategies look+cost,look+nearest --faults on,off --baseline look+cost/no-faults
+# 20 floors, 4 elevators, 30 minutes of traffic; the run continues until everyone is delivered (or 90 min).
+name: chaos
+seed: 1
+building:
+  floors: 20
+  elevators: 4
+  capacity: 10
+  bypassThreshold: 0.8
+scheduling: look
+dispatch: cost
+maxSimTimeS: 5400
+watchdog: { timeoutS: 30 }
+traffic:
+  profile:
+    lobby: 1
+    mix: { fromLobby: 0.40, toLobby: 0.40, interfloor: 0.20 }
+    rate:
+      - { atS: 0,    perMinute: 4 }
+      - { atS: 450,  perMinute: 12 }
+      - { atS: 900,  perMinute: 6 }
+      - { atS: 1350, perMinute: 12 }
+      - { atS: 1800, perMinute: 4 }
+faults:
+  # E2 goes to maintenance during the first hump: it drains (delivers its riders), parks, comes back 10 min later.
+  - { atS: 480,  elevator: 2, kind: maintenance-on }
+  - { atS: 1080, elevator: 2, kind: maintenance-off }
+  # Emergency stops: E1 for a minute at the peak, E0 for 30 s in the second hump.
+  - { atS: 600,  elevator: 1, kind: emergency-stop }
+  - { atS: 660,  elevator: 1, kind: emergency-clear }
+  - { atS: 1400, elevator: 0, kind: emergency-stop }
+  - { atS: 1430, elevator: 0, kind: emergency-clear }
+  # Stuck drives: E3 for 2 minutes (it unsticks by itself), E1 until an operator unsticks it 3 minutes later.
+  - { atS: 750,  elevator: 3, kind: stuck, durationS: 120 }
+  - { atS: 1500, elevator: 1, kind: stuck }
+  - { atS: 1680, elevator: 1, kind: unstick }

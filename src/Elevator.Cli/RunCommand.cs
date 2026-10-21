@@ -167,12 +167,18 @@ internal sealed class RunCommand : Command<RunCommand.Settings>
         table.AddRow("  Faults detected", N(o.Faults));
         table.AddRow("  Time to detect (avg / max)", $"{S(o.TimeToDetect.Avg)} / {S(o.TimeToDetect.Max)}");
         table.AddRow("  Time to recover (avg / max)", $"{S(o.TimeToRecover.Avg)} / {S(o.TimeToRecover.Max)}");
-        table.AddRow("  Pickups handed back (out of service)", N(o.OutOfServiceReleases));
+        table.AddRow("  Pickups handed back", N(o.OutOfServiceReleases));
         table.AddRow("  Passengers affected", N(o.AffectedPassengers));
-        table.AddRow("  Wait penalty: reassignment / blocked", $"{S(o.ReassignmentWaitS)} / {S(o.BlockedWaitS)}");
+        table.AddRow("  Penalty: reassignment / blocked", $"{S(o.ReassignmentWaitS)} / {S(o.BlockedWaitS)}");
         table.AddRow("  Access denials / refused", $"{N(o.AccessDenials)} / {N(o.RefusedByPolicy)}");
-        foreach (var e in o.Elevators.Where(e => e.MaintenanceS > 0 || e.EmergencyStops > 0 || e.Faults > 0 || e.StuckS > 0))
-            table.AddRow($"  E{e.ElevatorId}",
-                $"maint {S(e.MaintenanceS)} (drain {S(e.DrainS)}) · emerg {N(e.EmergencyStops)}× {S(e.EmergencyS)} · stuck {S(e.StuckS)} · faults {N(e.Faults)}");
+        foreach (var e in o.Elevators)
+        {
+            var parts = new List<string>();
+            if (e.MaintenanceS > 0) parts.Add($"maint {S(e.MaintenanceS)} (drain {S(e.DrainS)})");
+            if (e.EmergencyStops > 0) parts.Add($"emerg {N(e.EmergencyStops)}× {S(e.EmergencyS)}");
+            if (e.StuckS > 0) parts.Add($"stuck {S(e.StuckS)}");
+            if (e.Faults > 0) parts.Add($"faults {N(e.Faults)}");
+            if (parts.Count > 0) table.AddRow($"  E{e.ElevatorId}", string.Join(", ", parts));
+        }
     }
 }
