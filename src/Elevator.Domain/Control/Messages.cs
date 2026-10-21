@@ -74,6 +74,12 @@ public sealed record FindBestQuery(int QueryId, Request Request) : Message;
 /// <summary>Spec's balanceLoad(): run a rebalancing pass now (no-op when rebalancing is off).</summary>
 public sealed record RebalanceNow : Message;
 
+/// <summary>
+/// Every elevator's access policies refused this request (ADR-012): it is not dispatched, the passenger is told and
+/// leaves (counted as refused by policy, never as lost). Sent to the passengers and to the client.
+/// </summary>
+public sealed record RequestRefused(int RequestId, string Policy, string Reason) : Message;
+
 // ---- To passengers ---------------------------------------------------------------------------------------
 /// <summary>A passenger arrives and enters their destination; the passengers handler submits the request.</summary>
 public sealed record PassengerArrives(Request Request) : Message;

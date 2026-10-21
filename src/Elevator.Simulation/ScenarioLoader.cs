@@ -84,6 +84,8 @@ public static class ScenarioLoader
 
         var fleet = LoadFleet(dto.Building, floors, timing, capacity, errors);
 
+        var access = LoadAccess(dto.Access, floors, elevators, errors);
+
         var passengers = new List<PassengerSpec>();
         foreach (var (p, i) in (dto.Passengers ?? []).Select((p, i) => (p, i)))
         {
@@ -166,7 +168,24 @@ public static class ScenarioLoader
             profile,
             latency,
             capacityMode,
-            faults.OrderBy(f => f.At).ToList()) { Fleet = fleet }, []);
+            faults.OrderBy(f => f.At).ToList()) { Fleet = fleet, Access = access }, []);
+    }
+
+    /// <summary><c>access:</c> floor restrictions and VIP service (ADR-012).</summary>
+    private static AccessConfig LoadAccess(AccessDto? dto, int floors, int elevators, List<string> errors)
+    {
+        if (dto is null) return AccessConfig.None;
+        var restricted = new Dictionary<int, int>();
+        foreach (var (floor, level) in dto.RestrictedFloors ?? [])
+        {
+            if (Floors.Check(floor, floors) is { } error) errors.Add($"access.restrictedFloors: {error}");
+            else if (level < 1) errors.Add($"access.restrictedFloors: floor {floor} needs a level >= 1 (got {level})");
+            else restricted[floor] = level;
+        }
+        var dedicated = dto.Vip?.Dedicated ?? [];
+        foreach (var e in dedicated.Where(e => e < 0 || e >= elevators))
+            errors.Add($"access.vip.dedicated: elevator {e} does not exist (0..{elevators - 1})");
+        return new AccessConfig(restricted, [.. dedicated.Distinct().Order()], dto.Vip?.Priority ?? false);
     }
 
     /// <summary>
@@ -224,6 +243,19 @@ public static class ScenarioLoader
         public List<PassengerDto>? Passengers { get; set; }
         public TrafficDto? Traffic { get; set; }
         public List<FaultDto>? Faults { get; set; }
+        public AccessDto? Access { get; set; }
+    }
+
+    private sealed class AccessDto
+    {
+        public Dictionary<int, int>? RestrictedFloors { get; set; }
+        public VipDto? Vip { get; set; }
+    }
+
+    private sealed class VipDto
+    {
+        public bool? Priority { get; set; }
+        public List<int>? Dedicated { get; set; }
     }
 
     private sealed class FaultDto

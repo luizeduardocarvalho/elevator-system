@@ -127,6 +127,7 @@ internal sealed class RunCommand : Command<RunCommand.Settings>
 
         table.AddRow("Requests served", $"{r.Delivered} / {r.Passengers}");
         table.AddRow(r.Unserved == 0 ? "Unserved" : "[red]Unserved[/]", r.Unserved.ToString(CultureInfo.InvariantCulture));
+        if (r.RefusedByPolicy > 0) table.AddRow("Refused by access policy", r.RefusedByPolicy.ToString(CultureInfo.InvariantCulture));
         table.AddRow("Invalid requests", r.RejectedRequests.ToString(CultureInfo.InvariantCulture));
         table.AddRow("Wait avg", S(r.Wait.Avg));
         table.AddRow("Wait p95", S(r.Wait.P95));
