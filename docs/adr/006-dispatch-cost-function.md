@@ -124,14 +124,22 @@ acceptance goes to the `reassignment` bucket.
 
 | Profile | Δ wait avg | Δ wait p95 | Moves per run (seeds 21–25) |
 |---|---|---|---|
-| up-peak | −0.3 ± 0.4 s (n.s.) | −0.4 ± 0.5 s (n.s.) | ~6 of ~225 passengers |
-| down-peak | −0.7 ± 0.5 s | −2.3 ± 1.8 s | ~37 of ~225 (16%) |
-| lunch | −0.3 ± 0.5 s (n.s.) | −1.3 ± 2.0 s (n.s.) | ~10 of ~206 |
+| up-peak | −0.2 ± 0.4 s (n.s.) | +0.1 ± 0.8 s (n.s.) | ~5 of ~225 passengers |
+| down-peak | −0.9 ± 0.5 s | −4.2 ± 1.9 s | ~30 of ~225 (13%) |
+| lunch | −0.4 ± 0.4 s | −1.2 ± 1.7 s (n.s.) | ~9 of ~206 |
 
-On top of Nearest, rebalancing recovers most of Nearest's gap. Lunch wait goes 20.9 → 15.3 s, against 13.8 s for
-sticky Cost. So rebalancing repairs poor initial decisions, and cost-based dispatch rarely makes them.
+On top of Nearest, rebalancing recovers most of Nearest's gap. So rebalancing repairs poor initial decisions, and
+cost-based dispatch rarely makes them.
 
-**Consequence: sticky stays the default.** At best rebalancing saves 0.7 s on average, at down-peak, while changing
-the displayed elevator for one passenger in six. Under destination dispatch that is a real usability cost the
+*Correction (found during the M6 projection rewrite).* The first version of this table came from code with a latent
+cache bug. The dispatcher cached each elevator's "without r" projection by (version, time), so a derived snapshot
+(the same elevator with r removed, as rebalancing builds) could be given the real snapshot's projection. Once the
+cache was keyed by snapshot identity:
+- the old per-passenger projection and the new per-stop projection give identical m4 results;
+- every other results file is unchanged.
+The corrected numbers above differ from the first version by at most 1.9 s in p95, and the conclusion is unchanged.
+
+**Consequence: sticky stays the default.** At best rebalancing saves 0.9 s on average, at down-peak, while changing
+the displayed elevator for about one passenger in eight. Under destination dispatch that is a real usability cost the
 simulation does not model: people walking to the wrong door. Rebalancing stays selectable for buildings that
 weigh it differently.

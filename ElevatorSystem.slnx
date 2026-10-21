@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/Elevator.Benchmarks/Elevator.Benchmarks.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/Elevator.Cli/Elevator.Cli.csproj" />
     <Project Path="src/Elevator.Domain/Elevator.Domain.csproj" />

@@ -55,7 +55,7 @@ public sealed class ElevatorSystem : IAsyncDisposable
         var dispatch = DispatchPolicies.Create(options.Dispatch, scheduling, timing);
         DispatchPolicy = dispatch.Name;
         var latency = options.Latency ?? MessageLatency.None;
-        var estimator = new RouteProjection(scheduling, timing);
+        var estimator = new StopProjection(scheduling, timing);
 
         for (var i = 0; i < options.Elevators; i++)
         {

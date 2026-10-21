@@ -27,7 +27,26 @@ public sealed record ElevatorSnapshot(
     SimTime ClosingStartedAt,
     long Version)
 {
-    public int Load => Riders.Sum(r => r.Load);
+    private DestinationTotals? _riderTotals;
+
+    public IReadOnlyList<Request> Riders
+    {
+        get;
+        init
+        {
+            field = value;
+            _riderTotals = null;
+        }
+    } = Riders;
+
+    /// <summary>Riders per destination: set by the elevator (maintained incrementally), computed otherwise.</summary>
+    public DestinationTotals RiderTotals
+    {
+        get => _riderTotals ??= DestinationTotals.Of(Riders);
+        init => _riderTotals = value;
+    }
+
+    public int Load => RiderTotals.TotalLoad;
 
     /// <summary>Full-load bypass: at or above the threshold it serves its riders only (no pickups).</summary>
     public bool IsFull => Load >= BypassThreshold * Capacity;

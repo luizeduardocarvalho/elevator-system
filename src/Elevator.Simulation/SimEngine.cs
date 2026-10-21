@@ -36,7 +36,7 @@ public sealed class SimEngine
         var scheduling = SchedulingPolicies.Create(strategy.Scheduling);
         var dispatch = DispatchPolicies.Create(strategy.Dispatch, scheduling, scenario.Timing);
         var latency = scenario.Latency ?? MessageLatency.None;
-        var estimator = new RouteProjection(scheduling, scenario.Timing); // each elevator's own view, for the staleness check
+        var estimator = new StopProjection(scheduling, scenario.Timing); // each elevator's own view, for the staleness check
 
         for (var i = 0; i < scenario.Elevators; i++)
         {

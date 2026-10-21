@@ -32,7 +32,7 @@ public sealed class Elevator
     private ImmutableSortedSet<int> _carCalls = [];
     private ImmutableList<HallCall> _hallCalls = []; // registration order = FIFO order
     private ImmutableList<Request> _riders = [];
-    private int _load;
+    private DestinationTotals _riderTotals = DestinationTotals.Empty;
     private readonly List<DomainEvent> _outbox = [];
 
     private SimTime? _deadline;       // end of the current timed phase; null in Idle/Maintenance
@@ -77,7 +77,7 @@ public sealed class Elevator
         e._carCalls = s.CarCalls as ImmutableSortedSet<int> ?? [.. s.CarCalls];
         e._hallCalls = s.HallCalls as ImmutableList<HallCall> ?? [.. s.HallCalls];
         e._riders = s.Riders as ImmutableList<Request> ?? [.. s.Riders];
-        e._load = e._riders.Sum(r => r.Load);
+        e._riderTotals = s.RiderTotals;
         return e;
     }
 
@@ -111,7 +111,7 @@ public sealed class Elevator
 
     public IReadOnlyList<Request> Riders => _riders;
 
-    public int Load => _load;
+    public int Load => _riderTotals.TotalLoad;
 
     public bool IsFull => Load >= BypassThreshold * Capacity;
 
@@ -120,7 +120,7 @@ public sealed class Elevator
 
     public ElevatorSnapshot Snapshot() =>
         new(Id, CurrentFloor, State, CommittedDirection, _carCalls, _hallCalls, FloorCount, _riders,
-            Capacity, BypassThreshold, Now, _deadline, _closingStartedAt, Version);
+            Capacity, BypassThreshold, Now, _deadline, _closingStartedAt, Version) { RiderTotals = _riderTotals };
 
     /// <summary>Returns and clears the events produced since the last call.</summary>
     public IReadOnlyList<DomainEvent> DrainEvents()
@@ -282,13 +282,17 @@ public sealed class Elevator
             // Already a stop here in this direction (lit button / dedup): the request just joins it.
             if (request is not null)
             {
-                _hallCalls = _hallCalls.SetItem(index, _hallCalls[index] with { Requests = [.. _hallCalls[index].Requests, request] });
+                var call = _hallCalls[index];
+                var requests = call.Requests as ImmutableList<Request> ?? [.. call.Requests];
+                _hallCalls = _hallCalls.SetItem(index, call with { Requests = requests.Add(request), Totals = call.Totals.Add(request) });
                 Version++;
             }
             return;
         }
 
-        _hallCalls = _hallCalls.Add(new HallCall(floor, direction, Now, request is null ? [] : [request]));
+        _hallCalls = _hallCalls.Add(request is null
+            ? new HallCall(floor, direction, Now)
+            : new HallCall(floor, direction, Now, ImmutableList.Create(request)) { Totals = DestinationTotals.Empty.Add(request) });
         Version++;
         Emit(new HallCallRegistered(Now, floor, direction, Id));
 
@@ -338,7 +342,7 @@ public sealed class Elevator
     public void Board(Request rider)
     {
         _riders = _riders.Add(rider);
-        _load += rider.Load;
+        _riderTotals = _riderTotals.Add(rider);
         Version++;
         AddRequest(rider.DestinationFloor);
         if (IsFull) ReleaseAllPickups(AssignmentReason.BypassedFull);
@@ -349,7 +353,7 @@ public sealed class Elevator
     {
         var index = _riders.FindIndex(r => r.Id == requestId);
         if (index < 0) return;
-        _load -= _riders[index].Load;
+        _riderTotals = _riderTotals.Remove(_riders[index]);
         _riders = _riders.RemoveAt(index);
         Version++;
     }
@@ -361,8 +365,11 @@ public sealed class Elevator
         if (index < 0) return false;
 
         var call = _hallCalls[index];
-        var remaining = call.Requests.Where(r => r.Id != requestId).ToArray();
-        _hallCalls = remaining.Length == 0 ? _hallCalls.RemoveAt(index) : _hallCalls.SetItem(index, call with { Requests = remaining });
+        var removed = call.Requests.First(r => r.Id == requestId);
+        var remaining = call.Requests.Where(r => r.Id != requestId).ToImmutableList();
+        _hallCalls = remaining.Count == 0
+            ? _hallCalls.RemoveAt(index)
+            : _hallCalls.SetItem(index, call with { Requests = remaining, Totals = call.Totals.Remove(removed) });
         Version++;
         return true;
     }

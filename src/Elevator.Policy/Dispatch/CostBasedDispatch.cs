@@ -21,8 +21,9 @@ public sealed record CostEvaluation(double Cost, double EtaS, double AddedDelayS
 ///     cost = ETA + λ·ΔD + μ·L̂/C
 ///
 /// <list type="bullet">
-/// <item><b>ETA</b>: seconds from now until the request would be picked up, from a <see cref="RouteProjection"/> of the
-/// elevator with the request inserted, using the elevator's own scheduling policy.</item>
+/// <item><b>ETA</b>: seconds from now until the request would be picked up, from a <see cref="StopProjection"/> of the
+/// elevator with the request inserted, using the elevator's own scheduling policy and mechanics (per stop, so the
+/// cost of a decision does not grow with the number of people queued).</item>
 /// <item><b>ΔD</b>: total extra time every passenger already riding or assigned to that elevator would spend before
 /// their drop-off, compared with the projection without the request. This is what stops a nearly-there elevator from
 /// detouring its riders for a newcomer.</item>
@@ -34,9 +35,11 @@ public sealed record CostEvaluation(double Cost, double EtaS, double AddedDelayS
 /// </summary>
 public sealed class CostBasedDispatch(ISchedulingPolicy scheduling, ElevatorTiming timing, CostWeights? weights = null, string name = "cost") : IDispatchPolicy
 {
-    private readonly RouteProjection _projection = new(scheduling, timing);
+    private readonly StopProjection _projection = new(scheduling, timing);
     private readonly CostWeights _weights = weights ?? CostWeights.Default;
-    private readonly Dictionary<int, (long Version, long AtMs, RouteProjection.Result Result)> _baselines = []; // latest per elevator
+    // Latest per elevator, keyed by the snapshot object itself. Not by (version, time): rebalancing evaluates derived
+    // snapshots (the same elevator with one request removed) that share the version but not the content.
+    private readonly Dictionary<int, (ElevatorSnapshot Snapshot, StopProjection.Outcome Result)> _baselines = [];
 
     public string Name => name;
 
@@ -62,10 +65,7 @@ public sealed class CostBasedDispatch(ISchedulingPolicy scheduling, ElevatorTimi
         if (with.LoadAtPickup >= s.BypassThreshold * s.Capacity || with.LoadAtPickup + r.Load > s.Capacity)
             return CostEvaluation.Ineligible(with.LoadAtPickup);
 
-        var without = Baseline(s, now);
-        var addedDelayMs = 0L;
-        foreach (var (id, completion) in without.Completions)
-            addedDelayMs += (with.Completions.TryGetValue(id, out var c) ? c : with.Horizon).Ms - completion.Ms;
+        var addedDelayMs = StopProjection.AddedDelayMs(Baseline(s, now), with);
 
         var etaS = Math.Max(0, pickupAt.Ms - now.Ms) / 1000.0;
         var addedDelayS = addedDelayMs / 1000.0;
@@ -75,14 +75,14 @@ public sealed class CostBasedDispatch(ISchedulingPolicy scheduling, ElevatorTimi
 
     /// <summary>
     /// Projection without the new request. With no input its future does not depend on when we look, so it is
-    /// cached per snapshot version; completions before <paramref name="now"/> appear in both projections and cancel out in ΔD.
+    /// cached per snapshot; completions before <paramref name="now"/> appear in both projections and cancel out in ΔD.
     /// </summary>
-    private RouteProjection.Result Baseline(ElevatorSnapshot s, SimTime now)
+    private StopProjection.Outcome Baseline(ElevatorSnapshot s, SimTime now)
     {
         // One entry per elevator (its latest snapshot): bounded memory however long the system runs.
-        if (_baselines.TryGetValue(s.ElevatorId, out var cached) && cached.Version == s.Version && cached.AtMs == s.At.Ms) return cached.Result;
+        if (_baselines.TryGetValue(s.ElevatorId, out var cached) && ReferenceEquals(cached.Snapshot, s)) return cached.Result;
         var result = _projection.Project(s, null, now);
-        _baselines[s.ElevatorId] = (s.Version, s.At.Ms, result);
+        _baselines[s.ElevatorId] = (s, result);
         return result;
     }
 }
