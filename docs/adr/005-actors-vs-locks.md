@@ -93,3 +93,14 @@ Real clock and real threads, on an M2 Pro (10 cores), on a quiet machine. Full n
   limit, not a realistic load.
 - **Next steps.** If needed, shard the dispatcher per bank (not per zone, which would break group optimality within a
   bank), and assign in batches as an assignment problem (Hungarian / grouping by destination).
+
+## Amendment: injection seam (shared v3 contract, `a00d01f`)
+
+Both shells gained the same entry point for fault and operator commands:
+- `SimEngine.Post(to, message)` in the simulator;
+- `ElevatorSystem.Post(to, message)` in the actor runtime (a write to the actor's mailbox).
+
+`IFaultInjector` (default `NoOpFaultInjector`) is the interface built on top of them, implemented by the Hard stage
+for both shells. Commands are still messages to the single owner of each handler, so there is no shared state and
+no lock. Whether an emergency stop needs to jump the mailbox queue (a priority channel or a flag) is Stage 4's
+decision, in ADR-013.

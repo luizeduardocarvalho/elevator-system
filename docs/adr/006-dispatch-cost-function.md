@@ -196,3 +196,14 @@ dispatcher time per request in a 1k burst.
   keep hitting. It is skipped in overload mode, where the fallback must stay cheap.
 - *Effect on results.* next-trip results are unchanged. Defer-mode files m1–m4 move by at most 0.1 s in means
   (deferred retries now see pickups just accepted), and are annotated to reproduce exactly at `d5864a0`.
+
+## Amendment: explaining a decision (shared v3 contract, `a00d01f`)
+
+`DispatchContext.Explain` asks a dispatch policy to report **every candidate's cost** in `DispatchChoice.Candidates`
+(null cost = ineligible, ∞). RoundRobin, Nearest and Cost all do; Cost adds an `eta + λ·ΔD + μ·L̂/C` note.
+- With `DispatcherOptions.EmitDispatchEvaluations`, the dispatcher logs this as `DispatchEvaluated`, just before
+  each `AssignmentProposed`. The TUI's ASSIGN line uses it.
+- Explaining never changes a decision. A test removes the extra lines and recovers the plain log byte for byte.
+- It is off by default, so bench logs are unchanged.
+- Eligibility policies added by Stage 4 (ADR-012) must keep reporting their candidates. Access refusals are logged
+  separately as `AccessDenied`.

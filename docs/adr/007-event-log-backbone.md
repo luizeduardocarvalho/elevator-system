@@ -51,3 +51,19 @@ on internal state, and two runs could not be compared after the fact.
   (`RuntimeOptions.KeepEvents = false`) instead of keeping the log in memory. The heap stays flat (perf soak).
 - **Order in the actor runtime is per arrival at the writer.** Events from different actors can be a few ms out of
   sim-time order, so consumers that need chronology sort by `t` (stable) first. The cross-check test does this.
+
+## Amendment: v3 events (shared v3 contract, `a00d01f`)
+
+New event types, all defined before anything emits them, so the TUI and the Hard stage can be built in parallel
+against them:
+- `MaintenanceRequested`, `MaintenanceEntered`, `MaintenanceExited`;
+- `EmergencyStopped`, `EmergencyCleared`;
+- `FaultDetected`, `FaultRecovered`;
+- `AccessDenied`;
+- `FaultCommandApplied`: an operator or scheduled command took effect, so `replay` reproduces injected runs;
+- `DispatchEvaluated`: opt-in (ADR-006).
+
+`AssignmentReleased` gains the reasons `Fault` and `Emergency`.
+
+Every type round-trips through JSONL (tested), and no default run emits any of them. The full list and the owners
+are in [contract-v3.md](../contract-v3.md).

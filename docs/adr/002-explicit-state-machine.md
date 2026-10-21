@@ -49,3 +49,13 @@ changes spread across `if`s in many methods are hard to review and impossible to
   that every `StateChanged` is a table edge, and that the floor changes only while moving, by one floor, within
   1..10. A mutation check (moving two floors per step, or forgetting to clear a car call) is caught at once.
 - A new behaviour such as an emergency stop means a new trigger plus new rows in one place, recorded in an ADR.
+
+## Amendment: operating mode (shared v3 contract, `a00d01f`)
+
+Maintenance draining, emergency stops and watchdog faults (Stage 4) need modes the spec's `ElevatorState` does not
+have, and that enum stays frozen. The contract therefore adds a separate **`ElevatorMode`** (Normal, Draining,
+Maintenance, Emergency, Fault), carried on `ElevatorSnapshot.Mode`.
+- The transition table is unchanged by the contract.
+- Any new triggers the Hard stage needs go through this table, with its own ADR (013).
+- `ElevatorState.Maintenance` remains the parked state; `ElevatorMode.Maintenance` mirrors it, and
+  `ElevatorMode.Draining` precedes it.

@@ -16,4 +16,6 @@
 | 012 | Eligibility policies and elevator types | Reserved for Stage 4 |
 | 013 | Maintenance, emergency, watchdog and reassignment | Reserved for Stage 4 |
 
-The interface between Stages 3 and 4 is the [shared v3 contract](../contract-v3.md).
+The interface between Stages 3 and 4 is the [shared v3 contract](../contract-v3.md). The ADRs it touches carry an
+amendment section: 002 (ElevatorMode), 003 (steppable engine), 005 (injection seam), 006 (explained decisions),
+007 (v3 events) and 008 (new release reasons).

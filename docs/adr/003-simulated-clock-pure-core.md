@@ -46,3 +46,14 @@ that matters once several elevators and concurrent requests exist (Medium level)
   one loop has no shared state. Medium adds it without touching the domain.
 - The simplified physics affects absolute numbers but not comparisons between strategies, which all run on the
   same model.
+
+## Amendment: steppable engine (shared v3 contract, `a00d01f`)
+
+The TUI needs to drive the simulation tick by tick, so the deterministic runner is now public as
+`SimEngine.Create` → `AdvanceTo(t)` (any step sizes) → `Finish()`. `Run` is exactly that loop with fixed ticks.
+
+- **The tick-size guarantee still holds, now at the API level.** A property test checks that random step sequences
+  give a log byte-identical to `Run`'s.
+- **Commands enter only in sim time.** `Post(to, message)` delivers at `Now`, after anything already due, so
+  operator and fault commands stay deterministic and replayable.
+- **Read-only views for rendering.** `Elevators` and `Waiting` are views that never drive the engine.

@@ -77,3 +77,13 @@ consecutive events, which is exact and equivalent to infinitely fine ticks. The 
   not from within a run.
 - **Wall-clock results depend on the machine and its load.** They are reported with core count, runtime and OS
   version (`perf` writes these), and re-measured when the machine is quiet.
+
+## Amendment: new release reasons (shared v3 contract, `a00d01f`)
+
+Until Stage 4 says otherwise (ADR-013):
+- a pickup handed back with reason `Fault`, `Emergency` or `Maintenance` counts as `reassignment` time, by the
+  existing rule that every release other than full-load bypass is a reassignment;
+- time assigned to an elevator in `ElevatorState.Maintenance` counts as `blocked`.
+
+Ops metrics (maintenance time, emergency stops and their duration, faults, time to detect and to recover) will be
+computed from the new events, from the log alone, like every other metric.
