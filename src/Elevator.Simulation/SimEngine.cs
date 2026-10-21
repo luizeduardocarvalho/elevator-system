@@ -122,7 +122,7 @@ public sealed class SimEngine
     /// <summary>Sim time reached so far (the target of the last <see cref="AdvanceTo"/>, or the finish time).</summary>
     public SimTime Now { get; private set; } = SimTime.Zero;
 
-    /// <summary>Everyone delivered and every elevator idle, or the scenario's max sim time reached.</summary>
+    /// <summary>Everyone delivered (or refused by access policy) and every elevator idle or parked, or the scenario's max sim time reached.</summary>
     public bool Finished { get; private set; }
 
     /// <summary>When the run finished (the last event's time, or the max sim time).</summary>
@@ -203,7 +203,7 @@ public sealed class SimEngine
 
     private bool AllDone =>
         _passengers.Arrived == _expectedPassengers && _passengers.Delivered + _passengers.Refused == _expectedPassengers
-        && _elevators.All(e => e.Elevator.State == ElevatorState.Idle && e.Elevator.NextDeadline is null);
+        && _elevators.All(e => e.Elevator.State is ElevatorState.Idle or ElevatorState.Maintenance && e.Elevator.NextDeadline is null);
 
     /// <summary>Delivers every message due at or before <paramref name="target"/>; returns the finish time if the run completed.</summary>
     private SimTime? DrainUntil(SimTime target)

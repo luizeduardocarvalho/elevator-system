@@ -17,7 +17,8 @@ public sealed record ElevatorHandlerOptions(long SnapshotDelayMs = 0, long Stale
 ///
 /// Accept/reject, in priority order:
 /// <list type="number">
-/// <item>Maintenance → reject (always wins).</item>
+/// <item>Out of service (draining or parked for maintenance, emergency stop, fault; ADR-013) → reject with that reason
+/// (always wins).</item>
 /// <item>Capacity → reject (always wins): in Defer mode when full now; in NextTrip mode only if the request can never
 /// fit (its load exceeds the capacity), since a full elevator serves it on a later trip (ADR-010).</item>
 /// <item>Stale: our own ETA exceeds the dispatcher's estimate by more than the tolerance → reject, unless the
@@ -90,6 +91,8 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
         {
             FaultKind.Stuck => Stick(command, now),
             FaultKind.Unstick => Unstick(),
+            FaultKind.MaintenanceOn => Elevator.RequestMaintenance(),
+            FaultKind.MaintenanceOff => Elevator.EndMaintenance(),
             _ => false,
         };
         if (!applied) return;
@@ -131,6 +134,13 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
 
     private AssignmentReason? RejectionReason(Assign assign, SimTime now)
     {
+        // Out of service (ADR-013): always wins, even over a forced assignment.
+        switch (Elevator.Mode)
+        {
+            case ElevatorMode.Draining or ElevatorMode.Maintenance: return AssignmentReason.Maintenance;
+            case ElevatorMode.Emergency: return AssignmentReason.Emergency;
+            case ElevatorMode.Fault: return AssignmentReason.Fault;
+        }
         if (Elevator.State == ElevatorState.Maintenance) return AssignmentReason.Maintenance;
         // Defer mode: full now means no. NextTrip mode: a full elevator takes it for a later trip, unless it can never fit.
         if (Elevator.CapacityMode == CapacityMode.Defer ? Elevator.IsFull : assign.Request.Load > Elevator.Capacity)

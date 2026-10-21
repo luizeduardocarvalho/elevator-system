@@ -37,6 +37,7 @@ public sealed class Elevator
     private readonly List<DomainEvent> _outbox = [];
 
     private SimTime? _deadline;       // end of the current timed phase; null in Idle/Maintenance, and while stuck
+    private bool _maintenanceRequested; // draining, then parked (ADR-013)
     private bool _stuck;              // the drive is stuck (fault injection, ADR-013): no phase completes
     private long? _frozenMs;          // while stuck: what is left of the current phase
     private SimTime _closingStartedAt; // used to compute how long a reopen takes
@@ -123,6 +124,15 @@ public sealed class Elevator
 
     public ElevatorState State { get; private set; } = ElevatorState.Idle;
 
+    /// <summary>
+    /// Operating mode (ADR-013), alongside the spec's state: Draining while maintenance is requested and riders are
+    /// still on board, Maintenance once parked. Only a Normal elevator takes new assignments.
+    /// </summary>
+    public ElevatorMode Mode =>
+        State == ElevatorState.Maintenance ? ElevatorMode.Maintenance
+        : _maintenanceRequested ? ElevatorMode.Draining
+        : ElevatorMode.Normal;
+
     /// <summary>Direction of travel while moving; the lit lantern while stopped; null when there is no work.</summary>
     public Direction? CommittedDirection { get; private set; }
 
@@ -156,6 +166,7 @@ public sealed class Elevator
             Timing = _timing,
             TypeName = TypeName,
             ServedFloors = ServedFloors,
+            Mode = Mode,
         };
 
     /// <summary>What the scheduling policy sees: while bypassing, only the drop-offs.</summary>
@@ -441,7 +452,11 @@ public sealed class Elevator
         if (State != ElevatorState.Idle) return;
 
         var target = _policy.Decide(PolicyView()).Target;
-        if (target is null) CommittedDirection = null;
+        if (target is null)
+        {
+            CommittedDirection = null;
+            ParkIfDrained();
+        }
         else if (target == CurrentFloor) OpenDoor();
         else if (target > CurrentFloor) MoveUp();
         else MoveDown();
@@ -488,6 +503,46 @@ public sealed class Elevator
     {
         if (_stuck) _frozenMs = ms;
         else _deadline = Now.AddMs(ms);
+    }
+
+    // ---- Maintenance (ADR-013) ---------------------------------------------------------------------------
+
+    /// <summary>
+    /// Maintenance requested: the elevator drains. It takes no new assignment (Mode = Draining), hands every pending
+    /// pickup back at once (released with reason Maintenance, so the dispatcher reassigns them now rather than after the
+    /// riders are delivered), and keeps delivering its riders. Once it is idle and empty it parks where it is.
+    /// </summary>
+    /// <returns>False if maintenance was already requested or it is already parked.</returns>
+    public bool RequestMaintenance()
+    {
+        if (_maintenanceRequested || State == ElevatorState.Maintenance) return false;
+        _maintenanceRequested = true;
+        Version++;
+        Emit(new MaintenanceRequested(Now, Id));
+        ReleaseAllPickups(AssignmentReason.Maintenance);
+        DecideFromIdle(); // idle and empty: parks now
+        return true;
+    }
+
+    /// <summary>Back in service: leaves the parked state (Maintenance → Idle), or cancels a drain still in progress.</summary>
+    /// <returns>False if there was no maintenance to end.</returns>
+    public bool EndMaintenance()
+    {
+        if (!_maintenanceRequested && State != ElevatorState.Maintenance) return false;
+        _maintenanceRequested = false;
+        Version++;
+        if (State == ElevatorState.Maintenance) Fire(Trigger.ExitMaintenance);
+        Emit(new MaintenanceExited(Now, Id));
+        DecideFromIdle();
+        return true;
+    }
+
+    /// <summary>Draining, idle and nobody on board: park here (the table's Idle → Maintenance edge).</summary>
+    private void ParkIfDrained()
+    {
+        if (!_maintenanceRequested || State != ElevatorState.Idle || _riders.Count > 0) return;
+        Fire(Trigger.EnterMaintenance);
+        Emit(new MaintenanceEntered(Now, Id, CurrentFloor));
     }
 
     // ---- Stuck drive (fault injection, ADR-013) ---------------------------------------------------------
