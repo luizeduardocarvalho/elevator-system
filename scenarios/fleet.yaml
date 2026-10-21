@@ -1,0 +1,36 @@
+# Typed fleet (ADR-012): the lunch profile on a building with two locals, an express and a freight elevator, a
+# restricted penthouse and a VIP-dedicated elevator. Generated visitors have no badge, so their trips to or from the
+# penthouse are refused by policy (reported, never lost); the scripted passengers below show VIPs, badges and freight.
+name: fleet
+seed: 1
+building:
+  floors: 20
+  capacity: 10
+  bypassThreshold: 0.8
+  types:
+    local: {}                                                    # 2 s per floor, every floor, 10 units
+    express: { floorTravelMs: 1000, servedFloors: [1, 11-20] }   # lobby + upper half, twice as fast
+    freight: { floorTravelMs: 2500, doorDwellMs: 6000, capacity: 20 }
+  fleet: [local, local, express, freight]
+access:
+  restrictedFloors: { 20: 1 }      # the penthouse needs access level 1
+  vip: { priority: true, dedicated: [] }
+scheduling: look
+dispatch: cost
+maxSimTimeS: 5400
+traffic:
+  profile:
+    lobby: 1
+    mix: { fromLobby: 0.40, toLobby: 0.40, interfloor: 0.20 }
+    rate:
+      - { atS: 0,    perMinute: 4 }
+      - { atS: 450,  perMinute: 12 }
+      - { atS: 900,  perMinute: 6 }
+      - { atS: 1350, perMinute: 12 }
+      - { atS: 1800, perMinute: 4 }
+passengers:
+  - { at: 30,  from: 1,  to: 20, accessLevel: 1 }     # a resident with a badge
+  - { at: 60,  from: 1,  to: 20 }                     # a visitor without one: refused
+  - { at: 90,  from: 1,  to: 9,  load: 15 }           # a pallet: only the freight carries 15 units
+  - { at: 120, from: 1,  to: 17, vip: true }          # a VIP, dispatched first when anything is pending
+  - { at: 150, from: 16, to: 1,  load: 12 }

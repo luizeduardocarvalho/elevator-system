@@ -5,8 +5,12 @@ namespace Elevator.Domain;
 /// state changes: <see cref="Elevator"/> never assigns its state directly, it asks this table.
 ///
 /// The safety invariant "never moves unless the doors are closed" is structural here: the only edges into
-/// MovingUp/MovingDown leave from Idle, and Idle is only reached from DoorClosing via DoorsFullyClosed
-/// (or from Maintenance, which is entered from Idle). There is no edge from any door state to a moving state.
+/// MovingUp/MovingDown leave from Idle, and Idle is only reached from DoorClosing via DoorsFullyClosed, from a moving
+/// state via EmergencyHalt (doors closed all along), or from Maintenance (entered from Idle). There is no edge from any
+/// door state to a moving state.
+///
+/// The emergency edges (ADR-013) reuse the spec's states: a halted elevator is Idle (stationary, doors closed); its
+/// <see cref="ElevatorMode.Emergency"/> mode is what keeps it there until cleared.
 /// </summary>
 public static class TransitionTable
 {
@@ -23,6 +27,10 @@ public static class TransitionTable
         [(ElevatorState.DoorClosing, Trigger.Reopen)] = ElevatorState.DoorOpening,
         [(ElevatorState.Idle, Trigger.EnterMaintenance)] = ElevatorState.Maintenance,
         [(ElevatorState.Maintenance, Trigger.ExitMaintenance)] = ElevatorState.Idle,
+        [(ElevatorState.MovingUp, Trigger.EmergencyHalt)] = ElevatorState.Idle,
+        [(ElevatorState.MovingDown, Trigger.EmergencyHalt)] = ElevatorState.Idle,
+        [(ElevatorState.DoorOpening, Trigger.EmergencyClose)] = ElevatorState.DoorClosing,
+        [(ElevatorState.DoorOpen, Trigger.EmergencyClose)] = ElevatorState.DoorClosing,
     };
 
     public static IReadOnlyDictionary<(ElevatorState From, Trigger Trigger), ElevatorState> Transitions => Table;

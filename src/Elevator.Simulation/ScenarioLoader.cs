@@ -44,7 +44,10 @@ public static class ScenarioLoader
         var floors = dto.Building?.Floors ?? dto.Floors ?? 10;
         if (floors < 2) errors.Add($"floors must be at least 2 (got {floors})");
 
-        var elevators = dto.Building?.Elevators ?? 1;
+        var fleetNames = dto.Building?.Fleet;
+        if (fleetNames is not null && dto.Building?.Elevators is { } count && count != fleetNames.Count)
+            errors.Add($"building.elevators ({count}) does not match building.fleet ({fleetNames.Count} entries)");
+        var elevators = fleetNames?.Count ?? dto.Building?.Elevators ?? 1;
         if (elevators < 1) errors.Add($"building.elevators must be at least 1 (got {elevators})");
         var capacity = dto.Building?.Capacity ?? 10;
         if (capacity < 1) errors.Add($"building.capacity must be at least 1 (got {capacity})");
@@ -79,6 +82,16 @@ public static class ScenarioLoader
             dto.Timing?.DoorClosingMs ?? ElevatorTiming.Default.DoorClosingMs);
         errors.AddRange(timing.Validate().Select(e => $"timing: {e}"));
 
+        var fleet = LoadFleet(dto.Building, floors, timing, capacity, errors);
+
+        var access = LoadAccess(dto.Access, floors, elevators, errors);
+        var watchdogMs = Scenario.DefaultWatchdogTimeoutMs;
+        if (dto.Watchdog?.TimeoutS is { } timeoutS)
+        {
+            if (timeoutS <= 0) errors.Add($"watchdog.timeoutS must be > 0 (got {timeoutS})");
+            else watchdogMs = SimTime.FromSeconds(timeoutS).Ms;
+        }
+
         var passengers = new List<PassengerSpec>();
         foreach (var (p, i) in (dto.Passengers ?? []).Select((p, i) => (p, i)))
         {
@@ -97,9 +110,10 @@ public static class ScenarioLoader
                 else errors.Add($"{where}: direction must be 'up' or 'down' (got '{text}')");
             }
 
-            var request = Request.Create(from, to, SimTime.FromSeconds(at), floors, declared);
+            if (p.AccessLevel is < 0) errors.Add($"{where}: 'accessLevel' must be >= 0");
+            var request = Request.Create(from, to, SimTime.FromSeconds(at), floors, declared, load: p.Load ?? 1);
             if (!request.IsSuccess) errors.Add($"{where}: {request.Error}");
-            else passengers.Add(new PassengerSpec(SimTime.FromSeconds(at), from, to));
+            else passengers.Add(new PassengerSpec(SimTime.FromSeconds(at), from, to) { Vip = p.Vip ?? false, AccessLevel = p.AccessLevel ?? 0, Load = p.Load ?? 1 });
         }
 
         PoissonTraffic? traffic = null;
@@ -160,7 +174,64 @@ public static class ScenarioLoader
             profile,
             latency,
             capacityMode,
-            faults.OrderBy(f => f.At).ToList()), []);
+            faults.OrderBy(f => f.At).ToList()) { Fleet = fleet, Access = access, WatchdogTimeoutMs = watchdogMs }, []);
+    }
+
+    /// <summary><c>access:</c> floor restrictions and VIP service (ADR-012).</summary>
+    private static AccessConfig LoadAccess(AccessDto? dto, int floors, int elevators, List<string> errors)
+    {
+        if (dto is null) return AccessConfig.None;
+        var restricted = new Dictionary<int, int>();
+        foreach (var (floor, level) in dto.RestrictedFloors ?? [])
+        {
+            if (Floors.Check(floor, floors) is { } error) errors.Add($"access.restrictedFloors: {error}");
+            else if (level < 1) errors.Add($"access.restrictedFloors: floor {floor} needs a level >= 1 (got {level})");
+            else restricted[floor] = level;
+        }
+        var dedicated = dto.Vip?.Dedicated ?? [];
+        foreach (var e in dedicated.Where(e => e < 0 || e >= elevators))
+            errors.Add($"access.vip.dedicated: elevator {e} does not exist (0..{elevators - 1})");
+        return new AccessConfig(restricted, [.. dedicated.Distinct().Order()], dto.Vip?.Priority ?? false);
+    }
+
+    /// <summary>
+    /// building.types + building.fleet (ADR-012). A type's missing fields default to the scenario's timing and
+    /// capacity, and to every floor. Without a fleet the building has standard elevators only (null).
+    /// </summary>
+    private static List<ElevatorType>? LoadFleet(BuildingDto? building, int floors, ElevatorTiming timing, int capacity, List<string> errors)
+    {
+        var types = new Dictionary<string, ElevatorType>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (name, t) in building?.Types ?? [])
+        {
+            var where = $"building.types.{name}";
+            var typeTiming = new ElevatorTiming(
+                t?.FloorTravelMs ?? timing.FloorTravelMs, t?.DoorOpeningMs ?? timing.DoorOpeningMs,
+                t?.DoorDwellMs ?? timing.DoorDwellMs, t?.DoorClosingMs ?? timing.DoorClosingMs);
+            errors.AddRange(typeTiming.Validate().Select(e => $"{where}: {e}"));
+            var typeCapacity = t?.Capacity ?? capacity;
+            if (typeCapacity < 1) errors.Add($"{where}: capacity must be at least 1 (got {typeCapacity})");
+            var served = FloorMask.All;
+            if (t?.ServedFloors is { } list)
+            {
+                var parsed = FloorMask.Parse(list, floors);
+                if (parsed.IsSuccess) served = parsed.Value;
+                else errors.Add($"{where}.servedFloors: {parsed.Error}");
+            }
+            types[name] = new ElevatorType(name, typeTiming, typeCapacity, served);
+        }
+
+        if (building?.Fleet is not { } names)
+        {
+            if (types.Count > 0) errors.Add("building.types is given but building.fleet is missing");
+            return null;
+        }
+        var fleet = new List<ElevatorType>();
+        foreach (var (name, i) in names.Select((n, i) => (n, i)))
+        {
+            if (types.TryGetValue(name, out var type)) fleet.Add(type);
+            else errors.Add($"building.fleet[{i}]: unknown type '{name}' (known: {string.Join(", ", types.Keys)})");
+        }
+        return fleet;
     }
 
     // YAML shape. Everything nullable so missing keys can be reported instead of silently defaulting to 0.
@@ -178,6 +249,25 @@ public static class ScenarioLoader
         public List<PassengerDto>? Passengers { get; set; }
         public TrafficDto? Traffic { get; set; }
         public List<FaultDto>? Faults { get; set; }
+        public AccessDto? Access { get; set; }
+        public WatchdogDto? Watchdog { get; set; }
+    }
+
+    private sealed class WatchdogDto
+    {
+        public double? TimeoutS { get; set; }
+    }
+
+    private sealed class AccessDto
+    {
+        public Dictionary<int, int>? RestrictedFloors { get; set; }
+        public VipDto? Vip { get; set; }
+    }
+
+    private sealed class VipDto
+    {
+        public bool? Priority { get; set; }
+        public List<int>? Dedicated { get; set; }
     }
 
     private sealed class FaultDto
@@ -202,6 +292,19 @@ public static class ScenarioLoader
         public int? From { get; set; }
         public int? To { get; set; }
         public string? Direction { get; set; }
+        public bool? Vip { get; set; }
+        public int? AccessLevel { get; set; }
+        public int? Load { get; set; }
+    }
+
+    private sealed class ElevatorTypeDto
+    {
+        public int? FloorTravelMs { get; set; }
+        public int? DoorOpeningMs { get; set; }
+        public int? DoorDwellMs { get; set; }
+        public int? DoorClosingMs { get; set; }
+        public int? Capacity { get; set; }
+        public List<string>? ServedFloors { get; set; }
     }
 
     private sealed class TrafficDto
@@ -217,6 +320,8 @@ public static class ScenarioLoader
         public int? Capacity { get; set; }
         public double? BypassThreshold { get; set; }
         public string? CapacityMode { get; set; }
+        public Dictionary<string, ElevatorTypeDto?>? Types { get; set; }
+        public List<string>? Fleet { get; set; }
     }
 
     private sealed class LatencyDto

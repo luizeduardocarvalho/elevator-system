@@ -24,7 +24,30 @@ public sealed record RuntimeOptions(
 {
     public ElevatorTiming EffectiveTiming => Timing ?? ElevatorTiming.Default;
 
+    /// <summary>Each elevator's type (ADR-012); null = <see cref="Elevators"/> standard elevators.</summary>
+    public IReadOnlyList<ElevatorType>? Fleet { get; init; }
+
+    public IReadOnlyList<ElevatorType> EffectiveFleet =>
+        Fleet ?? [.. Enumerable.Repeat(ElevatorType.Standard(EffectiveTiming, Capacity), Elevators)];
+
+    /// <summary>
+    /// Create the system without starting its actors; <see cref="ElevatorSystem.Resume"/> starts them. Lets a caller
+    /// queue messages first (tests of mailbox priority).
+    /// </summary>
+    public bool StartPaused { get; init; }
+
+    /// <summary>Floor restrictions and VIP service (ADR-012).</summary>
+    public AccessConfig Access { get; init; } = AccessConfig.None;
+
+    /// <summary>Watchdog timeout in sim ms (ADR-013); null = no watchdog.</summary>
+    public long? WatchdogTimeoutMs { get; init; } = Scenario.DefaultWatchdogTimeoutMs;
+
     public static RuntimeOptions From(Scenario s, double speed) =>
         new(s.Floors, s.Elevators, s.Capacity, s.BypassThreshold, s.Scheduling, s.Dispatch, Speed: speed, Timing: s.Timing, Latency: s.Latency,
-            CapacityMode: s.CapacityMode);
+            CapacityMode: s.CapacityMode)
+        {
+            Fleet = s.Fleet,
+            Access = s.Access,
+            WatchdogTimeoutMs = s.WatchdogTimeoutMs,
+        };
 }

@@ -25,18 +25,61 @@ public sealed record Scenario(
     CapacityMode CapacityMode = CapacityMode.NextTrip,
     IReadOnlyList<FaultCommand>? Faults = null)
 {
-    /// <summary>Scheduled fault and operator commands (shared v3 contract); not acted on until the Hard stage.</summary>
+    /// <summary>Scheduled fault and operator commands (shared v3 contract), applied at their sim time (ADR-013).</summary>
     public IReadOnlyList<FaultCommand> FaultSchedule => Faults ?? [];
+
+    /// <summary>
+    /// The type of each elevator, by index (ADR-012). Null = <see cref="Elevators"/> standard elevators built from
+    /// <see cref="Timing"/> and <see cref="Capacity"/> (the default; behaves exactly as before types existed).
+    /// </summary>
+    public IReadOnlyList<ElevatorType>? Fleet { get; init; }
+
+    public IReadOnlyList<ElevatorType> EffectiveFleet =>
+        Fleet ?? [.. Enumerable.Repeat(ElevatorType.Standard(Timing, Capacity), Elevators)];
+
+    /// <summary>Floor restrictions and VIP service (ADR-012). Default: none.</summary>
+    public AccessConfig Access { get; init; } = AccessConfig.None;
+
+    /// <summary>Default watchdog timeout T (ADR-013): 30 s of sim time without progress while having work.</summary>
+    public const long DefaultWatchdogTimeoutMs = 30_000;
+
+    /// <summary>Watchdog timeout in sim ms (YAML <c>watchdog.timeoutS</c>); null = no watchdog.</summary>
+    public long? WatchdogTimeoutMs { get; init; } = DefaultWatchdogTimeoutMs;
+}
+
+/// <summary>Access configuration of a building (ADR-012); YAML <c>access:</c>.</summary>
+/// <param name="RestrictedFloors">Floor → minimum access level to be picked up there or taken there.</param>
+/// <param name="VipElevators">Elevators dedicated to VIPs (everyone else is denied on them).</param>
+/// <param name="VipPriority">VIP requests are dispatched first among pending requests.</param>
+public sealed record AccessConfig(IReadOnlyDictionary<int, int> RestrictedFloors, IReadOnlyList<int> VipElevators, bool VipPriority)
+{
+    public static AccessConfig None { get; } = new(new Dictionary<int, int>(), [], false);
 }
 
 /// <summary>An explicitly scripted passenger: arrives at <paramref name="At"/> on <paramref name="From"/>, wants <paramref name="To"/>.</summary>
-public sealed record PassengerSpec(SimTime At, int From, int To);
+public sealed record PassengerSpec(SimTime At, int From, int To)
+{
+    /// <summary>VIP passenger (priority, may use VIP-dedicated elevators; ADR-012).</summary>
+    public bool Vip { get; init; }
+
+    /// <summary>Access level for restricted floors (0 = none).</summary>
+    public int AccessLevel { get; init; }
+
+    /// <summary>Load units (a person is 1; freight more).</summary>
+    public int Load { get; init; } = 1;
+}
 
 public sealed record Passenger(int Id, SimTime ArrivesAt, int From, int To)
 {
     public Direction Direction => Directions.Between(From, To)!.Value;
 
-    public Request ToRequest() => new(From, To, Direction, ArrivesAt, Id);
+    public bool Vip { get; init; }
+
+    public int AccessLevel { get; init; }
+
+    public int Load { get; init; } = 1;
+
+    public Request ToRequest() => new(From, To, Direction, ArrivesAt, Id, Load) { Vip = Vip, AccessLevel = AccessLevel };
 }
 
 /// <summary>Sim-time delays on control messages, to model a dispatcher working from stale snapshots (default: none).</summary>

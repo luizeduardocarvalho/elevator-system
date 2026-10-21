@@ -124,7 +124,7 @@ the progression is in [docs/results.md](results.md).
 
 ## v3: Hard
 
-To be written: elevator types, maintenance and emergency stops (with watchdog and fault injection), floor
+To be written at merge: elevator types, maintenance and emergency stops (with watchdog and fault injection), floor
 restrictions and VIP, and the TUI.
 
 ### TUI note (stage 3; the full v3 section is written at merge)
@@ -144,3 +144,23 @@ flowchart LR
 - **One fold for live and replay**, checked against `SimEngine.Elevators` / `Waiting`.
 - **Speed cannot change results:** 0.5×, 10× and headless give the same log hash.
 - **Seeking:** live re-simulates, re-applying the operator commands it recorded; replay re-folds the log.
+
+### Hard-stage note (stage 4)
+
+The v2 shape held. Types, eligibility and faults went
+into the pure core and the shared handlers, so both shells got them at once:
+- **Types are configuration** (`building.types`/`fleet`). The elevator and `StopProjection` replay each elevator's own
+  timing and served floors, so cost dispatch predicts an express as an express.
+- **Eligibility comes before cost.** A composable `IAccessPolicy` pipeline (served floors, capacity units, floor
+  restrictions, VIP) runs in the dispatcher once per request. A denied elevator is invisible to every dispatch path; a
+  request no elevator may take is refused, never lost.
+- **Out of service is a mode, not a state** (`ElevatorMode`). Two new transition-table edges: `EmergencyHalt` and
+  `EmergencyClose`.
+- **Commands are messages** (`ApplyFault`) to the elevator's single owner. Emergency stops preempt: a priority control
+  channel per actor, a priority key in the sim queue.
+- **The watchdog rides on the dispatcher's snapshot stream,** plus a per-floor progress report.
+- **Ops metrics come from the log only.**
+
+With faults off and the default config, every v2 result regenerates byte-identically.
+Results: [h1-chaos](results/h1-chaos.md), [h2-fleet](results/h2-fleet.md), [h3](results/h3-watchdog-timeout.md),
+[h4](results/h4-watchdog-false-positives.md).

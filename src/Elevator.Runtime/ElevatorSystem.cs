@@ -4,6 +4,7 @@ using System.Threading.Channels;
 using Elevator.Domain;
 using Elevator.Domain.Control;
 using Elevator.Domain.Events;
+using Elevator.Domain.Faults;
 using Elevator.Metrics;
 using Elevator.Policy;
 using Elevator.Policy.Dispatch;
@@ -12,6 +13,15 @@ using Elevator.Simulation;
 namespace Elevator.Runtime;
 
 public sealed record ActorStats(ActorKind Kind, int Actors, long Messages, WallDuration InHandlers, WallDuration Delivering);
+
+/// <summary>Every elevator's access policies refused the request (ADR-012); <see cref="ElevatorSystem.AssignRequest"/> throws it.</summary>
+public sealed class RequestRefusedException(int requestId, string policy, string reason)
+    : InvalidOperationException($"request {requestId} refused by access policy '{policy}': {reason}")
+{
+    public int RequestId { get; } = requestId;
+
+    public string Policy { get; } = policy;
+}
 
 /// <summary>An accepted assignment, as seen by whoever submitted the request.</summary>
 public sealed record Assignment(int RequestId, int ElevatorId, WallDuration Latency);
@@ -61,25 +71,51 @@ public sealed class ElevatorSystem : IAsyncDisposable
         var latency = options.Latency ?? MessageLatency.None;
         var estimator = new StopProjection(scheduling, timing);
 
+        var fleet = options.EffectiveFleet;
+        if (fleet.Count != options.Elevators)
+            throw new ArgumentException($"the fleet has {fleet.Count} elevators but the options say {options.Elevators}", nameof(options));
         for (var i = 0; i < options.Elevators; i++)
         {
-            var elevator = new Domain.Elevator(i, options.Floors, timing, scheduling, Floors.Lowest, options.Capacity, options.BypassThreshold, options.CapacityMode);
-            Add(new Actor(new ElevatorHandler(elevator, new ElevatorHandlerOptions(SnapshotDelayMs: latency.SnapshotMs), estimator), this));
+            var elevator = Building.CreateElevator(i, options.Floors, fleet[i], scheduling, options.BypassThreshold, options.CapacityMode);
+            var handlerOptions = new ElevatorHandlerOptions(SnapshotDelayMs: latency.SnapshotMs, ReportProgress: options.WatchdogTimeoutMs is not null);
+            Add(new Actor(new ElevatorHandler(elevator, handlerOptions, estimator), this));
         }
         var rebalance = options.Rebalance ? new HysteresisRebalance(scheduling, timing) : null;
         Add(new Actor(new DispatcherHandler(dispatch, options.Elevators, timing,
-            new DispatcherOptions(latency.DispatchMs, rebalance is null ? null : 5_000, options.OverloadThreshold), rebalance, new NearestDispatch()),
+            new DispatcherOptions(latency.DispatchMs, rebalance is null ? null : 5_000, options.OverloadThreshold)
+            {
+                Access = Building.CreateAccess(options.Access),
+                WatchdogTimeoutMs = options.WatchdogTimeoutMs,
+            },
+            rebalance, new NearestDispatch()),
             this, _requests.Reader));
-        Add(new Actor(new PassengersHandler(options.Capacity), this));
+        Add(new Actor(new PassengersHandler([.. fleet.Select(t => t.Capacity)]), this));
 
+        FaultInjector = new RuntimeFaultInjector(this);
         _logWriter = Task.Run(WriteLog);
-        foreach (var actor in _actors.Values) _loops.Add(actor.Start(_stop.Token));
         for (var i = 0; i < options.Elevators; i++) _actors[Address.Elevator(i)].Mailbox.Writer.TryWrite(new Start());
+        if (!options.StartPaused) Resume();
     }
+
+    /// <summary>Starts the actor loops of a system created with <see cref="RuntimeOptions.StartPaused"/>. Idempotent.</summary>
+    public void Resume()
+    {
+        if (Interlocked.Exchange(ref _started, 1) == 1) return;
+        foreach (var actor in _actors.Values) _loops.Add(actor.Start(_stop.Token));
+    }
+
+    private int _started;
 
     public static ElevatorSystem Start(RuntimeOptions options, Action<long, DomainEvent>? sink = null) => new(options, sink);
 
     public RealClock Clock { get; }
+
+    public int ElevatorCount => _options.Elevators;
+
+    /// <summary>Injects maintenance, emergency stops and faults (ADR-013), at their sim time on <see cref="Clock"/>.</summary>
+    public IFaultInjector FaultInjector { get; }
+
+    internal CancellationToken Stopping => _stop.Token;
 
     public string DispatchPolicy { get; }
 
@@ -90,7 +126,8 @@ public sealed class ElevatorSystem : IAsyncDisposable
 
     /// <summary>
     /// Submits <paramref name="request"/> and completes when an elevator has accepted it. Thread-safe; any number of
-    /// callers. Waits (asynchronously) while the request queue is full.
+    /// callers. Waits (asynchronously) while the request queue is full. Throws <see cref="RequestRefusedException"/> when
+    /// no elevator may serve it (access policies, ADR-012).
     /// </summary>
     public async Task<Assignment> AssignRequest(Request request, CancellationToken ct = default)
     {
@@ -130,9 +167,16 @@ public sealed class ElevatorSystem : IAsyncDisposable
 
     /// <summary>
     /// Delivers <paramref name="message"/> to the actor at <paramref name="to"/> (shared v3 contract: the injection seam
-    /// for fault and operator commands, as <c>SimEngine.Post</c> in the simulator).
+    /// for fault and operator commands, as <c>SimEngine.Post</c> in the simulator). An emergency stop goes to the actor's
+    /// priority control channel, ahead of its mailbox (ADR-013).
     /// </summary>
-    public void Post(Address to, Message message) => _actors[to].Mailbox.Writer.TryWrite(message);
+    public void Post(Address to, Message message)
+    {
+        var actor = _actors[to];
+        // Emergency stops preempt: the priority control channel is read before the mailbox (ADR-013).
+        var channel = message is ApplyFault { Command.Kind: FaultKind.EmergencyStop } ? actor.Control : actor.Mailbox;
+        channel.Writer.TryWrite(message);
+    }
 
     /// <summary>Spec's <c>requestQueue</c>: submissions waiting in the bounded request channel.</summary>
     public int RequestQueueLength => _requests.Reader.Count;
@@ -182,6 +226,10 @@ public sealed class ElevatorSystem : IAsyncDisposable
             case { To.Kind: ActorKind.Client, Message: RequestAssigned assigned }:
                 if (_pending.TryRemove(assigned.RequestId, out var p))
                     p.Tcs.TrySetResult(new Assignment(assigned.RequestId, assigned.ElevatorId, WallDuration.Since(p.Started)));
+                break;
+            case { To.Kind: ActorKind.Client, Message: RequestRefused refused }:
+                if (_pending.TryRemove(refused.RequestId, out var r))
+                    r.Tcs.TrySetException(new RequestRefusedException(refused.RequestId, refused.Policy, refused.Reason));
                 break;
             case { To.Kind: ActorKind.Client, Message: BestElevatorAnswer answer }:
                 if (_queries.TryRemove(answer.QueryId, out var query)) query.TrySetResult(answer.ElevatorId);

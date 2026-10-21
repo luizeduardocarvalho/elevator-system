@@ -1,11 +1,15 @@
 using Elevator.Domain.Events;
+using Elevator.Domain.Faults;
 
 namespace Elevator.Domain.Control;
 
 /// <param name="SnapshotDelayMs">Delay before a published snapshot reaches the dispatcher (models a stale view).</param>
 /// <param name="StalenessToleranceMs">Reject as stale if our ETA is this much worse than the dispatcher's estimate.</param>
 /// <param name="AgingMs">Requests waiting at least this long since t_call can no longer be rejected as stale.</param>
-public sealed record ElevatorHandlerOptions(long SnapshotDelayMs = 0, long StalenessToleranceMs = 10_000, long AgingMs = 60_000)
+/// <param name="ReportProgress">Tell the dispatcher about every floor reached (<see cref="ProgressReported"/>), for its
+/// watchdog (ADR-013).</param>
+public sealed record ElevatorHandlerOptions(long SnapshotDelayMs = 0, long StalenessToleranceMs = 10_000, long AgingMs = 60_000,
+    bool ReportProgress = false)
 {
     public static ElevatorHandlerOptions Default { get; } = new();
 }
@@ -16,7 +20,8 @@ public sealed record ElevatorHandlerOptions(long SnapshotDelayMs = 0, long Stale
 ///
 /// Accept/reject, in priority order:
 /// <list type="number">
-/// <item>Maintenance → reject (always wins).</item>
+/// <item>Out of service (draining or parked for maintenance, emergency stop, fault; ADR-013) → reject with that reason
+/// (always wins).</item>
 /// <item>Capacity → reject (always wins): in Defer mode when full now; in NextTrip mode only if the request can never
 /// fit (its load exceeds the capacity), since a full elevator serves it on a later trip (ADR-010).</item>
 /// <item>Stale: our own ETA exceeds the dispatcher's estimate by more than the tolerance → reject, unless the
@@ -28,20 +33,35 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
 {
     private readonly ElevatorHandlerOptions _options = options ?? ElevatorHandlerOptions.Default;
     private long _publishedVersion = -1;
+    private SimTime? _unstickAt; // a timed Stuck command ends here
 
     public Elevator Elevator { get; } = elevator;
 
     public Address Address => Address.Elevator(Elevator.Id);
 
-    public SimTime? NextWakeUp => Elevator.NextDeadline;
+    public SimTime? NextWakeUp => _unstickAt is { } at && (Elevator.NextDeadline is not { } d || at < d) ? at : Elevator.NextDeadline;
 
     public void Handle(Message message, SimTime now, Outbox outbox)
     {
+        if (_unstickAt is { } unstickAt && unstickAt <= now)
+        {
+            Elevator.Tick(unstickAt); // the stuck command ends exactly on time, whenever we are woken
+            _unstickAt = null;
+            Elevator.Unstick();
+        }
         Elevator.Tick(now);
         Flush(outbox);
 
         switch (message)
         {
+            case ApplyFault fault:
+                ApplyCommand(fault.Command, now, outbox);
+                break;
+            case FaultDeclared declared:
+                Elevator.DeclareFault(declared.SilentForMs);
+                Publish(outbox); // Fault mode visible before the released pickups reach the dispatcher
+                Flush(outbox);
+                break;
             case Assign assign:
                 OnAssign(assign, now, outbox);
                 break;
@@ -58,11 +78,51 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
         }
 
         Flush(outbox);
-        if (Elevator.Version != _publishedVersion)
+        Publish(outbox);
+    }
+
+    private void Publish(Outbox outbox)
+    {
+        if (Elevator.Version == _publishedVersion) return;
+        _publishedVersion = Elevator.Version;
+        outbox.Send(Address.Dispatcher, new SnapshotPublished(Elevator.Snapshot()), _options.SnapshotDelayMs);
+    }
+
+    /// <summary>
+    /// Applies a fault or operator command (ADR-013). Only a command that changes something is logged, as
+    /// <see cref="FaultCommandApplied"/>, before whatever it causes. The new snapshot is published before the pickups it
+    /// hands back, so the dispatcher already sees the elevator out of service when it reassigns them.
+    /// </summary>
+    private void ApplyCommand(FaultCommand command, SimTime now, Outbox outbox)
+    {
+        var applied = command.Kind switch
         {
-            _publishedVersion = Elevator.Version;
-            outbox.Send(Address.Dispatcher, new SnapshotPublished(Elevator.Snapshot()), _options.SnapshotDelayMs);
-        }
+            FaultKind.Stuck => Stick(command, now),
+            FaultKind.Unstick => Unstick(),
+            FaultKind.MaintenanceOn => Elevator.RequestMaintenance(),
+            FaultKind.MaintenanceOff => Elevator.EndMaintenance(),
+            FaultKind.EmergencyStop => Elevator.EmergencyStop(),
+            FaultKind.EmergencyClear => Elevator.ClearEmergency(),
+            _ => throw new ArgumentOutOfRangeException(nameof(command), command.Kind, "unknown fault kind"),
+        };
+        if (!applied) return;
+        outbox.Emit(new FaultCommandApplied(now, Elevator.Id, command.Kind, command.DurationMs));
+        Publish(outbox);
+        Flush(outbox);
+    }
+
+    /// <summary>Stuck for DurationMs, or until Unstick; a new Stuck command replaces the previous one's end.</summary>
+    private bool Stick(FaultCommand command, SimTime now)
+    {
+        Elevator.Stick();
+        _unstickAt = command.DurationMs is { } ms ? now.AddMs(ms) : null;
+        return true;
+    }
+
+    private bool Unstick()
+    {
+        _unstickAt = null;
+        return Elevator.Unstick();
     }
 
     private void OnAssign(Assign assign, SimTime now, Outbox outbox)
@@ -84,6 +144,13 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
 
     private AssignmentReason? RejectionReason(Assign assign, SimTime now)
     {
+        // Out of service (ADR-013): always wins, even over a forced assignment.
+        switch (Elevator.Mode)
+        {
+            case ElevatorMode.Draining or ElevatorMode.Maintenance: return AssignmentReason.Maintenance;
+            case ElevatorMode.Emergency: return AssignmentReason.Emergency;
+            case ElevatorMode.Fault: return AssignmentReason.Fault;
+        }
         if (Elevator.State == ElevatorState.Maintenance) return AssignmentReason.Maintenance;
         // Defer mode: full now means no. NextTrip mode: a full elevator takes it for a later trip, unless it can never fit.
         if (Elevator.CapacityMode == CapacityMode.Defer ? Elevator.IsFull : assign.Request.Load > Elevator.Capacity)
@@ -113,6 +180,9 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
             {
                 case DoorsOpened or HallCallAnswered:
                     outbox.Send(Address.Passengers, new ElevatorNotice(e));
+                    break;
+                case FloorReached reached when _options.ReportProgress:
+                    outbox.Send(Address.Dispatcher, new ProgressReported(Elevator.Id, reached.Floor, reached.At), _options.SnapshotDelayMs);
                     break;
                 case AssignmentReleased released: // full-load bypass, raised by the elevator itself
                     outbox.Send(Address.Dispatcher, new AssignmentReleasedMsg(released.RequestId, Elevator.Id, released.Reason));

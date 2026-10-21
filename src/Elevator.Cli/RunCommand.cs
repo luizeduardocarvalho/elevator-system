@@ -33,6 +33,10 @@ internal sealed class RunCommand : Command<RunCommand.Settings>
         [Description("next-trip (default) or defer (ADR-010).")]
         public string? CapacityMode { get; init; }
 
+        [CommandOption("--no-faults")]
+        [Description("Ignore the scenario's fault schedule (ADR-013).")]
+        public bool NoFaults { get; init; }
+
         [CommandOption("--rebalance")]
         [Description("Enable optional rebalancing of sticky assignments (ADR-006).")]
         public bool Rebalance { get; init; }
@@ -92,6 +96,7 @@ internal sealed class RunCommand : Command<RunCommand.Settings>
             }
         }
 
+        if (settings.NoFaults) scenario = scenario with { Faults = [] };
         var result = ScenarioRunner.Run(scenario, new Strategy(scenario.Scheduling, scenario.Dispatch, settings.Rebalance));
 
         var logPath = settings.Log ?? Path.Combine("out", $"{scenario.Name}-seed{scenario.Seed}.jsonl");
@@ -127,6 +132,7 @@ internal sealed class RunCommand : Command<RunCommand.Settings>
 
         table.AddRow("Requests served", $"{r.Delivered} / {r.Passengers}");
         table.AddRow(r.Unserved == 0 ? "Unserved" : "[red]Unserved[/]", r.Unserved.ToString(CultureInfo.InvariantCulture));
+        if (r.RefusedByPolicy > 0) table.AddRow("Refused by access policy", r.RefusedByPolicy.ToString(CultureInfo.InvariantCulture));
         table.AddRow("Invalid requests", r.RejectedRequests.ToString(CultureInfo.InvariantCulture));
         table.AddRow("Wait avg", S(r.Wait.Avg));
         table.AddRow("Wait p95", S(r.Wait.P95));
@@ -143,6 +149,36 @@ internal sealed class RunCommand : Command<RunCommand.Settings>
         table.AddRow("[grey]Wait breakdown (avg per passenger)[/]", "");
         foreach (var (bucket, seconds) in r.WaitBreakdown.Where(kv => kv.Value > 0))
             table.AddRow($"  {BenchAnalysis.BucketName(bucket)}", S(seconds));
+        if (r.Ops.Any) AddOps(table, r.Ops);
         return table;
+    }
+
+    /// <summary>Operations (ADR-013): only shown when something operational happened, so plain runs print as before.</summary>
+    private static void AddOps(Table table, OpsReport o)
+    {
+        static string S(double? seconds) => seconds is { } s ? s.ToString("0.0", CultureInfo.InvariantCulture) + " s" : "–";
+        static string N(int n) => n.ToString(CultureInfo.InvariantCulture);
+
+        table.AddEmptyRow();
+        table.AddRow("[grey]Operations[/]", "");
+        table.AddRow("  Commands applied", N(o.CommandsApplied));
+        table.AddRow("  Maintenance (count / time)", $"{N(o.Maintenances)} / {S(o.MaintenanceS)}");
+        table.AddRow("  Emergency stops (count / time)", $"{N(o.EmergencyStops)} / {S(o.EmergencyS)}");
+        table.AddRow("  Faults detected", N(o.Faults));
+        table.AddRow("  Time to detect (avg / max)", $"{S(o.TimeToDetect.Avg)} / {S(o.TimeToDetect.Max)}");
+        table.AddRow("  Time to recover (avg / max)", $"{S(o.TimeToRecover.Avg)} / {S(o.TimeToRecover.Max)}");
+        table.AddRow("  Pickups handed back", N(o.OutOfServiceReleases));
+        table.AddRow("  Passengers affected", N(o.AffectedPassengers));
+        table.AddRow("  Penalty: reassignment / blocked", $"{S(o.ReassignmentWaitS)} / {S(o.BlockedWaitS)}");
+        table.AddRow("  Access denials / refused", $"{N(o.AccessDenials)} / {N(o.RefusedByPolicy)}");
+        foreach (var e in o.Elevators)
+        {
+            var parts = new List<string>();
+            if (e.MaintenanceS > 0) parts.Add($"maint {S(e.MaintenanceS)} (drain {S(e.DrainS)})");
+            if (e.EmergencyStops > 0) parts.Add($"emerg {N(e.EmergencyStops)}× {S(e.EmergencyS)}");
+            if (e.StuckS > 0) parts.Add($"stuck {S(e.StuckS)}");
+            if (e.Faults > 0) parts.Add($"faults {N(e.Faults)}");
+            if (parts.Count > 0) table.AddRow($"  E{e.ElevatorId}", string.Join(", ", parts));
+        }
     }
 }

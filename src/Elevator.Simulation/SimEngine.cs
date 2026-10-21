@@ -32,7 +32,9 @@ public sealed class SimEngine
     /// </summary>
     public const int OverloadThreshold = 200;
 
-    private readonly PriorityQueue<Envelope, (long TimeMs, long Seq)> _queue = new();
+    // Ordered by (sim time, priority, sequence). Priority 0 is only for emergency stops (ADR-013): they take effect
+    // before anything else due at the same instant, as the actor runtime's priority control channel does.
+    private readonly PriorityQueue<Envelope, (long TimeMs, int Priority, long Seq)> _queue = new();
     private readonly Dictionary<Address, IHandler> _handlers = [];
     private readonly Dictionary<Address, SimTime> _scheduledWakeUps = [];
     private readonly List<ElevatorHandler> _elevators = [];
@@ -70,19 +72,27 @@ public sealed class SimEngine
         var estimator = new StopProjection(scheduling, scenario.Timing); // each elevator's own view, for the staleness check
 
         var capacityMode = strategy.Capacity ?? scenario.CapacityMode;
+        var fleet = scenario.EffectiveFleet;
+        if (fleet.Count != scenario.Elevators)
+            throw new ArgumentException($"the fleet has {fleet.Count} elevators but the scenario says {scenario.Elevators}", nameof(scenario));
         for (var i = 0; i < scenario.Elevators; i++)
         {
-            var elevator = new ElevatorUnit(i, scenario.Floors, scenario.Timing, scheduling, Floors.Lowest, scenario.Capacity, scenario.BypassThreshold, capacityMode);
-            var handler = new ElevatorHandler(elevator, new ElevatorHandlerOptions(SnapshotDelayMs: latency.SnapshotMs), estimator);
+            var elevator = Building.CreateElevator(i, scenario.Floors, fleet[i], scheduling, scenario.BypassThreshold, capacityMode);
+            var handler = new ElevatorHandler(elevator,
+                new ElevatorHandlerOptions(SnapshotDelayMs: latency.SnapshotMs, ReportProgress: scenario.WatchdogTimeoutMs is not null), estimator);
             _elevators.Add(handler);
             Register(handler);
         }
         var rebalance = strategy.Rebalance ? new HysteresisRebalance(scheduling, scenario.Timing) : null;
         Register(new DispatcherHandler(dispatch, scenario.Elevators, scenario.Timing,
             new DispatcherOptions(latency.DispatchMs, RebalanceIntervalMs: rebalance is null ? null : 5_000, OverloadThreshold: OverloadThreshold,
-                EmitDispatchEvaluations: options.EmitDispatchEvaluations),
+                EmitDispatchEvaluations: options.EmitDispatchEvaluations)
+            {
+                Access = Building.CreateAccess(scenario.Access),
+                WatchdogTimeoutMs = scenario.WatchdogTimeoutMs,
+            },
             rebalance, new NearestDispatch()));
-        _passengers = new PassengersHandler(scenario.Capacity);
+        _passengers = new PassengersHandler([.. fleet.Select(t => t.Capacity)]);
         Register(_passengers);
 
         var passengers = ScenarioRunner.BuildPassengers(scenario);
@@ -91,8 +101,17 @@ public sealed class SimEngine
             scenario.Elevators, dispatch.Name + (rebalance is null ? "" : "+rebalance"), scenario.Capacity,
             scenario.BypassThreshold, CapacityModes.Name(capacityMode)));
 
+        Register(new FaultScheduler());
+
         foreach (var e in _elevators) Enqueue(SimTime.Zero, new Envelope(e.Address, new Start()));
         foreach (var p in passengers) Enqueue(SimTime.Zero, new Envelope(Address.Passengers, new PassengerArrives(p.ToRequest()), p.ArrivesAt.Ms));
+        // The scenario's fault schedule (ADR-013): each command reaches its elevator at its sim time.
+        foreach (var f in scenario.FaultSchedule)
+        {
+            if (f.ElevatorId < 0 || f.ElevatorId >= scenario.Elevators)
+                throw new ArgumentException($"fault schedule: elevator {f.ElevatorId} does not exist (0..{scenario.Elevators - 1})", nameof(scenario));
+            Enqueue(SimTime.Zero, new Envelope(Address.Elevator(f.ElevatorId), new ApplyFault(f), f.At.Ms));
+        }
 
         FaultInjector = options.FaultInjector?.Invoke(this) ?? NoOpFaultInjector.Instance;
     }
@@ -108,7 +127,7 @@ public sealed class SimEngine
     /// <summary>Sim time reached so far (the target of the last <see cref="AdvanceTo"/>, or the finish time).</summary>
     public SimTime Now { get; private set; } = SimTime.Zero;
 
-    /// <summary>Everyone delivered and every elevator idle, or the scenario's max sim time reached.</summary>
+    /// <summary>Everyone delivered (or refused by access policy) and every elevator idle or parked, or the scenario's max sim time reached.</summary>
     public bool Finished { get; private set; }
 
     /// <summary>When the run finished (the last event's time, or the max sim time).</summary>
@@ -153,7 +172,8 @@ public sealed class SimEngine
 
     /// <summary>
     /// Delivers <paramref name="message"/> to <paramref name="to"/> at <see cref="Now"/>, after anything already due
-    /// at <see cref="Now"/>. The injection seam for fault and operator commands (shared v3 contract).
+    /// at <see cref="Now"/>. The injection seam for fault and operator commands (shared v3 contract). Emergency stops
+    /// are the one exception: they go ahead of what is due at the same instant (ADR-013).
     /// </summary>
     public void Post(Address to, Message message) => Enqueue(Now, new Envelope(to, message));
 
@@ -175,12 +195,20 @@ public sealed class SimEngine
     private void Enqueue(SimTime now, Envelope envelope)
     {
         if (envelope.To.Kind == ActorKind.Client) return; // nobody waits on acks in a simulation
-        _queue.Enqueue(envelope, (now.Ms + envelope.DelayMs, _seq++));
+        _queue.Enqueue(envelope, (now.Ms + envelope.DelayMs, PriorityOf(envelope.Message), _seq++));
     }
 
+    /// <summary>
+    /// Emergency stops, on their way to the elevator (via the fault scheduler or directly), jump ahead of messages due
+    /// at the same instant: the simulator's equivalent of the actor runtime's priority channel (ADR-013). Every other
+    /// message keeps the (time, sequence) order, so <see cref="Post"/> delivers after what is already due.
+    /// </summary>
+    private static int PriorityOf(Message message) =>
+        message is ApplyFault { Command.Kind: FaultKind.EmergencyStop } or ScheduleFault { Command.Kind: FaultKind.EmergencyStop } ? 0 : 1;
+
     private bool AllDone =>
-        _passengers.Arrived == _expectedPassengers && _passengers.Delivered == _expectedPassengers
-        && _elevators.All(e => e.Elevator.State == ElevatorState.Idle && e.Elevator.NextDeadline is null);
+        _passengers.Arrived == _expectedPassengers && _passengers.Delivered + _passengers.Refused == _expectedPassengers
+        && _elevators.All(e => e.Elevator.State is ElevatorState.Idle or ElevatorState.Maintenance && e.Elevator.NextDeadline is null);
 
     /// <summary>Delivers every message due at or before <paramref name="target"/>; returns the finish time if the run completed.</summary>
     private SimTime? DrainUntil(SimTime target)
@@ -201,7 +229,7 @@ public sealed class SimEngine
             if (handler.NextWakeUp is { } wake && (!_scheduledWakeUps.TryGetValue(handler.Address, out var scheduled) || scheduled != wake))
             {
                 _scheduledWakeUps[handler.Address] = wake;
-                _queue.Enqueue(new Envelope(handler.Address, new WakeUp()), (wake.Ms, _seq++));
+                _queue.Enqueue(new Envelope(handler.Address, new WakeUp()), (wake.Ms, 1, _seq++));
             }
 
             if (AllDone) return now;

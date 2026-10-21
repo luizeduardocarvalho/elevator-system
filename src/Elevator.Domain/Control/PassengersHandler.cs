@@ -8,10 +8,24 @@ namespace Elevator.Domain.Control;
 ///
 /// Real behaviour: a passenger boards only the elevator they were assigned to (destination dispatch shows it on the
 /// hall panel), only when its lantern shows their direction, in arrival order per floor, while there is room
-/// (hard capacity). Anyone who does not fit is left behind and presses again (same request id and t_call).
+/// (hard capacity). Anyone who does not fit is left behind and presses again (same request id and t_call), and so is
+/// everyone behind them: nobody overtakes in the queue, also when a heavy load does not fit but a lighter one would
+/// (ADR-012). With one-unit loads that is the same thing.
 /// </summary>
-public sealed class PassengersHandler(int capacity) : IHandler
+public sealed class PassengersHandler : IHandler
 {
+    private readonly Func<int, int> _capacityOf;
+
+    /// <param name="capacity">Every elevator's capacity (load units).</param>
+    public PassengersHandler(int capacity) => _capacityOf = _ => capacity;
+
+    /// <param name="capacities">Each elevator's capacity by id (elevator types, ADR-012).</param>
+    public PassengersHandler(IReadOnlyList<int> capacities)
+    {
+        var copy = capacities.ToArray();
+        _capacityOf = id => copy[id];
+    }
+
     private sealed class Passenger(Request request)
     {
         public Request Request { get; } = request;
@@ -35,6 +49,9 @@ public sealed class PassengersHandler(int capacity) : IHandler
 
     public int Delivered { get; private set; }
 
+    /// <summary>Passengers whose request every elevator's access policies refused (ADR-012); they left.</summary>
+    public int Refused { get; private set; }
+
     public bool Empty => _byId.Count == 0;
 
     public void Handle(Message message, SimTime now, Outbox outbox)
@@ -54,6 +71,11 @@ public sealed class PassengersHandler(int capacity) : IHandler
             case AssignmentReleasedMsg released when _byId.GetValueOrDefault(released.RequestId) is { } waiting
                                                      && waiting.AssignedTo == released.ElevatorId:
                 waiting.AssignedTo = null;
+                break;
+            case RequestRefused refused when _byId.GetValueOrDefault(refused.RequestId) is { RidingOn: null } waiting:
+                _waiting[(waiting.Request.PickupFloor, waiting.Request.Direction)].Remove(waiting);
+                _byId.Remove(refused.RequestId);
+                Refused++;
                 break;
             case ElevatorNotice { Event: DoorsOpened opened }:
                 GetOff(opened, now, outbox);
@@ -95,9 +117,11 @@ public sealed class PassengersHandler(int capacity) : IHandler
 
         var riders = _riding.TryGetValue(answered.ElevatorId, out var list) ? list : _riding[answered.ElevatorId] = [];
         var load = riders.Sum(r => r.Request.Load);
+        var capacity = _capacityOf(answered.ElevatorId);
+        var blocked = false; // strict arrival order: once someone does not fit, nobody behind them overtakes (ADR-012)
         foreach (var p in candidates)
         {
-            if (load + p.Request.Load <= capacity)
+            if (!blocked && load + p.Request.Load <= capacity)
             {
                 load += p.Request.Load;
                 here.Remove(p);
@@ -109,6 +133,7 @@ public sealed class PassengersHandler(int capacity) : IHandler
             }
             else
             {
+                blocked = true;
                 p.AssignedTo = null;
                 outbox.Emit(new PassengerLeftBehind(now, p.Request.Id, answered.ElevatorId, answered.Floor));
                 outbox.Send(Address.Dispatcher, new ReRegister(p.Request.Id, AssignmentReason.LeftBehind));

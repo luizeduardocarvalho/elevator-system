@@ -13,6 +13,7 @@ public static class ReportBuilder
         var records = PassengerLifecycle.Analyze(list);
         var delivered = records.Where(r => r.Delivered && r.BoardedAt is not null).ToList();
         var passengers = started?.Passengers ?? records.Count;
+        var refused = list.Count(e => e is AccessDenied { ElevatorId: null });
 
         var breakdown = Enum.GetValues<WaitBucket>().ToDictionary(
             b => b,
@@ -24,7 +25,7 @@ public static class ReportBuilder
             started?.Seed ?? 0,
             passengers,
             delivered.Count,
-            passengers - delivered.Count,
+            passengers - delivered.Count - refused,
             list.Count(e => e is RequestRejected),
             DurationStats.From(delivered.Select(r => r.WaitS!.Value).ToList()),
             DurationStats.From(delivered.Select(r => r.RideS!.Value).ToList()),
@@ -39,6 +40,13 @@ public static class ReportBuilder
             Reassignments = records.Sum(r => r.Reassignments),
             Rejections = records.Sum(r => r.Rejections),
             WaitBreakdown = breakdown,
+            RefusedByPolicy = refused,
+            Ops = OpsMetrics.Build(list) with
+            {
+                AffectedPassengers = OpsMetrics.AffectedPassengers(list),
+                ReassignmentWaitS = delivered.Sum(r => r.WaitBuckets[WaitBucket.Reassignment]),
+                BlockedWaitS = delivered.Sum(r => r.WaitBuckets[WaitBucket.Blocked]),
+            },
         };
     }
 }

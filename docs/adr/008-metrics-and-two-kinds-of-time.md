@@ -87,3 +87,18 @@ Until Stage 4 says otherwise (ADR-013):
 
 Ops metrics (maintenance time, emergency stops and their duration, faults, time to detect and to recover) will be
 computed from the new events, from the log alone, like every other metric.
+
+## Amendment: out-of-service time (Stage 4, ADR-013)
+
+Settled by [ADR-013](013-maintenance-emergency-watchdog.md):
+- **Releases** for maintenance, emergency or fault count as `reassignment`, as above. In practice that time is close
+  to zero: the dispatcher reassigns at once.
+- **Rejections** for emergency or fault count as `blocked`, like maintenance rejections ("an elevator out of service
+  refused it").
+- **Time assigned to a stuck elevator** counts as `blocked`. Stuck intervals come from `FaultCommandApplied`
+  (DurationMs, or until Unstick), and attribution splits intervals at a timed stuck's end, so buckets still sum
+  exactly to the wait.
+- **The wait penalty** of out-of-service reassignments is the `reassignment` + `blocked` bucket time. It is reported
+  in the Operations section of `run` and `bench`.
+- **Passengers refused by an access policy** (ADR-012) are neither delivered nor unserved. They are a separate count.
+

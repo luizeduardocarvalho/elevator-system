@@ -36,21 +36,33 @@ public sealed class Elevator
     private DestinationTotals _riderTotals = DestinationTotals.Empty;
     private readonly List<DomainEvent> _outbox = [];
 
-    private SimTime? _deadline;       // end of the current timed phase; null in Idle/Maintenance
+    private SimTime? _deadline;       // end of the current timed phase; null in Idle/Maintenance, and while stuck
+    private bool _maintenanceRequested; // draining, then parked (ADR-013)
+    private bool _emergency;          // emergency stop in effect (ADR-013)
+    private bool _faulted;            // declared faulty by the watchdog, until it moves again (ADR-013)
+    private bool _stuck;              // the drive is stuck (fault injection, ADR-013): no phase completes
+    private long? _frozenMs;          // while stuck: what is left of the current phase
     private SimTime _closingStartedAt; // used to compute how long a reopen takes
     private bool _levelWithFloor;     // true while stopped, or at the instant a moving elevator reaches a floor
 
+    /// <param name="servedFloors">Floors this elevator serves (its type, ADR-012): it never stops at any other.</param>
+    /// <param name="typeName">Its type's name (Local, Express, Freight...).</param>
     public Elevator(int id, int floors, ElevatorTiming timing, ISchedulingPolicy policy, int startFloor = Floors.Lowest,
-        int capacity = int.MaxValue, double bypassThreshold = 1.0, CapacityMode capacityMode = CapacityMode.NextTrip)
+        int capacity = int.MaxValue, double bypassThreshold = 1.0, CapacityMode capacityMode = CapacityMode.NextTrip,
+        ulong servedFloors = FloorMask.All, string typeName = ElevatorType.StandardName)
     {
         if (floors < 2) throw new ArgumentOutOfRangeException(nameof(floors), "need at least two floors");
         if (Floors.Check(startFloor, floors) is { } error) throw new ArgumentOutOfRangeException(nameof(startFloor), error);
+        if (!FloorMask.Contains(servedFloors, startFloor))
+            throw new ArgumentOutOfRangeException(nameof(startFloor), $"floor {startFloor} is not served by this elevator");
         if (timing.Validate() is [var first, ..]) throw new ArgumentException(first, nameof(timing));
         if (capacity <= 0) throw new ArgumentOutOfRangeException(nameof(capacity));
         if (bypassThreshold is <= 0 or > 1) throw new ArgumentOutOfRangeException(nameof(bypassThreshold), "must be in (0, 1]");
 
         Id = id;
         FloorCount = floors;
+        ServedFloors = servedFloors;
+        TypeName = typeName;
         Capacity = capacity;
         BypassThreshold = bypassThreshold;
         CapacityMode = capacityMode;
@@ -66,8 +78,12 @@ public sealed class Elevator
     /// </summary>
     public static Elevator FromSnapshot(ElevatorSnapshot s, ElevatorTiming timing, ISchedulingPolicy policy)
     {
-        var e = new Elevator(s.ElevatorId, s.Floors, timing, policy, s.CurrentFloor, s.Capacity, s.BypassThreshold, s.CapacityMode)
+        // Built at a served floor, then placed where the snapshot says: mid-route it may be passing an unserved one.
+        var anyServed = Enumerable.Range(Floors.Lowest, s.Floors).First(f => FloorMask.Contains(s.ServedFloors, f));
+        var e = new Elevator(s.ElevatorId, s.Floors, s.Timing ?? timing, policy, anyServed, s.Capacity, s.BypassThreshold, s.CapacityMode,
+            s.ServedFloors, s.TypeName)
         {
+            CurrentFloor = s.CurrentFloor,
             State = s.State,
             CommittedDirection = s.CommittedDirection,
             Now = s.At,
@@ -87,6 +103,15 @@ public sealed class Elevator
 
     public int FloorCount { get; }
 
+    /// <summary>Floors this elevator serves (<see cref="FloorMask"/>). It passes the others without stopping.</summary>
+    public ulong ServedFloors { get; }
+
+    public string TypeName { get; }
+
+    public ElevatorTiming Timing => _timing;
+
+    public bool Serves(int floor) => FloorMask.Contains(ServedFloors, floor);
+
     public int Capacity { get; }
 
     public double BypassThreshold { get; }
@@ -100,6 +125,18 @@ public sealed class Elevator
     public int CurrentFloor { get; private set; }
 
     public ElevatorState State { get; private set; } = ElevatorState.Idle;
+
+    /// <summary>
+    /// Operating mode (ADR-013), alongside the spec's state: Emergency while an emergency stop is in effect (it wins
+    /// over everything), Maintenance once parked, Fault from the watchdog's declaration until it moves again, Draining
+    /// while maintenance is requested and riders are still on board. Only a Normal elevator takes new assignments.
+    /// </summary>
+    public ElevatorMode Mode =>
+        _emergency ? ElevatorMode.Emergency
+        : State == ElevatorState.Maintenance ? ElevatorMode.Maintenance
+        : _faulted ? ElevatorMode.Fault
+        : _maintenanceRequested ? ElevatorMode.Draining
+        : ElevatorMode.Normal;
 
     /// <summary>Direction of travel while moving; the lit lantern while stopped; null when there is no work.</summary>
     public Direction? CommittedDirection { get; private set; }
@@ -127,10 +164,31 @@ public sealed class Elevator
 
     public ElevatorSnapshot Snapshot() =>
         new(Id, CurrentFloor, State, CommittedDirection, _carCalls, _hallCalls, FloorCount, _riders,
-            Capacity, BypassThreshold, Now, _deadline, _closingStartedAt, Version) { RiderTotals = _riderTotals, CapacityMode = CapacityMode };
+            Capacity, BypassThreshold, Now, _deadline, _closingStartedAt, Version)
+        {
+            RiderTotals = _riderTotals,
+            CapacityMode = CapacityMode,
+            Timing = _timing,
+            TypeName = TypeName,
+            ServedFloors = ServedFloors,
+            Mode = Mode,
+        };
 
-    /// <summary>What the scheduling policy sees: while bypassing, only the drop-offs.</summary>
-    private ElevatorSnapshot PolicyView() => Bypassing ? Snapshot() with { HallCalls = [] } : Snapshot();
+    /// <summary>
+    /// What the scheduling policy sees: while bypassing, only the drop-offs. Otherwise every pickup, except those where
+    /// someone would not fit in the room left (a heavy load, ADR-012): they are bypassed the same way until riders get
+    /// off. Passengers board in strict arrival order, so when every load at a stop fits, the first in line does and a stop
+    /// there always boards someone; without this, a policy that serves "a pickup right here" first would reopen for a
+    /// load that never fits, forever. Once empty, every load fits (the capacity access policy sees to it). With one-unit
+    /// loads this never hides anything: no room at all means full, which bypasses every pickup already.
+    /// </summary>
+    private ElevatorSnapshot PolicyView()
+    {
+        if (Bypassing) return Snapshot() with { HallCalls = [] };
+        var room = (long)Capacity - Load;
+        if (!_hallCalls.Any(c => c.MaxLoad > room)) return Snapshot();
+        return Snapshot() with { HallCalls = [.. _hallCalls.Where(c => c.MaxLoad <= room)] };
+    }
 
     /// <summary>Returns and clears the events produced since the last call.</summary>
     public IReadOnlyList<DomainEvent> DrainEvents()
@@ -151,6 +209,7 @@ public sealed class Elevator
         {
             Now = deadline;
             _deadline = null;
+            if (_faulted) Recover(); // a timed phase completed: it moves again
             OnPhaseEnded();
         }
         Now = now;
@@ -169,7 +228,7 @@ public sealed class Elevator
                 CommittedDirection ??= _hallCalls.FirstOrDefault(c => c.Floor == CurrentFloor)?.Direction;
                 Emit(new DoorsOpened(Now, Id, CurrentFloor, CommittedDirection));
                 AnswerHallCallHere();
-                _deadline = Now.AddMs(_timing.DoorDwellMs);
+                StartPhase(_timing.DoorDwellMs);
                 break;
             case ElevatorState.DoorOpen:
                 CloseDoor();
@@ -188,24 +247,34 @@ public sealed class Elevator
         Emit(new FloorReached(Now, Id, CurrentFloor));
 
         _levelWithFloor = true;
+        if (_emergency)
+        {
+            // The next safe point: stopped level with a floor, doors closed. Riders stay inside until it is cleared.
+            Fire(Trigger.EmergencyHalt);
+            CommittedDirection = null;
+            return;
+        }
         if (ShouldStopHere(direction))
         {
             OpenDoor();
             return;
         }
         _levelWithFloor = false;
-        _deadline = Now.AddMs(_timing.FloorTravelMs);
+        StartPhase(_timing.FloorTravelMs);
     }
 
     /// <summary>
     /// Stop for a drop-off here (always), at the policy's target, or when the target is no longer ahead.
     /// The last case only arises from a car call pressed behind the elevator while it moves: a real elevator
     /// cannot reverse in mid-flight, so it stops at the next floor and decides again from there.
+    /// A floor it does not serve (an express passing the local floors) is never a stop: it carries on to the next
+    /// served floor and decides there. Every stop it can have is a served floor, so one always lies ahead.
     /// </summary>
     private bool ShouldStopHere(Direction direction)
     {
         if (_carCalls.Contains(CurrentFloor)) return true;
         if (CurrentFloor == Floors.Lowest || CurrentFloor == FloorCount) return true;
+        if (!Serves(CurrentFloor)) return false;
         var target = _policy.Decide(PolicyView()).Target;
         return target is null || target == CurrentFloor || !direction.IsAhead(CurrentFloor, target.Value);
     }
@@ -226,7 +295,7 @@ public sealed class Elevator
         Fire(trigger);
         CommittedDirection = direction;
         _levelWithFloor = false;
-        _deadline = Now.AddMs(_timing.FloorTravelMs);
+        StartPhase(_timing.FloorTravelMs);
     }
 
     /// <summary>
@@ -239,8 +308,8 @@ public sealed class Elevator
         {
             Fire(Trigger.Reopen);
             // Doors reverse from where they are: having closed for x ms, they need x·(opening/closing) ms to be open again.
-            var closedFor = Now.Ms - _closingStartedAt.Ms;
-            _deadline = Now.AddMs(closedFor * _timing.DoorOpeningMs / _timing.DoorClosingMs);
+            var closedFor = _stuck ? _timing.DoorClosingMs - (_frozenMs ?? 0) : Now.Ms - _closingStartedAt.Ms;
+            StartPhase(closedFor * _timing.DoorOpeningMs / _timing.DoorClosingMs);
             return;
         }
 
@@ -250,14 +319,14 @@ public sealed class Elevator
         var lantern = LanternForStop();
         Fire(Trigger.ArriveAndOpen);
         CommittedDirection = lantern;
-        _deadline = Now.AddMs(_timing.DoorOpeningMs);
+        StartPhase(_timing.DoorOpeningMs);
     }
 
     public void CloseDoor()
     {
         Fire(Trigger.StartClosing);
         _closingStartedAt = Now;
-        _deadline = Now.AddMs(_timing.DoorClosingMs);
+        StartPhase(_timing.DoorClosingMs);
     }
 
     public void EnterMaintenance() => Fire(Trigger.EnterMaintenance);
@@ -285,6 +354,7 @@ public sealed class Elevator
     private void AddPickup(int floor, Direction direction, Request? request)
     {
         if (Floors.CheckHallButton(floor, direction, FloorCount) is { } error) throw new ArgumentOutOfRangeException(nameof(floor), error);
+        if (!Serves(floor)) throw new ArgumentOutOfRangeException(nameof(floor), NotServed(floor));
 
         var index = _hallCalls.FindIndex(c => c.Floor == floor && c.Direction == direction);
         if (index >= 0)
@@ -316,7 +386,11 @@ public sealed class Elevator
             floor == CurrentFloor && State is ElevatorState.DoorOpening or ElevatorState.DoorOpen or ElevatorState.DoorClosing;
         if (!standingHereWithDoorsInCycle) return;
 
-        if (Bypassing) return; // full: served on a later trip
+        if (Bypassing || _emergency) return; // full: served on a later trip; emergency: doors stay closed
+        // A load that cannot fit now (freight, ADR-012) is not answered at the open door: it would be left behind and,
+        // re-dispatched to this same elevator, answered again at the same instant, forever. It waits for a later trip.
+        // With one-unit loads this never applies: not fitting means full, which bypasses above.
+        if (request is not null && Load + request.Load > Capacity) return;
         CommittedDirection ??= direction; // stopped with no work: adopt the caller's direction
         if (CommittedDirection != direction) return; // served later, when the elevator comes back for it
 
@@ -324,7 +398,7 @@ public sealed class Elevator
         {
             case ElevatorState.DoorOpen:
                 AnswerHallCallHere();
-                _deadline = Now.AddMs(_timing.DoorDwellMs); // give the newcomer a full dwell
+                StartPhase(_timing.DoorDwellMs); // give the newcomer a full dwell
                 break;
             case ElevatorState.DoorClosing:
                 OpenDoor(); // reopen; answered when fully open
@@ -337,6 +411,7 @@ public sealed class Elevator
     public void AddRequest(int floor)
     {
         if (Floors.Check(floor, FloorCount) is { } error) throw new ArgumentOutOfRangeException(nameof(floor), error);
+        if (!Serves(floor)) throw new ArgumentOutOfRangeException(nameof(floor), NotServed(floor)); // access policies prevent this
         if (floor == CurrentFloor && _levelWithFloor) return; // already here
         if (_carCalls.Contains(floor)) return;
         _carCalls = _carCalls.Add(floor);
@@ -370,7 +445,7 @@ public sealed class Elevator
 
         // Riders getting off can make room while the doors are open: a bypassed pickup here is answered now.
         if (CapacityMode == CapacityMode.NextTrip && State == ElevatorState.DoorOpen && !IsFull && AnswerHallCallHere())
-            _deadline = Now.AddMs(_timing.DoorDwellMs);
+            StartPhase(_timing.DoorDwellMs);
         // Idle and no longer full: the bypassed pickups are visible to the policy again.
         if (State == ElevatorState.Idle) DecideFromIdle();
     }
@@ -405,9 +480,18 @@ public sealed class Elevator
     private void DecideFromIdle()
     {
         if (State != ElevatorState.Idle) return;
+        if (_emergency)
+        {
+            CommittedDirection = null; // stays put, doors closed, until cleared
+            return;
+        }
 
         var target = _policy.Decide(PolicyView()).Target;
-        if (target is null) CommittedDirection = null;
+        if (target is null)
+        {
+            CommittedDirection = null;
+            ParkIfDrained();
+        }
         else if (target == CurrentFloor) OpenDoor();
         else if (target > CurrentFloor) MoveUp();
         else MoveDown();
@@ -448,4 +532,195 @@ public sealed class Elevator
     }
 
     private void Emit(DomainEvent e) => _outbox.Add(e);
+
+    /// <summary>Starts a timed phase of <paramref name="ms"/>; while stuck it is frozen with all its time left.</summary>
+    private void StartPhase(long ms)
+    {
+        if (_stuck) _frozenMs = ms;
+        else _deadline = Now.AddMs(ms);
+    }
+
+    // ---- Maintenance (ADR-013) ---------------------------------------------------------------------------
+
+    /// <summary>
+    /// Maintenance requested: the elevator drains. It takes no new assignment (Mode = Draining), hands every pending
+    /// pickup back at once (released with reason Maintenance, so the dispatcher reassigns them now rather than after the
+    /// riders are delivered), and keeps delivering its riders. Once it is idle and empty it parks where it is.
+    /// </summary>
+    /// <returns>False if maintenance was already requested or it is already parked.</returns>
+    public bool RequestMaintenance()
+    {
+        if (_maintenanceRequested || State == ElevatorState.Maintenance) return false;
+        _maintenanceRequested = true;
+        Version++;
+        Emit(new MaintenanceRequested(Now, Id));
+        ReleaseAllPickups(AssignmentReason.Maintenance);
+        DecideFromIdle(); // idle and empty: parks now
+        return true;
+    }
+
+    /// <summary>Back in service: leaves the parked state (Maintenance → Idle), or cancels a drain still in progress.</summary>
+    /// <returns>False if there was no maintenance to end.</returns>
+    public bool EndMaintenance()
+    {
+        if (!_maintenanceRequested && State != ElevatorState.Maintenance) return false;
+        _maintenanceRequested = false;
+        Version++;
+        if (State == ElevatorState.Maintenance) Fire(Trigger.ExitMaintenance);
+        Emit(new MaintenanceExited(Now, Id));
+        DecideFromIdle();
+        return true;
+    }
+
+    /// <summary>Draining, idle and nobody on board: park here (the table's Idle → Maintenance edge).</summary>
+    private void ParkIfDrained()
+    {
+        if (!_maintenanceRequested || _emergency || State != ElevatorState.Idle || _riders.Count > 0) return;
+        Fire(Trigger.EnterMaintenance);
+        Emit(new MaintenanceEntered(Now, Id, CurrentFloor));
+    }
+
+    // ---- Emergency stop (ADR-013) ------------------------------------------------------------------------
+
+    /// <summary>
+    /// Emergency stop. Takes effect now (logged with the floor it is at, or last passed) and stops the elevator at the
+    /// next safe point:
+    /// <list type="bullet">
+    /// <item>moving: it finishes the floor segment it is in (it cannot stop between floors) and halts level with the
+    /// next floor, doors closed (<see cref="Trigger.EmergencyHalt"/>);</item>
+    /// <item>doors open: they close now; doors opening: they reverse and close, taking as long as they had opened
+    /// (<see cref="Trigger.EmergencyClose"/>); doors closing: they finish closing;</item>
+    /// <item>idle: it stays.</item>
+    /// </list>
+    /// The doors never open in an emergency: riders stay inside, protected. Pending pickups are handed back (reason
+    /// Emergency) so other elevators serve them, and no new phase starts until <see cref="ClearEmergency"/>.
+    /// </summary>
+    /// <returns>False if already in an emergency, or parked for maintenance (already stopped, doors closed).</returns>
+    public bool EmergencyStop()
+    {
+        if (_emergency || State == ElevatorState.Maintenance) return false;
+        _emergency = true;
+        Version++;
+        Emit(new EmergencyStopped(Now, Id, CurrentFloor));
+        ReleaseAllPickups(AssignmentReason.Emergency);
+        switch (State)
+        {
+            case ElevatorState.DoorOpen:
+                Fire(Trigger.EmergencyClose);
+                _closingStartedAt = Now;
+                StartPhase(_timing.DoorClosingMs);
+                break;
+            case ElevatorState.DoorOpening:
+                // Reverse from where the doors are: open for x ms, they need x·(closing/opening) ms to close.
+                var openingLeft = _stuck ? _frozenMs ?? 0 : _deadline!.Value.Ms - Now.Ms;
+                var closing = (_timing.DoorOpeningMs - openingLeft) * _timing.DoorClosingMs / _timing.DoorOpeningMs;
+                Fire(Trigger.EmergencyClose);
+                _closingStartedAt = Now.AddMs(closing - _timing.DoorClosingMs); // as if closing had started that long ago
+                StartPhase(closing);
+                break;
+            case ElevatorState.Idle:
+                CommittedDirection = null;
+                break;
+            // Moving: halts at the next floor (OnFloorReached). Closing: finishes, then stays (DecideFromIdle).
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Clears the emergency stop: normal decisions resume (draining resumes if maintenance was requested). If riders
+    /// are headed for the floor where it stopped (it halted there, or its doors had not finished opening), the doors
+    /// open here first.
+    /// </summary>
+    /// <returns>False if there was no emergency.</returns>
+    public bool ClearEmergency()
+    {
+        if (!_emergency) return false;
+        _emergency = false;
+        Version++;
+        Emit(new EmergencyCleared(Now, Id));
+        if (State != ElevatorState.Idle) return true; // still moving or closing: carries on normally
+        if (_riders.Any(r => r.DestinationFloor == CurrentFloor)) OpenDoor();
+        else DecideFromIdle();
+        RecoverIfHealthy();
+        return true;
+    }
+
+    // ---- Fault (watchdog, ADR-013) -----------------------------------------------------------------------
+
+    /// <summary>
+    /// The dispatcher's watchdog saw no progress for <paramref name="silentForMs"/> while this elevator had work. It goes
+    /// into Fault mode: logged (<see cref="FaultDetected"/>), every pending pickup handed back (reason Fault) so other
+    /// elevators serve them, no new assignment. Riders stay on board; it still tries to deliver them, and it recovers
+    /// (<see cref="FaultRecovered"/>) as soon as it moves again: a timed phase completes, or, with nothing to do, as soon
+    /// as the drive is no longer stuck.
+    /// </summary>
+    /// <returns>False if already faulty or parked for maintenance. Always acknowledged with a new version, so the
+    /// dispatcher gets a fresh snapshot either way.</returns>
+    public bool DeclareFault(long silentForMs)
+    {
+        Version++;
+        if (_faulted || State == ElevatorState.Maintenance) return false;
+        _faulted = true;
+        Emit(new FaultDetected(Now, Id, CurrentFloor, silentForMs));
+        ReleaseAllPickups(AssignmentReason.Fault);
+        RecoverIfHealthy();
+        return true;
+    }
+
+    private void Recover()
+    {
+        _faulted = false;
+        Version++;
+        Emit(new FaultRecovered(Now, Id));
+    }
+
+    /// <summary>Faulty but able to move and with nothing in progress (idle, not stuck, not stopped by an emergency): recovered.</summary>
+    private void RecoverIfHealthy()
+    {
+        if (_faulted && !_stuck && !_emergency && _deadline is null && State is ElevatorState.Idle or ElevatorState.Maintenance) Recover();
+    }
+
+    // ---- Stuck drive (fault injection, ADR-013) ---------------------------------------------------------
+
+    /// <summary>True while the drive is stuck.</summary>
+    public bool IsStuck => _stuck;
+
+    /// <summary>
+    /// The drive gets stuck: the current timed phase (travel or a door phase) stops progressing, and so does any phase
+    /// started meanwhile. The controller keeps working (it takes messages and decides), but nothing physical happens.
+    /// The snapshot shows no phase end while stuck. Not a state change: the state machine stays where it was.
+    /// </summary>
+    /// <returns>False if it was already stuck.</returns>
+    public bool Stick()
+    {
+        if (_stuck) return false;
+        _stuck = true;
+        if (_deadline is { } d)
+        {
+            _frozenMs = d.Ms - Now.Ms;
+            _deadline = null;
+        }
+        Version++;
+        return true;
+    }
+
+    /// <summary>The drive works again: the frozen phase resumes with the time it had left.</summary>
+    /// <returns>False if it was not stuck.</returns>
+    public bool Unstick()
+    {
+        if (!_stuck) return false;
+        _stuck = false;
+        if (_frozenMs is { } left)
+        {
+            _deadline = Now.AddMs(left);
+            _frozenMs = null;
+            // Keep "phase end = closing start + closing time" true, so a reopen (and a projection) computes the doors' position right.
+            if (State == ElevatorState.DoorClosing) _closingStartedAt = Now.AddMs(left - _timing.DoorClosingMs);
+        }
+        Version++;
+        RecoverIfHealthy();
+        return true;
+    }
+
+    private string NotServed(int floor) => $"elevator {Id} ({TypeName}) does not serve floor {floor}";
 }

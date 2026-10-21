@@ -20,7 +20,7 @@ public static class ScenarioRunner
         return scenario.Passengers.Concat(poisson).Concat(profile)
             .Select((spec, order) => (spec, order))
             .OrderBy(x => x.spec.At).ThenBy(x => x.order)
-            .Select((x, i) => new Passenger(i + 1, x.spec.At, x.spec.From, x.spec.To))
+            .Select((x, i) => new Passenger(i + 1, x.spec.At, x.spec.From, x.spec.To) { Vip = x.spec.Vip, AccessLevel = x.spec.AccessLevel, Load = x.spec.Load })
             .ToList();
     }
 
