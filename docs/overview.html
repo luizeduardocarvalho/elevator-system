@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Elevator System Overview</title>
+<meta name="description" content="Architecture, simulation, concurrency, performance, error handling and test evidence for the elevator system (v3-hard).">
+<style>
+:root {
+  --bg: #f7f7f5; --surface: #ffffff; --surface-2: #f0efeb; --text: #1d1d1b; --muted: #5f5e58;
+  --border: #dddcd5; --accent: #2f5bd3; --accent-soft: #e6ecfb; --good: #1d7a46; --good-soft: #e3f3e9;
+  --bad: #b3261e; --bad-soft: #fbe7e5; --warn: #8a5a00; --warn-soft: #fbf0d9; --code: #f0efeb;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141413; --surface: #1d1d1b; --surface-2: #262624; --text: #ecebe6; --muted: #a6a59e;
+    --border: #393935; --accent: #8aa8ff; --accent-soft: #232b44; --good: #6fcf97; --good-soft: #1b3326;
+    --bad: #ff8a80; --bad-soft: #3a1f1d; --warn: #f2c063; --warn-soft: #3a2f17; --code: #262624;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141413; --surface: #1d1d1b; --surface-2: #262624; --text: #ecebe6; --muted: #a6a59e;
+  --border: #393935; --accent: #8aa8ff; --accent-soft: #232b44; --good: #6fcf97; --good-soft: #1b3326;
+  --bad: #ff8a80; --bad-soft: #3a1f1d; --warn: #f2c063; --warn-soft: #3a2f17; --code: #262624;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+}
+header { max-width: 1100px; margin: 0 auto; padding: 28px 16px 8px; }
+header h1 { margin: 0 0 4px; font-size: 26px; letter-spacing: -0.01em; }
+header p { margin: 0; color: var(--muted); }
+.badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.badge { font-size: 12px; padding: 2px 9px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); }
+nav {
+  position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--border);
+}
+.tabs { max-width: 1100px; margin: 0 auto; padding: 0 16px; display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab {
+  appearance: none; border: 0; background: none; color: var(--muted); font: inherit; font-size: 14px;
+  padding: 12px 12px 10px; cursor: pointer; white-space: nowrap; border-bottom: 2px solid transparent;
+}
+.tab:hover { color: var(--text); }
+.tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 64px; }
+section[role="tabpanel"] { display: none; }
+section[role="tabpanel"].active { display: block; }
+h2 { font-size: 21px; margin: 8px 0 6px; }
+h3 { font-size: 16px; margin: 26px 0 8px; }
+p, li { max-width: 78ch; }
+.lede { color: var(--muted); margin-top: 0; }
+.grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); margin: 14px 0; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+.card h4 { margin: 0 0 4px; font-size: 14px; }
+.card p { margin: 0; color: var(--muted); font-size: 13.5px; }
+.stat .num { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
+.stat .lbl { color: var(--muted); font-size: 13px; }
+.stat.good .num { color: var(--good); }
+.stat.bad .num { color: var(--bad); }
+.table-wrap { overflow-x: auto; margin: 10px 0 6px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { background: var(--surface-2); font-weight: 600; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pass { color: var(--good); font-weight: 600; }
+.fail { color: var(--bad); font-weight: 600; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; background: var(--code); padding: 1px 5px; border-radius: 4px; }
+pre { background: var(--code); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; overflow-x: auto; font-size: 12.5px; line-height: 1.5; }
+pre code { background: none; padding: 0; }
+.callout { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 14px 0; }
+.callout.warn { border-color: var(--warn); background: var(--warn-soft); }
+.callout.good { border-color: var(--good); background: var(--good-soft); }
+.diagram { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; overflow-x: auto; margin: 12px 0; }
+.diagram .mermaid { min-width: 560px; }
+.diagram pre.fallback { border: 0; margin: 0; background: none; }
+.bars { display: grid; gap: 6px; margin: 10px 0; }
+.bar { display: grid; grid-template-columns: 70px 1fr 74px; gap: 8px; align-items: center; font-size: 13px; }
+.bar .track { height: 14px; background: var(--surface-2); border-radius: 4px; position: relative; overflow: hidden; }
+.bar .fill { position: absolute; inset: 0 auto 0 0; border-radius: 4px; background: var(--accent); }
+.bar .fill.over { background: var(--bad); }
+.bar .slo { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--text); opacity: .55; }
+.bar .v { text-align: right; font-variant-numeric: tabular-nums; }
+.legend { font-size: 12.5px; color: var(--muted); }
+.two { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+ol.steps { padding-left: 20px; }
+ol.steps li { margin-bottom: 6px; }
+.theme-toggle { position: absolute; top: 24px; right: 16px; }
+header { position: relative; }
+.theme-toggle button { font: inherit; font-size: 12px; background: var(--surface); color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; cursor: pointer; }
+@media (max-width: 640px) { header h1 { font-size: 21px; padding-right: 70px; } .bar { grid-template-columns: 52px 1fr 62px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Elevator System</h1>
+  <p>Easy → Medium → Hard, built as an experiment: build, simulate, measure, evolve. State at tag <code>v3-hard</code>.</p>
+  <div class="badges">
+    <span class="badge">.NET 10</span><span class="badge">480 tests passing</span><span class="badge">13 ADRs</span>
+    <span class="badge">deterministic sim + actor runtime</span><span class="badge">p99 12.2 ms @ 100 concurrent</span>
+  </div>
+  <div class="theme-toggle"><button id="theme" type="button" aria-label="Toggle colour theme">Theme</button></div>
+</header>
+<nav>
+  <div class="tabs" role="tablist" aria-label="Sections">
+    <button class="tab" role="tab" id="t-arch" aria-controls="p-arch" aria-selected="true">Architecture</button>
+    <button class="tab" role="tab" id="t-sim" aria-controls="p-sim" aria-selected="false">Simulation</button>
+    <button class="tab" role="tab" id="t-conc" aria-controls="p-conc" aria-selected="false">Thread safety</button>
+    <button class="tab" role="tab" id="t-perf" aria-controls="p-perf" aria-selected="false">Performance</button>
+    <button class="tab" role="tab" id="t-err" aria-controls="p-err" aria-selected="false">Errors &amp; faults</button>
+    <button class="tab" role="tab" id="t-tests" aria-controls="p-tests" aria-selected="false">Test results</button>
+  </div>
+</nav>
+<main>
+
+<!-- ============================== ARCHITECTURE ============================== -->
+<section role="tabpanel" id="p-arch" aria-labelledby="t-arch" class="active">
+  <h2>Architecture: pure core, threaded shell</h2>
+  <p class="lede">All decisions live in pure, single-threaded handlers. Two shells deliver the <em>same messages</em> to them: a deterministic simulator for experiments and tests, and a real actor runtime for latency and concurrency. Everything that is measured is read from one event log.</p>
+
+  <div class="diagram"><pre class="mermaid">
+flowchart TB
+  subgraph Pure["Pure core: no threads, clocks or I/O"]
+    direction LR
+    subgraph Domain["Elevator.Domain"]
+      ELEV["Elevator&lt;br/&gt;explicit transition table&lt;br/&gt;+ ElevatorMode"]
+      subgraph Control["Control: one message protocol"]
+        EH["ElevatorHandler&lt;br/&gt;accept / reject · ApplyFault"]
+        DH["DispatcherHandler&lt;br/&gt;access pipeline → dispatch&lt;br/&gt;overlay · fallback · watchdog"]
+        PH["PassengersHandler&lt;br/&gt;board · alight · refused"]
+      end
+    end
+    subgraph Policy["Elevator.Policy"]
+      ACC["IAccessPolicy pipeline"]
+      DISP["RoundRobin · Nearest · Cost"]
+      SCHED["FIFO · LOOK"]
+    end
+    DH --> ACC --> DISP --> SCHED
+    EH --> ELEV --> SCHED
+  end
+  subgraph Shells["Shells: deliver messages, keep time, no decisions"]
+    direction LR
+    SIM["SimEngine&lt;br/&gt;priority queue (time, seq)"]
+    RT["Elevator.Runtime&lt;br/&gt;actor per elevator"]
+    FI["IFaultInjector"]
+  end
+  Shells -- "same messages" --> Control
+  FI -- "ApplyFault" --> Control
+  Control -- "DomainEvents" --> LOG[("Event log JSONL")]
+  LOG --> MET["Elevator.Metrics"]
+  LOG --> TUI["Elevator.Tui&lt;br/&gt;fold → view → Spectre"]
+  CLI["Elevator.Cli&lt;br/&gt;run · tui · replay · bench · perf"] --> SIM
+  CLI --> RT
+  </pre></div>
+
+  <div class="grid">
+    <div class="card"><h4>Elevator.Domain</h4><p>State machine with an explicit transition table; advances only through <code>Tick(simTime)</code>. Handlers implement <code>Handle(message, now, outbox)</code>.</p></div>
+    <div class="card"><h4>Elevator.Policy</h4><p>Scheduling (FIFO, LOOK) and dispatch (RoundRobin, Nearest, Cost) as pure functions over immutable snapshots. All stay selectable via <code>--dispatch</code>.</p></div>
+    <div class="card"><h4>Elevator.Runtime</h4><p>One actor loop + <code>Channel&lt;T&gt;</code> mailbox per elevator, a single dispatcher on a bounded request channel, a log writer, a watchdog.</p></div>
+    <div class="card"><h4>Elevator.Simulation</h4><p><code>SimEngine</code>, SimClock/RealClock, seeded Poisson traffic, YAML scenarios, fault injector. One seeded RNG → fully deterministic.</p></div>
+    <div class="card"><h4>Elevator.Metrics</h4><p>Reads the event log only: wait/ride/journey, wait attribution buckets, ops metrics, Student-t CIs.</p></div>
+    <div class="card"><h4>Elevator.Tui</h4><p>A fold over the log; reads at ~20 fps and never drives decisions. Same view for live runs and replays.</p></div>
+  </div>
+
+  <h3>How it evolved</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Tag</th><th>What it added</th><th>Key ADRs</th></tr>
+    <tr><td><code>v1-easy</code></td><td>One elevator, explicit state machine, FIFO, simulated clock, event log</td><td>001 FIFO · 002 transition table · 003 sim clock</td></tr>
+    <tr><td><code>v2-medium</code></td><td>4 elevators, destination dispatch, LOOK, cost-based dispatch, capacity, actor runtime</td><td>004 LOOK · 005 actors vs locks · 006 cost function · 007 event log · 008 metrics · 009/010 capacity</td></tr>
+    <tr><td><code>v3-hard</code></td><td>TUI ∥ elevator types, access policies (VIP, restricted floors), maintenance, emergency stop, watchdog, fault injection</td><td>011 TUI · 012 eligibility &amp; types · 013 maintenance / emergency / watchdog</td></tr>
+  </table></div>
+
+  <h3>Dispatch: the cost function</h3>
+  <p><strong>cost(e, r) = ETA + λ·ΔD + μ·L̂/C</strong>, lowest wins (λ = 0.5, μ = 10 s, from a weight sweep on seeds 1–20, reported on held-out seeds 21–40).</p>
+  <ul>
+    <li><strong>ETA</strong>: seconds until elevator <em>e</em> would pick request <em>r</em> up.</li>
+    <li><strong>ΔD</strong>: extra seconds everyone already riding or assigned would spend if <em>e</em> also takes <em>r</em>.</li>
+    <li><strong>L̂/C</strong>: predicted load at pickup over capacity (the spec's <code>balanceLoad()</code>).</li>
+    <li>The terms come from a <strong>route projection</strong>: the elevator is replayed forward with its own scheduler and mechanics, with and without <em>r</em>. <code>StopProjection</code> (per stop, O(floors²), backlog-independent) is checked against the per-passenger <code>RouteProjection</code> oracle on 1,500 random elevators.</li>
+    <li><strong>Eligibility comes before cost</strong>: an elevator an access policy denies is invisible to every dispatch path.</li>
+  </ul>
+</section>
+
+<!-- ============================== SIMULATION ============================== -->
+<section role="tabpanel" id="p-sim" aria-labelledby="t-sim">
+  <h2>The simulation</h2>
+  <p class="lede">A discrete-event simulator turns "is LOOK + Cost better?" into a paired experiment: same passengers, different strategies, confidence intervals.</p>
+
+  <div class="two">
+    <div>
+      <h3>The engine</h3>
+      <ul>
+        <li><code>SimEngine</code> is one priority queue of messages keyed on <strong>(sim time, sequence number)</strong>. Ties break by insertion order, so a run is a pure function of (scenario, seed, strategy).</li>
+        <li>It delivers the same protocol messages as the actor runtime, to the same handlers. There is no simulator-only logic.</li>
+        <li>Steppable: <code>Create</code> → <code>AdvanceTo(t)</code> → <code>Finish</code>. The TUI advances it in fixed 100 ms ticks; speed only changes how many ticks per frame.</li>
+        <li>Emergency stops get a priority key in the queue, so they preempt queued traffic at the same instant.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Two kinds of time</h3>
+      <ul>
+        <li><strong>Sim seconds</strong>: wait, ride, journey, maintenance time, detection time. Deterministic.</li>
+        <li><strong>Wall-clock ms</strong>: assignment latency in the actor runtime. Depends on the machine; only measured by <code>perf</code>.</li>
+        <li>They are never mixed in one metric.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Traffic</h3>
+  <ul>
+    <li>A <strong>non-homogeneous Poisson process</strong> with a piecewise-linear rate λ(t), generated by <strong>thinning</strong> (Lewis–Shedler): draw candidates at the peak rate λmax, keep each with probability λ(t)/λmax.</li>
+    <li>An origin/destination mix per profile: <em>up-peak</em> (mostly from the lobby), <em>down-peak</em> (mostly to it), <em>lunch</em> (both, two humps, 12/min peak, 6/min trough).</li>
+    <li>Scenarios are YAML: building, fleet types, access rules, traffic, latency, and a fault schedule.</li>
+  </ul>
+<pre><code>name: lunch
+seed: 1
+building: { floors: 20, elevators: 4, capacity: 10, bypassThreshold: 0.8 }
+scheduling: look
+dispatch: cost
+traffic:
+  profile:
+    lobby: 1
+    mix: { fromLobby: 0.40, toLobby: 0.40, interfloor: 0.20 }
+    rate:
+      - { atS: 0,    perMinute: 4 }
+      - { atS: 450,  perMinute: 12 }
+      - { atS: 900,  perMinute: 6 }
+      - { atS: 1350, perMinute: 12 }</code></pre>
+
+  <h3>How a result is measured</h3>
+  <ol class="steps">
+    <li><strong>Common random numbers</strong>: for a given seed every strategy sees exactly the same passengers.</li>
+    <li><strong>Paired differences</strong> per seed against a baseline, with a 95% Student-t interval; a Δ whose interval excludes 0 is marked ✱.</li>
+    <li><strong>Tuning vs held-out seeds</strong>: seeds 1–20 for exploring and weight sweeps, 21–40 for every reported decision.</li>
+    <li><strong>Wait attribution</strong>: each passenger's wait is split into buckets (dispatch, reassignment, bypassed_full, blocked, finishing door cycle, serving others, travel toward / away) that sum exactly to the wait. This explains <em>why</em> a strategy wins.</li>
+    <li>Every results file records the exact command that produced it and regenerates byte-identically.</li>
+  </ol>
+
+  <h3>The experiment, step by step (avg / p95 wait, sim seconds)</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Step</th><th class="n">Up-peak</th><th class="n">Down-peak</th><th class="n">Lunch</th></tr>
+    <tr><td>Baseline: FIFO + Nearest</td><td class="n">25.9 / 89.3</td><td class="n">255.6 / 592.5 <span class="legend">(saturated)</span></td><td class="n">99.1 / 353.5</td></tr>
+    <tr><td>+ LOOK</td><td class="n">19.2 / 47.1</td><td class="n">28.3 / 84.9</td><td class="n">20.7 / 73.9</td></tr>
+    <tr><td>+ cost-based dispatch (held-out)</td><td class="n">16.4 / 39.1</td><td class="n">20.8 / 53.3</td><td class="n">13.8 / 38.4</td></tr>
+    <tr><td>± rebalancing (held-out)</td><td class="n">−0.2 s (n.s.)</td><td class="n">−0.9 ± 0.5 s</td><td class="n">−0.4 ± 0.4 s</td></tr>
+    <tr><td><strong>next-trip capacity, final default</strong></td><td class="n"><strong>15.8 / 37.9</strong></td><td class="n"><strong>20.6 / 53.2</strong></td><td class="n"><strong>13.8 / 38.4</strong></td></tr>
+  </table></div>
+
+  <h3>Hard stage, same method</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Question</th><th>LOOK + Cost</th><th>LOOK + Nearest</th></tr>
+    <tr><td>Chaos schedule vs none, same passengers</td><td>13.8 / 38.4 → 19.6 / 58.9 (+5.8 ± 0.8 s ✱), 100% served</td><td>21.0 / 78.1 → 25.6 / 87.0</td></tr>
+    <tr><td>Typed fleet with access policies</td><td><strong>14.0 / 39.8</strong></td><td>22.8 / 81.9 (Cost −8.8 ± 1.0 s ✱)</td></tr>
+    <tr><td>Watchdog T = 5 / 10 / 30 / 60 s: time to detect</td><td>6.0 / 11.3 / 31.9 / 61.2 s</td><td>–</td></tr>
+    <tr><td>Watchdog false positives on fault-free runs</td><td colspan="2">≈ 61–65 per run at T = 5 s (freight's 6 s dwell); none at 10 or 30 s → default T = 30 s</td></tr>
+  </table></div>
+
+  <h3>Watching it</h3>
+  <p><code>elevator tui chaos</code> runs the same engine live (0.25×…50×, MAX, pause, single-step, seek); <code>elevator replay out/run.jsonl</code> drives the same view from a log. Speed cannot change the result: 0.5×, 10×, MAX and headless produce the same log hash.</p>
+</section>
+
+<!-- ============================== CONCURRENCY ============================== -->
+<section role="tabpanel" id="p-conc" aria-labelledby="t-conc">
+  <h2>Thread safety: single writers, not locks</h2>
+  <p class="lede">The spec asks for "appropriate locks/mutexes", atomic state changes and no races in request assignment. We get all three without a single domain lock: every piece of mutable state has exactly one owner, and owners only talk through messages (ADR-005).</p>
+
+  <div class="diagram"><pre class="mermaid">
+flowchart LR
+  C1["caller 1"] & C2["caller 2"] & CN["caller N"] -- "AssignRequest" --> RQ[["bounded request channel&lt;br/&gt;FullMode.Wait = backpressure"]]
+  RQ --> D["Dispatcher actor&lt;br/&gt;(single reader)"]
+  D -- "Assign" --> E0["Elevator 0 actor&lt;br/&gt;mailbox + control channel"]
+  D -- "Assign" --> E1["Elevator 1 actor"]
+  D -- "Assign" --> E3["Elevator 3 actor"]
+  E0 & E1 & E3 -- "Accept / Reject + snapshot" --> D
+  E0 & E1 & E3 -- "events" --> L["Log writer&lt;br/&gt;(assigns seq)"]
+  D -- "events" --> L
+  D -- "accepted" --> P["Passengers actor"]
+  P -- "TaskCompletionSource" --> C1
+  </pre></div>
+
+  <h3>Why it is thread safe</h3>
+  <div class="grid">
+    <div class="card"><h4>One owner per state</h4><p>Each elevator, the dispatcher and the passengers are owned by exactly one loop reading a <code>SingleReader</code> channel. No other thread can touch that state.</p></div>
+    <div class="card"><h4>Immutable snapshots</h4><p>The dispatcher never reads an elevator's memory. It sees immutable snapshots that arrive as messages.</p></div>
+    <div class="card"><h4>No domain locks</h4><p>The shell uses only channels, a <code>ConcurrentDictionary</code> to correlate acks with callers, and a <code>ConcurrentQueue</code> log copy for tests. None holds domain state.</p></div>
+    <div class="card"><h4>No lock across await</h4><p>Since there are no locks, none can be held across a sleep or an await, and there is no lock ordering to get wrong.</p></div>
+  </div>
+
+  <h3>Atomic state changes</h3>
+  <ul>
+    <li><strong>Run-to-completion.</strong> A handler processes one message fully before the next is read. Every state change caused by a message, together with its events, is therefore atomic with respect to every other message for that elevator.</li>
+    <li><strong>Explicit transition table.</strong> <code>TransitionTable</code> maps (state, trigger) → state; anything else is an illegal transition and throws. The tests check every edge.</li>
+    <li><strong>Structural safety invariant.</strong> Moving states are entered only from <code>Idle</code>, which is reached only after <code>DoorsFullyClosed</code>, so "never moves unless doors are closed" is guaranteed by the table, not by a check.</li>
+    <li><strong>Modes, not states.</strong> Maintenance, emergency and fault are an <code>ElevatorMode</code> derived from flags owned by the elevator. The emergency edges <code>EmergencyHalt</code> and <code>EmergencyClose</code> go through the same table.</li>
+  </ul>
+
+  <h3>Race conditions and how each is handled</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Race</th><th>Handling</th></tr>
+    <tr><td>Two callers' requests land on the same elevator at the same instant</td><td>Requests are serialised through the single dispatcher; elevators accept them one message at a time.</td></tr>
+    <tr><td>The dispatcher decides on a stale snapshot</td><td><strong>The elevator has the final say</strong>: it accepts, or rejects (maintenance › capacity › stale &gt; 10 s off its own projection). A rejected request is re-dispatched oldest-first. Aging (≥ 60 s) and forced proposals guarantee progress. The cost is visible in the <code>reassignment</code> wait bucket.</td></tr>
+    <tr><td>A burst of proposals before any snapshot returns</td><td>A <strong>pending-assignment overlay</strong>: the dispatcher adds its own in-flight proposals to each snapshot. Stale rejections at 100 simultaneous submitters dropped from 3.6 proposals per request to ≈ 1 per request and 0 rejections.</td></tr>
+    <tr><td>A notice about a request arrives before the passenger exists</td><td><strong>Causality, not locks</strong>: <code>AssignRequest</code> posts <code>PassengerWaiting</code> <em>before</em> writing to the request channel, so every later notice is caused by (and arrives after) the registration.</td></tr>
+    <tr><td>A request owned by two elevators</td><td>Ownership changes only through accept / release messages handled by the dispatcher; asserted in every stress and property test.</td></tr>
+    <tr><td>An elevator handed pickups back while it still looked in service</td><td>The elevator publishes its new snapshot <em>before</em> the pickups it hands back, so the dispatcher never proposes them straight back.</td></tr>
+    <tr><td>An emergency stuck behind a queue of traffic</td><td>A <strong>priority control channel</strong> per actor (and a priority key in the sim queue): an emergency behind 50 queued commands takes effect first.</td></tr>
+    <tr><td>Log ordering across actors</td><td>One log-writer task assigns sequence numbers; consumers never depend on cross-actor order.</td></tr>
+  </table></div>
+
+  <h3>Tests that prove it</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Test</th><th>What it does</th><th>Checks</th></tr>
+    <tr><td><code>ConcurrencyStressTests</code></td><td>A barrier releases 32 threads × 300 rounds (Nearest) and 16 × 60 (Cost) at the same instant each round</td><td>Every submission assigned exactly once; no request owned by two elevators; each elevator's state changes form one valid transition chain. 10 / 10 runs passed.</td></tr>
+    <tr><td><em>Mutation check</em></td><td>Start a second loop on each elevator's mailbox (two writers)</td><td>The stress test fails at once ("Collection was modified"), so it does detect races.</td></tr>
+    <tr><td><code>CrossCheckTests</code></td><td>The same scenario through the sim and the actor runtime (200× speed)</td><td>Same passengers, everyone served once at the right floor, invariants intact, waits within jitter tolerance.</td></tr>
+    <tr><td><code>ChaosCrossCheckTests</code></td><td>The same, with maintenance, emergency stops and stuck faults</td><td>Equivalent outcomes under faults.</td></tr>
+    <tr><td><code>EmergencyPreemptionTests</code></td><td>Emergency behind 50 queued commands; other commands behind the mailbox</td><td>The emergency takes effect first; ordinary commands keep FIFO order.</td></tr>
+    <tr><td><code>PerfGateTests</code></td><td>1,000 concurrent submitters, then a sustained-load soak (runs alone)</td><td>p99 &lt; 100 ms; nothing lost or duplicated; heap flat.</td></tr>
+    <tr><td>FsCheck properties</td><td>Random buildings, strategies, capacities and latencies through the sim</td><td>System invariants: assignment ownership, capacity, arrival order, served exactly once.</td></tr>
+  </table></div>
+
+  <div class="callout">This is <strong>deterministic simulation testing</strong>: logic is proven deterministically in the sim over thousands of random cases, and the threaded shell is tested for outcome equivalence and thread-safety invariants. The next step, if needed, is Microsoft Coyote, which controls actor scheduling so interleaving bugs replay from a seed.</div>
+</section>
+
+<!-- ============================== PERFORMANCE ============================== -->
+<section role="tabpanel" id="p-perf" aria-labelledby="t-perf">
+  <h2>Performance</h2>
+  <p class="lede">Real clock, real threads, Apple M2 Pro (10 cores, 16 GB), .NET 10, on a quiet machine. Default system: LOOK + cost dispatch, next-trip capacity, overload fallback to Nearest above 200 in flight.</p>
+
+  <div class="grid">
+    <div class="stat card good"><div class="num">12.2 ms</div><div class="lbl">assignment p99 at 100 concurrent (SLO &lt; 100 ms)</div></div>
+    <div class="stat card good"><div class="num">53.6 ms</div><div class="lbl">assignment p99 at 1,000 concurrent</div></div>
+    <div class="stat card"><div class="num">≈ 4.5k</div><div class="lbl">simultaneous requests within the SLO (≈ 45× the spec's "100+")</div></div>
+    <div class="stat card good"><div class="num">0 / 0</div><div class="lbl">requests lost / duplicated, at every load</div></div>
+    <div class="stat card good"><div class="num">+0.9%</div><div class="lbl">heap growth over a 60 s soak (1.06 → 1.10 MB)</div></div>
+  </div>
+
+  <h3>Spec SLOs</h3>
+  <div class="table-wrap"><table>
+    <tr><th>SLO</th><th class="n">Measured</th><th>Result</th></tr>
+    <tr><td>Assignment p99 &lt; 100 ms at 100 concurrent</td><td class="n">12.2 ms</td><td class="pass">PASS</td></tr>
+    <tr><td>Assignment p99 &lt; 100 ms at 1,000 concurrent</td><td class="n">53.6 ms</td><td class="pass">PASS</td></tr>
+    <tr><td>Assignment p99 &lt; 100 ms at 10,000 concurrent (stretch)</td><td class="n">201.9 ms</td><td class="fail">FAIL</td></tr>
+    <tr><td>Every request assigned (100 / 1k / 10k)</td><td class="n">100 / 1,000 / 10,000</td><td class="pass">PASS</td></tr>
+    <tr><td>Lost = 0, duplicated = 0</td><td class="n">0, 0</td><td class="pass">PASS</td></tr>
+    <tr><td>Heap growth &lt; 10% over a 60 s soak</td><td class="n">+0.9%</td><td class="pass">PASS</td></tr>
+  </table></div>
+
+  <h3>p99 vs burst size, default system</h3>
+  <div class="bars" id="bars"></div>
+  <p class="legend">Bar scale 0–200 ms; the line marks the 100 ms SLO. Each point is a fresh process with warm-up, median p99 of 3 repeats.</p>
+
+  <div class="table-wrap"><table>
+    <tr><th>Simultaneous submitters</th><th class="n">100</th><th class="n">300</th><th class="n">1k</th><th class="n">3k</th><th class="n">5k</th><th class="n">6.5k</th><th class="n">8k</th><th class="n">10k</th></tr>
+    <tr><td>Default (cost + fallback), p99 ms</td><td class="n">12.7</td><td class="n">38.1</td><td class="n">50.6</td><td class="n">80.4</td><td class="n">103.3</td><td class="n">125.4</td><td class="n">158.8</td><td class="n">181.6</td></tr>
+    <tr><td>Cost only, p99 ms</td><td class="n">11.6</td><td class="n">66.0</td><td class="n">309.7</td><td class="n">605.8</td><td class="n">852.8</td><td class="n">858.5</td><td class="n">989.6</td><td class="n">1,131.3</td></tr>
+    <tr><td>Nearest only, p99 ms</td><td class="n">1.1</td><td class="n">3.2</td><td class="n">18.5</td><td class="n">49.5</td><td class="n">77.2</td><td class="n">101.9</td><td class="n">120.9</td><td class="n">158.0</td></tr>
+  </table></div>
+
+  <h3>How the response time is measured</h3>
+  <ul>
+    <li><strong>Definition</strong>: wall clock from <code>AssignRequest</code> to the elevator's <em>accepted</em> assignment, queueing included. It is not the moment the dispatcher picks a candidate.</li>
+    <li><strong>Recording</strong>: HdrHistogram per run; p50 / p99 / max reported.</li>
+    <li><strong>Method</strong>: a burst of N callers released together, a fresh process per point, warm-up first, median p99 of 3 repeats, taken when the 1-minute load average was under 3.</li>
+    <li><strong>Gate</strong>: <code>PerfGateTests</code> (1,000 submitters plus a soak) runs in its own non-parallel test collection; it passed 3 / 3.</li>
+  </ul>
+
+  <h3>Where the ≈ 4.5k number comes from</h3>
+  <ol class="steps">
+    <li>The dispatcher is the <strong>one serial stage</strong>. Per request it spends 16.6 µs (13.8 handler + 2.8 delivery) on protocol work: ingesting the snapshot from each accepted assignment, the pending set and overlay, events, and channel writes. The Nearest decision itself is ≈ 1.4 µs.</li>
+    <li>1 / 16.6 µs ≈ <strong>60k requests/s</strong>; measured 55–59k from 3k up.</li>
+    <li>A burst of N waits about N / 57k s for its last request, so 100 ms ↔ ≈ 5.7k. Fixed overheads bring the measured crossing to between 5k (77 ms) and 6.5k (102 ms) for Nearest, ≈ 6.4k.</li>
+    <li>The default spends cost-function time on the first 200 in flight, so it crosses at ≈ 4.5k. 10k needs ≈ 175 ms at that rate, hence the stretch FAIL.</li>
+    <li>For scale, 10k simultaneous presses is more than the population of a 20-floor office building (≈ 1,500–2,000 people).</li>
+  </ol>
+
+  <h3>What got us there</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Change</th><th>Effect (measured)</th></tr>
+    <tr><td><strong>Per-stop projection</strong> (<code>StopProjection</code>): per-stop aggregates, ΔD by prefix matching, bitmask LOOK/FIFO, stop-to-stop travel</td><td>One cost decision: 22.5 → 2.1 µs (empty), 2,327 → 80 µs (backlog 400), flat at 88 µs for 1,600. Allocation 3.9 MB → 188 KB.</td></tr>
+    <tr><td><strong>Overload fallback</strong> to Nearest above 200 in flight</td><td>p99 at 1k: 309.7 → 50.6 ms. Normal traffic never gets near 200 in flight (peak 21), so bench quality is unchanged.</td></tr>
+    <tr><td><strong>Pending-assignment overlay</strong></td><td>3.6 → ≈ 1 proposal per request at 100 simultaneous; 0 stale rejections.</td></tr>
+    <tr><td><strong>Overlay made O(n)</strong> (it was O(n²) during bursts)</td><td>Removed the super-linear tail at high load.</td></tr>
+    <tr><td><strong>Single-writer actors on channels</strong></td><td>Elevators work in parallel; no lock contention.</td></tr>
+    <tr><td><strong>Bounded request channel</strong> (<code>FullMode.Wait</code>)</td><td>Backpressure: callers wait asynchronously instead of growing memory without bound.</td></tr>
+  </table></div>
+
+  <h3>Memory</h3>
+  <ul>
+    <li><strong>Soak</strong>: 60 s of sustained load, heap 1.06 → 1.10 MB (+0.9%), 1,183 of 1,190 delivered (the rest were still riding when it stopped).</li>
+    <li><strong>Per decision</strong>: 17 KB (empty) to 201 KB (backlog 1,600), flat with the backlog (BenchmarkDotNet).</li>
+    <li><strong>Bounded queues</strong>: the request channel is bounded; finished requests leave the correlation dictionary when their task completes.</li>
+  </ul>
+
+  <h3>If more were needed (not done)</h3>
+  <ul>
+    <li><strong>Shard the dispatcher per elevator bank</strong>, not per zone. Zoning one bank breaks the group optimisation the cost function exists for.</li>
+    <li><strong>Batch assignment</strong>: drain the channel in batches and solve each as an assignment problem (Hungarian). One snapshot ingestion per batch, and possibly better quality than greedy.</li>
+  </ul>
+</section>
+
+<!-- ============================== ERRORS ============================== -->
+<section role="tabpanel" id="p-err" aria-labelledby="t-err">
+  <h2>Errors, failures and faults</h2>
+  <p class="lede">Every failure mode is either rejected at the boundary with a reason, or turned into a message that the single owner handles. Nothing is silently dropped, and every outcome appears in the event log.</p>
+
+  <h3>Invalid input</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Case</th><th>Handling</th></tr>
+    <tr><td>Hall or car call to a floor that doesn't exist, or a direction that's impossible (Up at the top floor)</td><td><code>RequestRejected</code> event with kind and reason; <code>RequestResult.Rejected(reason)</code> to the caller; counted as "Invalid requests".</td></tr>
+    <tr><td>The same request id submitted twice while pending</td><td><code>InvalidOperationException</code> ("already pending").</td></tr>
+    <tr><td>A request every elevator's access policy refuses (restricted floor without access, express not serving the floor)</td><td><code>AccessDenied</code> with no elevator; in the runtime the caller's task fails with <code>RequestRefusedException(policy, reason)</code>. Reported as "refused by policy", <em>not</em> as unserved.</td></tr>
+    <tr><td>Invalid scenario YAML</td><td>The loader collects every validation error (not just the first); the CLI prints them all and exits with code 2.</td></tr>
+    <tr><td>Fleet size mismatch, or a fault command for an unknown elevator</td><td><code>ArgumentException</code> / <code>ArgumentOutOfRangeException</code> at construction or injection.</td></tr>
+    <tr><td>A corrupt or unknown line in a replayed log</td><td>The log reader is tolerant: unknown events show raw in the tail, garbage shows as <code>UNREADABLE</code>, and the replay continues.</td></tr>
+  </table></div>
+
+  <h3>Operational faults (ADR-013)</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Situation</th><th>What happens</th></tr>
+    <tr><td><strong>Maintenance requested</strong></td><td>Mode becomes Draining; every pending pickup is handed back at once and reassigned; riders are still delivered. It then parks (<code>Idle → Maintenance</code>) and comes back on <code>MaintenanceOff</code>.</td></tr>
+    <tr><td><strong>Emergency stop</strong></td><td>Preempts through the priority channel. If moving, it stops level with the next floor, doors closed (<code>EmergencyHalt</code>); if the doors are open, they close (<code>EmergencyClose</code>). Pickups are handed back; it takes no assignments until cleared.</td></tr>
+    <tr><td><strong>Stuck elevator</strong></td><td>The <strong>watchdog</strong>, which rides on the dispatcher's snapshot stream plus per-floor progress reports, declares a <code>FaultDetected</code> after T = 30 s without progress. Its pickups are reassigned; <code>FaultRecovered</code> when it moves again.</td></tr>
+    <tr><td><strong>Capacity full</strong></td><td>Next-trip mode: a full elevator bypasses pickups and keeps them for its next trip; the elevator rejects if a request wouldn't fit. Riders left behind are counted and re-served.</td></tr>
+    <tr><td><strong>Overload</strong></td><td>Above 200 requests in flight, dispatch falls back to Nearest, so latency stays bounded instead of collapsing.</td></tr>
+    <tr><td><strong>Queue full</strong></td><td>The bounded request channel makes submitters wait asynchronously (backpressure); nothing is dropped.</td></tr>
+    <tr><td><strong>Actor crash</strong></td><td>A faulted loop surfaces as <code>ElevatorSystem.Fault</code>; <code>perf</code> and the soak fail loudly with the inner exception instead of reporting numbers.</td></tr>
+  </table></div>
+
+  <h3>Measured cost of faults (chaos.yaml, held-out seeds 21–40)</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Strategy</th><th class="n">Wait avg (no faults → chaos)</th><th class="n">Faults detected</th><th class="n">Detect s</th><th class="n">Recover s</th><th class="n">Pickups handed back</th><th class="n">Served</th></tr>
+    <tr><td>LOOK + Cost</td><td class="n">13.8 → 19.6 s</td><td class="n">2.0</td><td class="n">31.9</td><td class="n">119.1</td><td class="n">5.2</td><td class="n">100%</td></tr>
+    <tr><td>LOOK + Nearest</td><td class="n">21.0 → 25.6 s</td><td class="n">2.0</td><td class="n">31.2</td><td class="n">120.0</td><td class="n">10.6</td><td class="n">100%</td></tr>
+  </table></div>
+  <div class="callout good">Under the full chaos schedule (10 minutes of maintenance, two emergency stops, two stuck drives) every passenger is still served, in both the simulator and the actor runtime.</div>
+</section>
+
+<!-- ============================== TESTS ============================== -->
+<section role="tabpanel" id="p-tests" aria-labelledby="t-tests">
+  <h2>Test results</h2>
+  <p class="lede">At <code>v3-hard</code>: <code>dotnet build -warnaserror</code> clean, 480 tests passing. Tests came first for the domain and the policies; no test uses <code>Thread.Sleep</code>.</p>
+
+  <div class="grid">
+    <div class="stat card good"><div class="num">175</div><div class="lbl">Domain: transition table, mechanics, handlers</div></div>
+    <div class="stat card good"><div class="num">84</div><div class="lbl">Policy: FIFO, LOOK, dispatch, projections</div></div>
+    <div class="stat card good"><div class="num">95</div><div class="lbl">Simulation: engine, scenarios, properties, contract</div></div>
+    <div class="stat card good"><div class="num">91</div><div class="lbl">TUI: fold, view model, pacer, replay, seek</div></div>
+    <div class="stat card good"><div class="num">26</div><div class="lbl">Metrics: report, lifecycle, buckets, ops</div></div>
+    <div class="stat card good"><div class="num">9</div><div class="lbl">Runtime: stress, cross-check, preemption, perf gate</div></div>
+  </div>
+
+  <h3>Kinds of evidence</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Kind</th><th>Examples</th></tr>
+    <tr><td><strong>Table-driven unit tests</strong></td><td>Every transition-table edge; illegal transitions throw; door and motion timing.</td></tr>
+    <tr><td><strong>Property tests (FsCheck)</strong></td><td>Random buildings (3–20 floors, 1–5 elevators, capacity 1–8, latencies, all strategies): served exactly once, never over capacity, no double ownership, arrival order respected, wait buckets sum to the wait, no watchdog false alarm without faults. Same seed → byte-identical log at any tick size, with and without faults.</td></tr>
+    <tr><td><strong>Differential tests</strong></td><td><code>StopProjection</code> equals the <code>RouteProjection</code> oracle on 1,500 random elevators.</td></tr>
+    <tr><td><strong>Concurrency</strong></td><td>Barrier stress test, sim ↔ actor cross-checks (with and without faults), emergency preemption.</td></tr>
+    <tr><td><strong>Determinism</strong></td><td>TUI at 0.5×, 10× and headless give the same log hash on lunch, demo, chaos and fleet; the live fold equals the engine's own state at sampled times.</td></tr>
+    <tr><td><strong>Regression by bytes</strong></td><td>With faults off, all 8 v2 bench reports and 4 run logs regenerate byte-identically at <code>v3-hard</code> (apart from wall time and output path).</td></tr>
+    <tr><td><strong>Performance gate</strong></td><td>1,000 concurrent submitters within p99 100 ms, nothing lost or duplicated, heap flat.</td></tr>
+  </table></div>
+
+  <h3>Merge verification (v2 → TUI ∥ Hard → v3)</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Check</th><th>Result</th></tr>
+    <tr><td>All tests with warnings as errors</td><td class="pass">480 / 480</td></tr>
+    <tr><td>Same seed across TUI speeds (0.5×, 10×, MAX, headless)</td><td class="pass">identical hash</td></tr>
+    <tr><td>v2 results with faults off</td><td class="pass">12 / 12 byte-identical</td></tr>
+    <tr><td>chaos.yaml in the TUI: maintenance / emergency / fault markers and the ops panel</td><td class="pass">live; 9 / 9 commands applied; 264 / 264 served</td></tr>
+  </table></div>
+
+  <h3>Bugs the tests caught</h3>
+  <ul>
+    <li><strong>Eligibility deadlock</strong>: an early cost rule made every elevator permanently ineligible at capacity 1 with threshold 0.5. Found by a random-building property before any bench ran.</li>
+    <li><strong>Projection staleness</strong>: a stale projection made LOOK + Cost worse than LOOK + Nearest (37.5 vs 19.2 s) with 480 stale rejections; after the fix, 0 rejections at zero latency.</li>
+    <li><strong>Race detector check</strong>: deliberately adding a second writer makes the stress test fail at once.</li>
+    <li><strong>Over-strict invariant</strong> (merge step): FsCheck found a rebalance handing a passenger over as the doors opened, so they boarded second in the same batch. Not a skip; the invariant now treats a door opening as one batch, and the seed is pinned as a regression.</li>
+  </ul>
+</section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+(function () {
+  // Theme toggle (per-viewer convenience only).
+  var root = document.documentElement;
+  try { var saved = localStorage.getItem('theme'); if (saved) root.setAttribute('data-theme', saved); } catch (e) {}
+  function isDark() {
+    var t = root.getAttribute('data-theme');
+    return t ? t === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+  document.getElementById('theme').addEventListener('click', function () {
+    var next = isDark() ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('theme', next); } catch (e) {}
+    rerenderDiagrams();
+  });
+
+  // Tabs.
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('[role="tab"]'));
+  function select(tab) {
+    tabs.forEach(function (t) {
+      var on = t === tab;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById(t.getAttribute('aria-controls')).classList.toggle('active', on);
+    });
+    try { history.replaceState(null, '', '#' + tab.id.slice(2)); } catch (e) {}
+    renderVisible();
+  }
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { select(t); });
+    t.addEventListener('keydown', function (e) {
+      var d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+      if (d) { var n = tabs[(i + d + tabs.length) % tabs.length]; n.focus(); select(n); }
+    });
+  });
+
+  // Latency bars (default system, p99 ms).
+  var data = [['100', 12.7], ['300', 38.1], ['1k', 50.6], ['3k', 80.4], ['5k', 103.3], ['6.5k', 125.4], ['8k', 158.8], ['10k', 181.6]];
+  var bars = document.getElementById('bars');
+  data.forEach(function (d) {
+    var row = document.createElement('div'); row.className = 'bar';
+    row.innerHTML = '<span>' + d[0] + '</span><span class="track"><span class="fill' + (d[1] > 100 ? ' over' : '') +
+      '" style="width:' + Math.min(100, d[1] / 2) + '%"></span><span class="slo" style="left:50%"></span></span><span class="v">' + d[1] + ' ms</span>';
+    bars.appendChild(row);
+  });
+
+  // Mermaid: render lazily per visible tab (hidden panels have no size); fall back to source text offline.
+  var sources = new Map();
+  document.querySelectorAll('pre.mermaid').forEach(function (el) { sources.set(el, el.textContent); });
+  function renderVisible() {
+    if (!window.mermaid) {
+      sources.forEach(function (_, el) { el.classList.remove('mermaid'); el.classList.add('fallback'); });
+      return;
+    }
+    var pending = [];
+    document.querySelectorAll('section.active pre.mermaid:not([data-processed])').forEach(function (el) { pending.push(el); });
+    if (pending.length) window.mermaid.run({ nodes: pending }).catch(function () {});
+  }
+  function rerenderDiagrams() {
+    if (!window.mermaid) return;
+    window.mermaid.initialize({ startOnLoad: false, theme: isDark() ? 'dark' : 'neutral', securityLevel: 'strict' });
+    sources.forEach(function (src, el) { el.removeAttribute('data-processed'); el.textContent = src; });
+    renderVisible();
+  }
+  if (window.mermaid) window.mermaid.initialize({ startOnLoad: false, theme: isDark() ? 'dark' : 'neutral', securityLevel: 'strict' });
+
+  var initial = tabs.filter(function (t) { return '#' + t.id.slice(2) === location.hash; })[0] || tabs[0];
+  select(initial);
+})();
+</script>
+</body>
+</html>
