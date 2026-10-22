@@ -88,6 +88,7 @@ public sealed class ElevatorSystem : IAsyncDisposable
             {
                 Access = Building.CreateAccess(options.Access),
                 WatchdogTimeoutMs = options.WatchdogTimeoutMs,
+                VipPriority = options.Access.VipPriority,
             },
             rebalance, new NearestDispatch()),
             this, _requests.Reader));

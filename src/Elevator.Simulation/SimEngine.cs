@@ -90,6 +90,7 @@ public sealed class SimEngine
             {
                 Access = Building.CreateAccess(scenario.Access),
                 WatchdogTimeoutMs = scenario.WatchdogTimeoutMs,
+                VipPriority = scenario.Access.VipPriority,
             },
             rebalance, new NearestDispatch()));
         _passengers = new PassengersHandler([.. fleet.Select(t => t.Capacity)]);

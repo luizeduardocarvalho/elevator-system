@@ -159,4 +159,27 @@ public class CostBasedDispatchTests
     [Fact]
     public void Cost_dispatch_is_registered() =>
         Assert.IsType<CostBasedDispatch>(DispatchPolicies.Create("cost", Look, ElevatorTiming.Default));
+
+    /// <summary>
+    /// VIP priority is a cost term, not a queue position (ADR-015): a VIP's request does not pay for the delay it adds
+    /// to people already riding, so it takes the fastest pickup. E0 at 5 heading up to 15 with five riders; E1 idle at
+    /// 20. A regular 8→9 request goes to E1 (stopping E0 twice would delay five riders); a VIP takes E0.
+    /// </summary>
+    [Fact]
+    public void Vip_priority_lets_a_vip_take_the_fastest_pickup_even_when_it_delays_riders()
+    {
+        var riders = Enumerable.Range(10, 5).Select(i => Req(i, 1, 15)).ToArray();
+        var e0 = Car(0, 5, Direction.Up, carCalls: [15], riders: riders, state: ElevatorState.MovingUp) with { PhaseEndsAt = new SimTime(2_000) };
+        var e1 = Car(1, 20);
+        var regular = Req(1, 8, 9);
+        var vip = regular with { Vip = true };
+        var cost = Cost();
+
+        Assert.Equal(1, cost.Choose(Ctx(regular, e0, e1) with { VipPriority = true })!.ElevatorId);
+        Assert.Equal(0, cost.Choose(Ctx(vip, e0, e1) with { VipPriority = true })!.ElevatorId);
+        Assert.Equal(1, cost.Choose(Ctx(vip, e0, e1))!.ElevatorId); // without VIP priority a VIP is costed like anyone
+        var forVip = cost.Evaluate(e0, vip, SimTime.Zero, vipPriority: true);
+        Assert.True(forVip.AddedDelayS > 0); // the delay is still there, and reported; it just isn't charged
+        Assert.Equal(forVip.EtaS + 10.0 * forVip.LoadAtPickup / 10, forVip.Cost, 6);
+    }
 }

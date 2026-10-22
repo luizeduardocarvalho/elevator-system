@@ -13,9 +13,6 @@ public interface IAccessPolicy
 
     /// <summary>Null when allowed; otherwise the reason it is not.</summary>
     string? Deny(Request request, ElevatorSnapshot elevator);
-
-    /// <summary>Dispatch priority of a request (lower goes first among pending requests); 0 = normal.</summary>
-    int Priority(Request request) => 0;
 }
 
 /// <param name="Policy">The policy that refused (the first one in pipeline order).</param>
@@ -40,13 +37,5 @@ public sealed class AccessPipeline(IReadOnlyList<IAccessPolicy> policies)
             if (p.Deny(request, elevator) is { } reason)
                 return new AccessDenial(p.Name, reason);
         return null;
-    }
-
-    /// <summary>The most urgent priority any policy gives the request (0 when none does).</summary>
-    public int Priority(Request request)
-    {
-        var priority = 0;
-        foreach (var p in Policies) priority = Math.Min(priority, p.Priority(request));
-        return priority;
     }
 }

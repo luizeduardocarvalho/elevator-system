@@ -23,7 +23,7 @@ public static class Building
     {
         List<IAccessPolicy> policies = [new ServedFloorsPolicy(), new CapacityUnitsPolicy()];
         if (access.RestrictedFloors.Count > 0) policies.Add(new FloorRestrictionPolicy(access.RestrictedFloors));
-        if (access.VipElevators.Count > 0 || access.VipPriority) policies.Add(new VipPolicy(access.VipElevators, access.VipPriority));
+        if (access.VipElevators.Count > 0) policies.Add(new VipPolicy(access.VipElevators));
         return new AccessPipeline(policies);
     }
 }

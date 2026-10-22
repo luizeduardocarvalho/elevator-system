@@ -6,6 +6,9 @@ public sealed record DispatchContext(Request Request, IReadOnlyList<ElevatorSnap
 {
     /// <summary>Also report every candidate's cost in <see cref="DispatchChoice.Candidates"/> (shared v3 contract).</summary>
     public bool Explain { get; init; }
+
+    /// <summary>VIP priority (ADR-015): a cost policy may stop charging a VIP request for the delay it adds to others.</summary>
+    public bool VipPriority { get; init; }
 }
 
 /// <param name="Cost">Score of the chosen elevator, lower is better; units depend on the policy.</param>

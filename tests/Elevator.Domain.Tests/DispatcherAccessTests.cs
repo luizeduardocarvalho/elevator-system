@@ -22,14 +22,12 @@ public class DispatcherAccessTests
     }
 
     /// <summary>Denies the listed elevators to every request, or only to those going to <paramref name="floor"/>.</summary>
-    private sealed class Refuse(string name, int[] elevators, int? floor = null, bool vipFirst = false) : IAccessPolicy
+    private sealed class Refuse(string name, int[] elevators, int? floor = null) : IAccessPolicy
     {
         public string Name => name;
 
         public string? Deny(Request request, ElevatorSnapshot elevator) =>
             elevators.Contains(elevator.ElevatorId) && (floor is null || request.DestinationFloor == floor) ? $"{name} says no to E{elevator.ElevatorId}" : null;
-
-        public int Priority(Request request) => vipFirst && request.Vip ? -1 : 0;
     }
 
     private static Request R(int id, int to = 7, bool vip = false, long at = 0) =>
@@ -105,15 +103,20 @@ public class DispatcherAccessTests
         Assert.Equal(0, evaluated.WinnerId);
     }
 
+    /// <summary>
+    /// Pending requests are served by call time, then id; VIP status never reorders them (ADR-015: urgency is a cost
+    /// term and eligibility, not a queue position). With VIP priority on, the VIP still waits its turn here.
+    /// </summary>
     [Fact]
-    public void Vip_requests_are_dispatched_first_among_pending_requests()
+    public void Pending_requests_are_served_by_call_time_and_vip_status_does_not_reorder_them()
     {
-        var (d, o) = Make(new AccessPipeline([new Refuse("vip", [], vipFirst: true)]), publish: false);
+        var d = new DispatcherHandler(new LowestId(), 3, ElevatorTiming.Default, new DispatcherOptions { VipPriority = true });
+        var o = new Outbox();
         d.Handle(new SubmitRequest(R(1, at: 0)), new SimTime(10), o);            // pending: no snapshots yet
-        d.Handle(new SubmitRequest(R(2, vip: true, at: 5)), new SimTime(10), o); // called later, but VIP
+        d.Handle(new SubmitRequest(R(2, vip: true, at: 5)), new SimTime(10), o); // called later, VIP
         d.Handle(new SubmitRequest(R(3, at: 1)), new SimTime(10), o);
         Publish(d, o, 3);
-        Assert.Equal([2, 1, 3], o.Events.OfType<AssignmentProposed>().Select(p => p.RequestId));
+        Assert.Equal([1, 3, 2], o.Events.OfType<AssignmentProposed>().Select(p => p.RequestId));
     }
 
     [Fact]

@@ -10,7 +10,7 @@ namespace Elevator.Domain;
 /// <param name="Load">Load units (a person is 1), so freight can be modelled later.</param>
 public sealed record Request(int PickupFloor, int DestinationFloor, Direction Direction, SimTime Timestamp, int Id = 0, int Load = 1)
 {
-    /// <summary>VIP passenger: dispatched first among pending requests, and allowed on VIP-dedicated elevators (ADR-012).</summary>
+    /// <summary>VIP passenger: allowed on VIP-dedicated elevators (ADR-012); with VIP priority, not charged in the cost function for the delay it adds to others (ADR-015).</summary>
     public bool Vip { get; init; }
 
     /// <summary>Access level, checked against restricted floors (ADR-012). 0 = no special access.</summary>

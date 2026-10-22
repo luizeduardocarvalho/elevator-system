@@ -29,7 +29,7 @@ public class AccessPolicyTests
         new ServedFloorsPolicy(),
         new CapacityUnitsPolicy(),
         new FloorRestrictionPolicy(new Dictionary<int, int> { [20] = 2, [15] = 1 }),
-        new VipPolicy(dedicated: [1], priority: true),
+        new VipPolicy(dedicated: [1]),
     ];
 
     private static Request R(int from, int to, int load = 1, bool vip = false, int level = 0) =>
@@ -80,20 +80,13 @@ public class AccessPolicyTests
         Assert.Null(new ServedFloorsPolicy().Deny(R(1, 20, load: 99), Fleet[0]));
         Assert.Null(new CapacityUnitsPolicy().Deny(R(1, 5), Fleet[2]));
         Assert.Equal("floor 20 requires access level 2 (has 1)", new FloorRestrictionPolicy(new Dictionary<int, int> { [20] = 2 }).Deny(R(20, 1, level: 1), Fleet[3]));
-        Assert.Null(new VipPolicy(dedicated: [], priority: true).Deny(R(1, 3), Fleet[1]));
+        Assert.Null(new VipPolicy(dedicated: []).Deny(R(1, 3), Fleet[1]));
     }
 
     [Fact]
     public void Empty_pipeline_allows_everything_with_normal_priority()
     {
         foreach (var s in Fleet) Assert.Null(AccessPipeline.AllowAll.Check(R(5, 20, load: 99), s));
-        Assert.Equal(0, AccessPipeline.AllowAll.Priority(R(1, 3, vip: true)));
     }
 
-    [Fact]
-    public void Vip_priority_puts_vips_first_only_when_enabled()
-    {
-        Assert.Equal((-1, 0), (new AccessPipeline(Standard).Priority(R(1, 3, vip: true)), new AccessPipeline(Standard).Priority(R(1, 3))));
-        Assert.Equal(0, new VipPolicy(dedicated: [1], priority: false).Priority(R(1, 3, vip: true)));
-    }
 }

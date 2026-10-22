@@ -51,10 +51,10 @@ public sealed class CostBasedDispatch(ISchedulingPolicy scheduling, ElevatorTimi
         var explained = context.Explain ? new List<Domain.Events.CandidateCost>() : null;
         foreach (var s in context.Candidates.OrderBy(s => s.ElevatorId))
         {
-            var eval = Evaluate(s, context.Request, context.Now);
+            var eval = Evaluate(s, context.Request, context.Now, context.VipPriority);
             explained?.Add(double.IsPositiveInfinity(eval.Cost)
                 ? new Domain.Events.CandidateCost(s.ElevatorId, null, "ineligible")
-                : new Domain.Events.CandidateCost(s.ElevatorId, Math.Round(eval.Cost, 3), $"eta {eval.EtaS:0.#}s + {_weights.Lambda}·{eval.AddedDelayS:0.#}s + {_weights.Mu}·{eval.LoadAtPickup}/{s.Capacity}"));
+                : new Domain.Events.CandidateCost(s.ElevatorId, Math.Round(eval.Cost, 3), $"eta {eval.EtaS:0.#}s + {(context.VipPriority && context.Request.Vip ? 0 : _weights.Lambda)}·{eval.AddedDelayS:0.#}s + {_weights.Mu}·{eval.LoadAtPickup}/{s.Capacity}"));
             if (double.IsPositiveInfinity(eval.Cost)) continue;
             if (best is null || eval.Cost < best.Cost) best = new DispatchChoice(s.ElevatorId, eval.Cost, eval.PickupAt);
         }
@@ -70,7 +70,9 @@ public sealed class CostBasedDispatch(ISchedulingPolicy scheduling, ElevatorTimi
 
     private readonly NearestDispatch _beyondHorizon = new();
 
-    public CostEvaluation Evaluate(ElevatorSnapshot s, Request r, SimTime now)
+    /// <param name="vipPriority">VIP priority (ADR-015): a VIP request is not charged λ·ΔD, the delay it adds to people
+    /// already riding or assigned, so it takes the fastest pickup. ΔD is still computed and reported.</param>
+    public CostEvaluation Evaluate(ElevatorSnapshot s, Request r, SimTime now, bool vipPriority = false)
     {
         var defer = s.CapacityMode == CapacityMode.Defer;
         if (s.State == ElevatorState.Maintenance || (defer && s.IsFull)) return CostEvaluation.Ineligible(s.Load);
@@ -87,7 +89,8 @@ public sealed class CostBasedDispatch(ISchedulingPolicy scheduling, ElevatorTimi
 
         var etaS = Math.Max(0, pickupAt.Ms - now.Ms) / 1000.0;
         var addedDelayS = addedDelayMs / 1000.0;
-        var cost = etaS + _weights.Lambda * addedDelayS + _weights.Mu * with.LoadAtPickup / s.Capacity;
+        var lambda = vipPriority && r.Vip ? 0 : _weights.Lambda;
+        var cost = etaS + lambda * addedDelayS + _weights.Mu * with.LoadAtPickup / s.Capacity;
         return new CostEvaluation(cost, etaS, addedDelayS, with.LoadAtPickup, pickupAt);
     }
 

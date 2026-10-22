@@ -21,6 +21,9 @@ public sealed record DispatcherOptions(long DispatchDelayMs = 0, long? Rebalance
     /// Null = no watchdog. The shells set 30 s by default.
     /// </summary>
     public long? WatchdogTimeoutMs { get; init; }
+
+    /// <summary>VIP priority (ADR-015): passed to the dispatch policy as a cost term; it never reorders requests.</summary>
+    public bool VipPriority { get; init; }
 }
 
 /// <summary>Decides, for an assigned request, whether moving it elsewhere is worth it (optional, ADR-006).</summary>
@@ -40,8 +43,8 @@ public interface IRebalancePolicy
 /// re-dispatched. If every eligible elevator rejected it as stale, the next proposal is forced.</item>
 /// <item>A release (full-load bypass, rebalance) or a re-registration (left behind) puts it back to Pending,
 /// keeping its id and t_call.</item>
-/// <item>Pending requests are retried oldest-first whenever an elevator publishes a new snapshot (aging order); with
-/// VIP priority, VIP requests first (ADR-012).</item>
+/// <item>Pending requests are retried oldest-first, by (t_call, id), whenever an elevator publishes a new snapshot
+/// (aging order). Nothing reorders them: urgency (VIP) is a cost term and eligibility, not a queue position (ADR-015).</item>
 /// <item>Eligibility comes before cost (ADR-012): the access pipeline is evaluated once per request (its answer depends
 /// only on the elevators' configuration); a denied elevator is never a candidate, and if every elevator is denied the
 /// request is refused (AccessDenied with no elevator) instead of waiting forever. Elevators out of service (any mode
@@ -59,11 +62,11 @@ public sealed class DispatcherHandler(
 {
     private enum Status { Pending, Proposed, Assigned }
 
-    private sealed class Tracked(Request request, int priority)
+    private sealed class Tracked(Request request)
     {
         public Request Request { get; } = request;
         public Status Status { get; set; } = Status.Pending;
-        public (int, long, int) Key => (priority, Request.Timestamp.Ms, Request.Id);
+        public (long, int) Key => (Request.Timestamp.Ms, Request.Id);
         /// <summary>Elevators the access pipeline denies for this request; null until evaluated (needs every snapshot).</summary>
         public IReadOnlyDictionary<int, AccessDenial>? Denied { get; set; }
         public int? Elevator { get; set; }
@@ -79,7 +82,7 @@ public sealed class DispatcherHandler(
     // Indexes so that no message costs O(requests in flight): pending requests oldest-first (aging order), and which
     // requests each elevator is currently excluded from.
     private static readonly IReadOnlyDictionary<int, AccessDenial> NoDenials = new Dictionary<int, AccessDenial>();
-    private readonly SortedSet<(int Priority, long CalledAtMs, int Id)> _pending = [];
+    private readonly SortedSet<(long CalledAtMs, int Id)> _pending = [];
     private readonly Dictionary<int, HashSet<int>> _excludedFrom = [];
     // Pending-assignment overlay: what this dispatcher has proposed to each elevator that the elevator's latest
     // snapshot does not show yet. Without it, a burst of requests is all evaluated against the same snapshot, the
@@ -189,7 +192,7 @@ public sealed class DispatcherHandler(
                     ? null
                     : policy.Choose(new DispatchContext(query.Request,
                         [.. _snapshots.Values.Where(s => InService(s) && _options.Access.Check(query.Request, s) is null).Select(WithOverlay)],
-                        now, timing, _sequence));
+                        now, timing, _sequence) { VipPriority = _options.VipPriority });
                 outbox.Send(Address.Client, new BestElevatorAnswer(query.QueryId, best?.ElevatorId, best?.Cost ?? double.NaN));
                 break;
         }
@@ -205,7 +208,7 @@ public sealed class DispatcherHandler(
             return;
         }
 
-        var t = new Tracked(request, _options.Access.Priority(request));
+        var t = new Tracked(request);
         _requests.Add(request.Id, t);
         _pending.Add(t.Key);
         outbox.Emit(new RequestSubmitted(now, request.Id, request.PickupFloor, request.DestinationFloor));
@@ -229,7 +232,7 @@ public sealed class DispatcherHandler(
 
     private void RetryPending(SimTime now, Outbox outbox)
     {
-        foreach (var (_, _, id) in _pending.ToList()) // oldest first: aging order (VIPs first with VIP priority)
+        foreach (var (_, id) in _pending.ToList()) // oldest first: aging order
             if (Find(id) is { Status: Status.Pending } t) TryDispatch(t, now, outbox);
     }
 
@@ -255,14 +258,14 @@ public sealed class DispatcherHandler(
         // Eligible = allowed by access and in service; candidates = eligible minus those that rejected this request.
         var candidates = _snapshots.Values.Where(s => !t.Excluded.Contains(s.ElevatorId) && Available(t, s)).Select(view).ToList();
         var explain = _options.EmitDispatchEvaluations;
-        var choice = active.Choose(new DispatchContext(t.Request, candidates, now, timing, _sequence) { Explain = explain });
+        var choice = active.Choose(new DispatchContext(t.Request, candidates, now, timing, _sequence) { Explain = explain, VipPriority = _options.VipPriority });
         var forced = false;
 
         if (choice is null && t.Excluded.Count > 0 && t.OnlyStaleRejections)
         {
             // Everyone eligible said "stale": stop bouncing and force the best one (ADR-006).
             choice = active.Choose(new DispatchContext(t.Request, [.. _snapshots.Values.Where(s => Available(t, s)).Select(view)], now, timing, _sequence)
-                { Explain = explain });
+                { Explain = explain, VipPriority = _options.VipPriority });
             forced = choice is not null;
         }
 

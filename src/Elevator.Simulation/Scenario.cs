@@ -56,7 +56,8 @@ public sealed record Scenario(
 /// <summary>Access configuration of a building (ADR-012); YAML <c>access:</c>.</summary>
 /// <param name="RestrictedFloors">Floor → minimum access level to be picked up there or taken there.</param>
 /// <param name="VipElevators">Elevators dedicated to VIPs (everyone else is denied on them).</param>
-/// <param name="VipPriority">VIP requests are dispatched first among pending requests.</param>
+/// <param name="VipPriority">A VIP request does not pay for the delay it adds to others in the cost function, so it takes
+/// the fastest pickup (ADR-015). It never reorders requests.</param>
 public sealed record AccessConfig(IReadOnlyDictionary<int, int> RestrictedFloors, IReadOnlyList<int> VipElevators, bool VipPriority)
 {
     public static AccessConfig None { get; } = new(new Dictionary<int, int>(), [], false);
