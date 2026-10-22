@@ -52,12 +52,14 @@ public sealed class ElevatorSystem : IAsyncDisposable
     private readonly ConcurrentQueue<DomainEvent> _events = new();
     private readonly Action<long, DomainEvent>? _sink;
     private readonly RuntimeOptions _options;
+    private readonly DelayedDelivery _delayed;
 
     private ElevatorSystem(RuntimeOptions options, Action<long, DomainEvent>? sink)
     {
         _options = options;
         _sink = sink;
         Clock = new RealClock(options.Speed);
+        _delayed = new DelayedDelivery(Clock, Deliver);
         _requests = Channel.CreateBounded<SubmitRequest>(new BoundedChannelOptions(options.RequestQueueCapacity)
         {
             FullMode = BoundedChannelFullMode.Wait,
@@ -102,6 +104,7 @@ public sealed class ElevatorSystem : IAsyncDisposable
     {
         if (Interlocked.Exchange(ref _started, 1) == 1) return;
         foreach (var actor in _actors.Values) _loops.Add(actor.Start(_stop.Token));
+        _loops.Add(_delayed.Run(_stop.Token));
     }
 
     private int _started;
@@ -213,11 +216,7 @@ public sealed class ElevatorSystem : IAsyncDisposable
     {
         if (envelope.DelayMs > 0)
         {
-            _ = Task.Run(async () =>
-            {
-                await Task.Delay(Clock.WallFor(envelope.DelayMs), ct).ConfigureAwait(false);
-                await Deliver(envelope with { DelayMs = 0 }, ct).ConfigureAwait(false);
-            }, ct);
+            _delayed.Schedule(envelope); // link latency, FIFO per sender for equal delays (ADR-015)
             return;
         }
 
