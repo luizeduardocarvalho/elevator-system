@@ -8,7 +8,7 @@ public class StatsTests
     [InlineData(9, 2.262)]
     [InlineData(19, 2.093)]
     [InlineData(29, 2.045)]
-    [InlineData(45, 2.014)]   // between table rows: interpolated
+    [InlineData(45, 2.014)]
     [InlineData(1000, 1.962)]
     public void Student_t_two_sided_95_matches_tables(int df, double expected) =>
         Assert.Equal(expected, Stats.StudentT975(df), 2);
@@ -16,7 +16,6 @@ public class StatsTests
     [Fact]
     public void Mean_ci_of_one_to_five()
     {
-        // mean 3, sd = sqrt(2.5) = 1.5811, se = 0.7071, t(4) = 2.776 → half-width 1.963
         var e = Stats.MeanCi([1, 2, 3, 4, 5]);
         Assert.Equal((3.0, 5), (e.Mean, e.N));
         Assert.Equal(1.963, e.HalfWidth, 3);
@@ -29,8 +28,6 @@ public class StatsTests
     [Fact]
     public void Paired_difference_uses_matching_seeds_only()
     {
-        // Strategy is exactly 2 s better on every common seed: the paired CI is degenerate at -2 even though the
-        // unpaired spreads are wide. Seed 4 exists only for the strategy and is ignored.
         var baseline = new Dictionary<int, double> { [1] = 10, [2] = 50, [3] = 90 };
         var strategy = new Dictionary<int, double> { [1] = 8, [2] = 48, [3] = 88, [4] = 1 };
         var d = Stats.PairedDifference(strategy, baseline);

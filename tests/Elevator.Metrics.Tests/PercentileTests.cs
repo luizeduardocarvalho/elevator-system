@@ -13,9 +13,9 @@ public class PercentileTests
     }
 
     [Theory]
-    [InlineData(50, 5)]   // ceil(0.50·10) = 5th
-    [InlineData(95, 10)]  // ceil(0.95·10) = 10th
-    [InlineData(90, 9)]   // ceil(0.90·10) = 9th
+    [InlineData(50, 5)]
+    [InlineData(95, 10)]
+    [InlineData(90, 9)]
     [InlineData(100, 10)]
     public void Nearest_rank_on_one_to_ten(double p, double expected) =>
         Assert.Equal(expected, Percentile.NearestRank([10, 3, 1, 2, 4, 5, 6, 7, 9, 8], p));

@@ -1,6 +1,5 @@
 namespace Elevator.Domain;
 
-/// <summary>A pickup stop as seen by a fast scheduling decision: floor, direction, and when it was registered.</summary>
 public readonly record struct PickupRef(int Floor, Direction Direction, long RegisteredAtMs);
 
 /// <summary>

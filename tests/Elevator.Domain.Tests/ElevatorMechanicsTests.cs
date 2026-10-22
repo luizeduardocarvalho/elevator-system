@@ -2,10 +2,6 @@ using Elevator.Domain.Events;
 
 namespace Elevator.Domain.Tests;
 
-/// <summary>
-/// Real-elevator mechanics, independent of the scheduling policy. Default timing: 2000 ms per floor,
-/// doors opening 1000 ms, dwell 3000 ms, closing 1000 ms.
-/// </summary>
 public class ElevatorMechanicsTests
 {
     [Fact]
@@ -46,7 +42,7 @@ public class ElevatorMechanicsTests
     {
         var h = new Harness(new StubPolicy(s => s.HallCalls.Count > 0 ? s.HallCalls[0].Floor : s.CarCalls.FirstOrDefault() is var c and > 0 ? c : null));
         h.Hall(0, 8, Direction.Down);
-        h.Car(100, 4); // someone already inside pressed 4 (manual press while moving)
+        h.Car(100, 4);
         h.At(60_000);
 
         var stops = h.Events.OfType<DoorsOpened>().Select(e => e.Floor).ToList();
@@ -71,7 +67,7 @@ public class ElevatorMechanicsTests
         var h = new Harness(new StubPolicy(s => s.HallCalls.Count > 0 ? s.HallCalls[0].Floor : null));
         h.Hall(0, 5, Direction.Up);
         h.Hall(100, 5, Direction.Down);
-        h.At(9_500); // arrives 8000, doors fully open 9000
+        h.At(9_500);
 
         var answered = Assert.Single(h.Events.OfType<HallCallAnswered>());
         Assert.Equal(Direction.Up, answered.Direction);
@@ -83,7 +79,7 @@ public class ElevatorMechanicsTests
     public void Matching_hall_call_while_doors_open_is_answered_immediately_and_restarts_dwell()
     {
         var h = new Harness();
-        h.Hall(0, 1, Direction.Up); // doors open at 1000, would start closing at 4000
+        h.Hall(0, 1, Direction.Up);
         h.Hall(3_000, 1, Direction.Up);
         h.At(10_000);
 
@@ -95,13 +91,12 @@ public class ElevatorMechanicsTests
     public void Matching_hall_call_while_doors_close_reopens_them()
     {
         var h = new Harness();
-        h.Hall(0, 1, Direction.Up); // closing 4000..5000
+        h.Hall(0, 1, Direction.Up);
         h.Hall(4_500, 1, Direction.Up);
         h.At(15_000);
 
         var reopen = Assert.Single(h.States, e => e.Trigger == Trigger.Reopen);
         Assert.Equal((4_500L, ElevatorState.DoorClosing, ElevatorState.DoorOpening), (reopen.At.Ms, reopen.From, reopen.To));
-        // Doors had closed for 500 ms, so they need 500 ms (scaled by opening/closing speed) to be fully open again.
         Assert.Equal([1_000L, 5_000L], h.Events.OfType<HallCallAnswered>().Select(e => e.At.Ms));
     }
 
@@ -109,7 +104,7 @@ public class ElevatorMechanicsTests
     public void Opposite_hall_call_while_doors_close_does_not_reopen()
     {
         var h = new Harness(new StubPolicy(s => s.HallCalls.Count > 0 ? s.HallCalls[0].Floor : null), startFloor: 5);
-        h.Hall(0, 5, Direction.Up); // lantern Up; closing 4000..5000
+        h.Hall(0, 5, Direction.Up);
         h.Hall(4_500, 5, Direction.Down);
         h.At(4_900);
 
@@ -122,7 +117,7 @@ public class ElevatorMechanicsTests
     {
         var h = new Harness();
         h.Hall(0, 1, Direction.Up);
-        h.At(2_000); // doors open
+        h.At(2_000);
         h.Car(2_000, 1);
 
         Assert.Empty(h.Events.OfType<CarCallRegistered>());
@@ -137,7 +132,6 @@ public class ElevatorMechanicsTests
         h.Car(2_000, 6);
         h.At(30_000);
 
-        // doors close 4000..5000, travel 5 floors = 10 s, arrive 15000, open at 16000
         var opened = h.Events.OfType<DoorsOpened>().Last();
         Assert.Equal((16_000L, 6), (opened.At.Ms, opened.Floor));
         Assert.Empty(h.Elevator.TargetFloors);

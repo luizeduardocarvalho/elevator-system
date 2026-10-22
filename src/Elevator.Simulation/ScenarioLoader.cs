@@ -54,7 +54,7 @@ public static class ScenarioLoader
         var bypass = dto.Building?.BypassThreshold ?? 0.8;
         if (bypass is <= 0 or > 1) errors.Add($"building.bypassThreshold must be in (0, 1] (got {bypass})");
 
-        var dispatch = dto.Dispatch ?? "cost"; // ADR-006
+        var dispatch = dto.Dispatch ?? "cost";
         if (!DispatchPolicies.IsKnown(dispatch))
             errors.Add($"unknown dispatch '{dispatch}' (known: {string.Join(", ", DispatchPolicies.Names)})");
 
@@ -172,7 +172,6 @@ public static class ScenarioLoader
             faults.OrderBy(f => f.At).ToList()) { Fleet = fleet, Access = access, WatchdogTimeoutMs = watchdogMs, ClockStart = clockStart }, []);
     }
 
-    /// <summary><c>access:</c> floor restrictions and VIP service (ADR-012).</summary>
     private static AccessConfig LoadAccess(AccessDto? dto, int floors, int elevators, List<string> errors)
     {
         if (dto is null) return AccessConfig.None;
@@ -189,10 +188,6 @@ public static class ScenarioLoader
         return new AccessConfig(restricted, [.. dedicated.Distinct().Order()], dto.Vip?.Priority ?? false);
     }
 
-    /// <summary>
-    /// building.types + building.fleet (ADR-012). A type's missing fields default to the scenario's timing and
-    /// capacity, and to every floor. Without a fleet the building has standard elevators only (null).
-    /// </summary>
     private static List<ElevatorType>? LoadFleet(BuildingDto? building, int floors, ElevatorTiming timing, int capacity, List<string> errors)
     {
         var types = new Dictionary<string, ElevatorType>(StringComparer.OrdinalIgnoreCase);
@@ -229,7 +224,6 @@ public static class ScenarioLoader
         return fleet;
     }
 
-    // YAML shape. Everything nullable so missing keys can be reported instead of silently defaulting to 0.
     private sealed class ScenarioDto
     {
         public string? Name { get; set; }

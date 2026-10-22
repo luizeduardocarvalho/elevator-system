@@ -5,11 +5,6 @@ using ElevatorUnit = Elevator.Domain.Elevator;
 
 namespace Elevator.Benchmarks;
 
-/// <summary>
-/// Explains where a cost decision's time goes as the backlog grows, by counting work rather than sampling:
-/// policy calls made by the route projections, stops each call scans, and the resulting time per decision.
-/// Run: dotnet run -c Release -- anatomy
-/// </summary>
 public static class ProjectionAnatomy
 {
     private sealed class CountingPolicy(ISchedulingPolicy inner) : ISchedulingPolicy
@@ -47,12 +42,10 @@ public static class ProjectionAnatomy
             }
             var context = new DispatchContext(Random(rng, ++id), snapshots, new SimTime(3_000), ElevatorTiming.Default);
 
-            // The oracle (per passenger), counted through the policy calls it makes for one decision (with + without, 4 elevators).
             var oracle = new RouteProjection(counting, ElevatorTiming.Default);
             foreach (var s in snapshots) { oracle.Project(s, context.Request, context.Now); oracle.Project(s, null, context.Now); }
             var (calls, scanned) = (counting.Calls, counting.StopsScanned);
 
-            // The per-stop projection: deterministic work units for the same decision.
             var fast = new StopProjection(new LookScheduling(), ElevatorTiming.Default);
             var steps = snapshots.Sum(s => fast.Project(s, context.Request, context.Now).Steps + fast.Project(s, null, context.Now).Steps);
 

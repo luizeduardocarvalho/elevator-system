@@ -3,10 +3,6 @@ using Elevator.Policy.Dispatch;
 
 namespace Elevator.Policy.Tests;
 
-/// <summary>
-/// Hand-computed examples. Timing: 2 s per floor; doors 1 s opening, 3 s open, 1 s closing.
-/// A pickup happens when the doors are fully open (arrival + 1 s). cost = ETA + λ·ΔD + μ·L̂/C.
-/// </summary>
 public class CostBasedDispatchTests
 {
     private static readonly LookScheduling Look = new();
@@ -29,8 +25,6 @@ public class CostBasedDispatchTests
     [Fact]
     public void Idle_elevators_cost_is_the_pickup_eta()
     {
-        // Request 8→12. E0 idle at 1: 7 floors = 14 s, doors open at 15 → cost 15.
-        //                E1 idle at 10: 2 floors = 4 s, doors open at 5   → cost 5. E1 wins.
         var cost = Cost();
         var r = Req(1, 8, 12);
         Assert.Equal(15.0, cost.Evaluate(Car(0, 1), r, SimTime.Zero).Cost, 6);
@@ -41,12 +35,6 @@ public class CostBasedDispatchTests
     [Fact]
     public void Added_delay_to_riders_and_predicted_load_are_charged()
     {
-        // E0 at 5 going up with rider A (5→12). New request R 8→15.
-        //   Without R: 5→12 is 7 floors = 14 s, doors open at 15 → A arrives at 15.
-        //   With R (LOOK stops at 8 on the way): 3 floors = 6 s, open at 7 → ETA 7. Dwell to 10, closed 11,
-        //   8→12 is 4 floors → 19, open at 20 → A arrives at 20: ΔD = 5 s. Load at pickup L̂ = 1 (A).
-        //   cost = 7 + 1.0·5 + 10·1/10 = 13.
-        // E1 idle at 1: 7 floors = 14 s, open at 15 → cost 15. E0 wins.
         var a = Req(100, 5, 12);
         var e0 = Car(0, 5, Direction.Up, [12], [a]);
         var e1 = Car(1, 1);
@@ -57,7 +45,6 @@ public class CostBasedDispatchTests
         Assert.Equal(13.0, eval.Cost, 6);
         Assert.Equal(0, Cost().Choose(Ctx(r, e0, e1))!.ElevatorId);
 
-        // Weighting existing riders more (λ = 2) flips the decision: E0 = 7 + 10 + 1 = 18 > 15.
         Assert.Equal(18.0, Cost(lambda: 2).Evaluate(e0, r, SimTime.Zero).Cost, 6);
         Assert.Equal(1, Cost(lambda: 2).Choose(Ctx(r, e0, e1))!.ElevatorId);
     }
@@ -65,9 +52,6 @@ public class CostBasedDispatchTests
     [Fact]
     public void A_snapshot_is_projected_forward_to_now_before_inserting_the_request()
     {
-        // E1 has been idle at 10 since t=0 (its last snapshot). The dispatcher decides at t=100 s: the elevator can only
-        // start moving then, so the pickup is at 100 + 4 + 1 = 105 s and the ETA is 5 s. (Projecting from the
-        // snapshot's own time would claim a pickup at 5 s, i.e. an ETA of 0: the bug the M3 bench exposed.)
         var eval = Cost().Evaluate(Car(1, 10), Req(1, 8, 12), new SimTime(100_000));
         Assert.Equal((5.0, 105_000L), (eval.EtaS, eval.PickupAt!.Value.Ms));
     }
@@ -75,8 +59,6 @@ public class CostBasedDispatchTests
     [Fact]
     public void A_moving_elevator_snapshot_is_advanced_along_its_route()
     {
-        // E0 left floor 1 at t=0 towards a drop-off at 15 (snapshot at t=0, mid-phase). At t=6 s it is at floor 4;
-        // a pickup at 8 (up) is reached at 14 s (7 floors × 2 s), doors open at 15 → ETA 9 s from now.
         var moving = Car(0, 1, Direction.Up, [15], [Req(100, 1, 15)], state: ElevatorState.MovingUp) with { PhaseEndsAt = new SimTime(2_000) };
         var eval = Cost().Evaluate(moving, Req(1, 8, 12), new SimTime(6_000));
         Assert.Equal((9.0, 15_000L), (eval.EtaS, eval.PickupAt!.Value.Ms));
@@ -85,11 +67,6 @@ public class CostBasedDispatchTests
     [Fact]
     public void Next_trip_a_full_elevator_is_scored_with_its_next_trip_in_the_eta()
     {
-        // E0 at 1 carries 8 riders to 3 (full: 8 ≥ 0.8 × 10). R: 2 → 9.
-        //   It bypasses 2 (full), reaches 3 at 4 s, doors open at 5 s, riders get off: room again.
-        //   Lantern off (no work was visible while full); doors close 5–9; then the nearest stop is R's pickup at 2:
-        //   down one floor, 9–11 s, doors open at 12 s → ETA 12 s. ΔD 0 (riders finish at 5 s either way); L̂ 0.
-        // E1 idle at 20: 18 floors (36 s) + opening → 37 s.
         var riders = Enumerable.Range(100, 8).Select(i => Req(i, 1, 3)).ToArray();
         var e0 = Car(0, 1, Direction.Up, [3], riders);
         var e1 = Car(1, 20);
@@ -97,7 +74,7 @@ public class CostBasedDispatchTests
 
         var eval = Cost().Evaluate(e0, r, SimTime.Zero);
         Assert.Equal((12.0, 0.0, 0), (eval.EtaS, eval.AddedDelayS, eval.LoadAtPickup));
-        Assert.Equal(0, Cost().Choose(Ctx(r, e0, e1))!.ElevatorId); // next trip of E0 (12 s) beats E1 (37 s)
+        Assert.Equal(0, Cost().Choose(Ctx(r, e0, e1))!.ElevatorId);
     }
 
     [Fact]
@@ -111,7 +88,6 @@ public class CostBasedDispatchTests
     [Fact]
     public void Projection_reproduces_what_the_elevator_actually_does()
     {
-        // The projected pickup time equals the time a real elevator answers, because the projection runs the same code.
         var e = new Elevator.Domain.Elevator(0, 20, ElevatorTiming.Default, Look, 1, 10, 0.8);
         e.AssignPickup(Req(1, 9, 3));
         e.Tick(new SimTime(5_300));
@@ -137,11 +113,6 @@ public class CostBasedDispatchTests
     public void Cost_dispatch_is_registered() =>
         Assert.IsType<CostBasedDispatch>(DispatchPolicies.Create("cost", Look, ElevatorTiming.Default));
 
-    /// <summary>
-    /// VIP priority is a cost term, not a queue position (ADR-015): a VIP's request does not pay for the delay it adds
-    /// to people already riding, so it takes the fastest pickup. E0 at 5 heading up to 15 with five riders; E1 idle at
-    /// 20. A regular 8→9 request goes to E1 (stopping E0 twice would delay five riders); a VIP takes E0.
-    /// </summary>
     [Fact]
     public void Vip_priority_lets_a_vip_take_the_fastest_pickup_even_when_it_delays_riders()
     {
@@ -154,18 +125,17 @@ public class CostBasedDispatchTests
 
         Assert.Equal(1, cost.Choose(Ctx(regular, e0, e1) with { VipPriority = true })!.ElevatorId);
         Assert.Equal(0, cost.Choose(Ctx(vip, e0, e1) with { VipPriority = true })!.ElevatorId);
-        Assert.Equal(1, cost.Choose(Ctx(vip, e0, e1))!.ElevatorId); // without VIP priority a VIP is costed like anyone
+        Assert.Equal(1, cost.Choose(Ctx(vip, e0, e1))!.ElevatorId);
         var forVip = cost.Evaluate(e0, vip, SimTime.Zero, vipPriority: true);
-        Assert.True(forVip.AddedDelayS > 0); // the delay is still there, and reported; it just isn't charged
+        Assert.True(forVip.AddedDelayS > 0);
         Assert.Equal(forVip.EtaS + 10.0 * forVip.LoadAtPickup / 10, forVip.Cost, 6);
     }
 
-    /// <summary>An exact cost tie goes to the lowest elevator id, an explicit rule, whatever the candidates' order (ADR-015).</summary>
     [Fact]
     public void Exact_cost_ties_go_to_the_lowest_id_whatever_the_candidate_order()
     {
         var r = Req(1, 8, 12);
-        var (e2, e5) = (Car(2, 4), Car(5, 12)); // both 4 floors away, idle and empty: identical cost
+        var (e2, e5) = (Car(2, 4), Car(5, 12));
         Assert.Equal(Cost().Evaluate(e2, r, SimTime.Zero).Cost, Cost().Evaluate(e5, r, SimTime.Zero).Cost, 9);
         Assert.Equal(2, Cost().Choose(Ctx(r, e2, e5))!.ElevatorId);
         Assert.Equal(2, Cost().Choose(Ctx(r, e5, e2))!.ElevatorId);

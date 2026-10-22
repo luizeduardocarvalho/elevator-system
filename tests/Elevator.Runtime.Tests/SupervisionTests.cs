@@ -5,22 +5,18 @@ using Elevator.Simulation;
 
 namespace Elevator.Runtime.Tests;
 
-/// <summary>
-/// Invalid input and handler bugs never hang the runtime (ADR-017). An invalid request is refused at the boundary and the
-/// system keeps serving; an exception inside an actor faults the whole system visibly, and every caller gets it.
-/// </summary>
 public class SupervisionTests
 {
     private static readonly TimeSpan Limit = TimeSpan.FromSeconds(5);
 
     public static TheoryData<int, int, Direction, int> InvalidRequests => new()
     {
-        { 99, 5, Direction.Down, 1 },  // pickup above the top floor
-        { 0, 5, Direction.Up, 1 },     // pickup below the lobby
-        { 5, 21, Direction.Up, 1 },    // destination out of range
-        { 5, 5, Direction.Up, 1 },     // pickup = destination
-        { 5, 9, Direction.Down, 1 },   // direction inconsistent with 5→9
-        { 5, 9, Direction.Up, 0 },     // no load
+        { 99, 5, Direction.Down, 1 },
+        { 0, 5, Direction.Up, 1 },
+        { 5, 21, Direction.Up, 1 },
+        { 5, 5, Direction.Up, 1 },
+        { 5, 9, Direction.Down, 1 },
+        { 5, 9, Direction.Up, 0 },
     };
 
     [Theory]
@@ -28,7 +24,7 @@ public class SupervisionTests
     public async Task An_invalid_request_is_refused_and_the_system_keeps_serving(int pickup, int destination, Direction direction, int load)
     {
         await using var system = ElevatorSystem.Start(new RuntimeOptions(Floors: 20, Elevators: 3, Speed: 50));
-        var bad = new Request(pickup, destination, direction, system.Clock.Now, Id: 1, Load: load); // skips Request.Create
+        var bad = new Request(pickup, destination, direction, system.Clock.Now, Id: 1, Load: load);
 
         await Assert.ThrowsAsync<ArgumentException>(() => system.AssignRequest(bad).WaitAsync(Limit));
         await Assert.ThrowsAsync<ArgumentException>(() => system.FindBestElevator(bad).WaitAsync(Limit));
@@ -57,7 +53,6 @@ public class SupervisionTests
             Assert.IsType<InvalidOperationException>(thrown.InnerException);
             Assert.Same(thrown.InnerException, system.Fault);
 
-            // Later callers fail at once instead of queueing behind a dead actor.
             var late = Request.Create(3, 7, system.Clock.Now, 10, id: 667).Value!;
             await Assert.ThrowsAsync<ElevatorSystemFaultedException>(() => system.AssignRequest(late).WaitAsync(Limit));
             await Assert.ThrowsAsync<ElevatorSystemFaultedException>(() => system.FindBestElevator(late).WaitAsync(Limit));
@@ -65,14 +60,13 @@ public class SupervisionTests
         }
         finally
         {
-            await system.DisposeAsync().AsTask().WaitAsync(Limit); // the fault was reported: stopping does not rethrow it
+            await system.DisposeAsync().AsTask().WaitAsync(Limit);
         }
     }
 
     private static Scenario Scenario() => new("supervision", 1, 10, ElevatorTiming.Default, SimTime.FromSeconds(600),
         [new PassengerSpec(SimTime.Zero, 1, 5)], null);
 
-    /// <summary>A handler bug on demand: delegates to <paramref name="inner"/> and throws when one request arrives.</summary>
     private sealed class ThrowsOn(IHandler inner, int requestId) : IHandler
     {
         public Address Address => inner.Address;

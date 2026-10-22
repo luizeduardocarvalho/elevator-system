@@ -29,7 +29,7 @@ public sealed class RouteProjection(ISchedulingPolicy scheduling, ElevatorTiming
     {
         var start = snapshot.At > now ? snapshot.At : now;
         var run = new Run(ElevatorUnit.FromSnapshot(snapshot, timing, scheduling), snapshot, extra);
-        run.AdvanceTo(start);      // what happens anyway before the request exists
+        run.AdvanceTo(start);
         if (extra is not null) run.Insert(extra);
         run.AdvanceTo(start.AddMs(horizonMs));
         return new Result(run.PickupAt, run.LoadAtPickup, run.Completions, start.AddMs(horizonMs));
@@ -87,7 +87,7 @@ public sealed class RouteProjection(ISchedulingPolicy scheduling, ElevatorTiming
                         case HallCallAnswered answered when _waiting.Remove((answered.Floor, answered.Direction), out var boarding):
                             foreach (var r in boarding)
                             {
-                                if (e.Load + r.Load > snapshot.Capacity) break; // left behind, with everyone behind them: not this elevator's to finish
+                                if (e.Load + r.Load > snapshot.Capacity) break;
                                 if (r.Id == extra?.Id)
                                 {
                                     PickupAt = answered.At;
@@ -97,9 +97,9 @@ public sealed class RouteProjection(ISchedulingPolicy scheduling, ElevatorTiming
                                 e.Board(r);
                             }
                             break;
-                        case AssignmentReleased released: // full-load bypass inside the projection
+                        case AssignmentReleased released:
                             foreach (var list in _waiting.Values) list.RemoveAll(r => r.Id == released.RequestId);
-                            if (released.RequestId == extra?.Id) LoadAtPickup = e.Load; // the load that made it bypass
+                            if (released.RequestId == extra?.Id) LoadAtPickup = e.Load;
                             break;
                     }
                 }

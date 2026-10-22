@@ -5,10 +5,6 @@ using FsCheck.Xunit;
 
 namespace Elevator.Domain.Tests;
 
-/// <summary>
-/// Property tests: random interleavings of hall calls, car calls and time advances, checking safety invariants
-/// on the produced event stream after every step.
-/// </summary>
 public class ElevatorInvariantProperties
 {
     public abstract record Op;
@@ -16,8 +12,6 @@ public class ElevatorInvariantProperties
     public sealed record CarOp(int Floor) : Op;
     public sealed record AdvanceOp(int Ms) : Op;
 
-    // Floors 0 and 11 are included on purpose: an invalid call must be refused (a precondition the shells check first,
-    // ADR-017) without breaking anything.
     private static readonly Gen<Op> OpGen = Gen.OneOf(
         from f in Gen.Choose(0, Harness.Floors + 1)
         from d in Gen.Elements(Direction.Up, Direction.Down)
@@ -51,15 +45,12 @@ public class ElevatorInvariantProperties
             else Call(h, now, op);
         }
 
-        // With no new input, a finite amount of work must drain: ≤ 2 hall calls + 1 car call per floor,
-        // each costing at most a full sweep plus a door cycle.
         h.At(now + 3L * Harness.Floors * (Harness.Floors * 2_000 + 5_000));
         Assert.Empty(h.Elevator.HallCalls);
         Assert.Empty(h.Elevator.CarCalls);
         Assert.Equal(ElevatorState.Idle, h.Elevator.State);
     });
 
-    /// <summary>Registers a call; an invalid one must throw and leave the elevator as it was.</summary>
     private static void Call(Harness h, long now, Op op)
     {
         var (valid, register) = op switch
@@ -88,12 +79,11 @@ public class ElevatorInvariantProperties
             {
                 case StateChanged sc:
                     Assert.Equal(state, sc.From);
-                    Assert.Equal(TransitionTable.Next(sc.From, sc.Trigger), sc.To); // every change is a table edge
+                    Assert.Equal(TransitionTable.Next(sc.From, sc.Trigger), sc.To);
                     Assert.Equal(floor, sc.Floor);
                     state = sc.To;
                     break;
                 case FloorReached fr:
-                    // The floor only changes while moving, i.e. with doors closed, by exactly one in the travel direction.
                     Assert.True(state is ElevatorState.MovingUp or ElevatorState.MovingDown, $"moved while {state}");
                     Assert.True(TransitionTable.DoorsClosed(state));
                     Assert.Equal(state == ElevatorState.MovingUp ? floor + 1 : floor - 1, fr.Floor);

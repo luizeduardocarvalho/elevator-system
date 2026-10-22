@@ -2,10 +2,6 @@ using Elevator.Domain;
 
 namespace Elevator.Policy.Dispatch;
 
-/// <summary>
-/// Dispatch strategies by name (<c>--dispatch</c>): cost-based (the default, ADR-006) and nearest (the overload fallback
-/// and the baseline it is measured against). Superseded strategies were removed (ADR-018); they live at the stage tags.
-/// </summary>
 public static class DispatchPolicies
 {
     private static readonly Dictionary<string, Func<ISchedulingPolicy, ElevatorTiming, IDispatchPolicy>> Factories =

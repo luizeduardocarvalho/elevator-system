@@ -28,7 +28,7 @@ public sealed record Scenario(
 
     /// <summary>
     /// The type of each elevator, by index (ADR-012). Null = <see cref="Elevators"/> standard elevators built from
-    /// <see cref="Timing"/> and <see cref="Capacity"/> (the default; behaves exactly as before types existed).
+    /// <see cref="Timing"/> and <see cref="Capacity"/>.
     /// </summary>
     public IReadOnlyList<ElevatorType>? Fleet { get; init; }
 

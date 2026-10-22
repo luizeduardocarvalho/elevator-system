@@ -11,10 +11,6 @@ using Spectre.Console.Cli;
 
 namespace Elevator.Cli;
 
-/// <summary>
-/// Runs a grid of strategies over many seeds and compares them to a baseline with paired confidence intervals.
-/// Every run is the deterministic sim, so the whole bench is reproducible; runs execute in parallel.
-/// </summary>
 internal sealed class BenchCommand : Command<BenchCommand.Settings>
 {
     public sealed class Settings : CommandSettings
@@ -62,7 +58,6 @@ internal sealed class BenchCommand : Command<BenchCommand.Settings>
                 .Select(Strategy.Parse).ToList();
             foreach (var s in strategies) DispatchPolicies.Create(s.Dispatch, new LookScheduling(), Domain.ElevatorTiming.Default);
 
-            // Faults on/off (ADR-013): one value applies to the whole run; both become a paired dimension.
             var faults = ScenarioPaths.List(settings.Faults).Select(f => f switch
             {
                 "on" => true,

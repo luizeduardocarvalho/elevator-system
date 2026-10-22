@@ -2,7 +2,6 @@ using Elevator.Domain;
 
 namespace Elevator.Policy.Access;
 
-/// <summary>An elevator can only take a request when its type serves both the pickup and the destination (ADR-012).</summary>
 public sealed class ServedFloorsPolicy : IAccessPolicy
 {
     public string Name => "served-floors";

@@ -27,7 +27,7 @@ public class LogReaderTests
     [Theory]
     [InlineData("not json at all")]
     [InlineData("[1,2]")]
-    [InlineData("{\"type\":\"StateChanged\",\"t\":5,\"elevatorId\":\"oops\"}")] // known type, bad field
+    [InlineData("{\"type\":\"StateChanged\",\"t\":5,\"elevatorId\":\"oops\"}")]
     public void Garbage_never_throws(string line)
     {
         var item = LogReader.Parse(line, new SimTime(77), lineNo: 3);

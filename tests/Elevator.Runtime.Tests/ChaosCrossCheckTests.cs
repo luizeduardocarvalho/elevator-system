@@ -6,11 +6,6 @@ using Elevator.Simulation;
 
 namespace Elevator.Runtime.Tests;
 
-/// <summary>
-/// Outcome equivalence under faults (ADR-013): a light chaos scenario through the deterministic sim engine and through
-/// real actors on an accelerated clock, with the same fault schedule (sim engine: the scenario's schedule; actors: the
-/// runtime injector on the system clock). Logs differ by thread interleaving and timer jitter, so outcomes are compared.
-/// </summary>
 public class ChaosCrossCheckTests
 {
     private static Scenario LightChaos() => new(
@@ -47,13 +42,10 @@ public class ChaosCrossCheckTests
         var events = system.Events.OrderBy(e => e.At).ToList();
         var actors = ReportBuilder.Build(events);
 
-        // Everyone delivered, in both, with every invariant intact (including: nothing accepted while out of service).
         Assert.Equal((passengers.Count, passengers.Count), (sim.Delivered, actors.Delivered));
         Invariants.Check(system.Events, scenario.Capacity);
         Invariants.CheckModes(system.Events);
 
-        // The same operations happened: every command took effect, the maintenance drained and parked, the emergency
-        // stopped and cleared; the same pickups-handed-back mechanism ran.
         static IEnumerable<(int, FaultKind)> Applied(IEnumerable<DomainEvent> log) =>
             log.OfType<FaultCommandApplied>().Select(f => (f.ElevatorId, f.Kind)).Order();
         Assert.Equal(Applied(simEvents), Applied(events));
@@ -63,14 +55,11 @@ public class ChaosCrossCheckTests
             Assert.Single(log.OfType<MaintenanceExited>(), m => m.ElevatorId == 1);
             Assert.Single(log.OfType<EmergencyStopped>(), m => m.ElevatorId == 2);
             Assert.Single(log.OfType<EmergencyCleared>(), m => m.ElevatorId == 2);
-            Assert.Equal(log.OfType<FaultDetected>().Count(), log.OfType<FaultRecovered>().Count()); // every fault recovered
+            Assert.Equal(log.OfType<FaultDetected>().Count(), log.OfType<FaultRecovered>().Count());
         }
-        // 180 s and 60 s in the sim. The runtime injector waits on the wall clock, so a command can land a little late
-        // under load (5 ms of wall time is 1 s of sim time at 200×).
         Assert.InRange(actors.Ops.MaintenanceS, sim.Ops.MaintenanceS - 3, sim.Ops.MaintenanceS + 3);
         Assert.InRange(actors.Ops.EmergencyS, sim.Ops.EmergencyS - 3, sim.Ops.EmergencyS + 3);
 
-        // Light load: the experience agrees within timer jitter.
         Assert.InRange(actors.Wait.Avg!.Value, sim.Wait.Avg!.Value * 0.7 - 3, sim.Wait.Avg!.Value * 1.3 + 3);
         Assert.InRange(actors.Ride.Avg!.Value, sim.Ride.Avg!.Value * 0.8 - 3, sim.Ride.Avg!.Value * 1.2 + 3);
     }

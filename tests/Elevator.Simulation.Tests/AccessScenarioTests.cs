@@ -4,7 +4,6 @@ using Elevator.Metrics;
 
 namespace Elevator.Simulation.Tests;
 
-/// <summary>Eligibility before cost (ADR-012), end to end through the sim engine.</summary>
 public class AccessScenarioTests
 {
     private const string Yaml = """
@@ -53,19 +52,17 @@ public class AccessScenarioTests
         var result = SimEngine.Run(Load());
         var events = result.Events;
 
-        // Refused by policy: logged with no elevator, never boarded, and the run still completes.
         Assert.Equal([1, 8], events.OfType<AccessDenied>().Where(a => a.ElevatorId is null).Select(a => a.RequestId));
         Assert.Equal("floor-restriction", events.OfType<AccessDenied>().Single(a => a is { RequestId: 1, ElevatorId: null }).Policy);
-        // Different elevators refuse for different reasons (the express also does not serve 9): all are named.
         Assert.Equal(("capacity+served-floors", "no elevator may serve it"),
             events.OfType<AccessDenied>().Where(a => a is { RequestId: 8, ElevatorId: null }).Select(a => (a.Policy, a.Reason)).Single());
         Assert.Equal(6, result.Delivered);
         Assert.DoesNotContain(events.OfType<PassengerBoarded>(), b => b.PassengerId is 1 or 8);
 
         var boardedOn = events.OfType<PassengerBoarded>().ToDictionary(b => b.PassengerId, b => b.ElevatorId);
-        Assert.NotEqual(2, boardedOn[3]);         // the express does not serve 5
-        Assert.Equal(3, boardedOn[4]);            // only the freight carries 15 units
-        Assert.All(boardedOn.Where(kv => kv.Value == 1), kv => Assert.Equal(5, kv.Key)); // E1 carries VIPs only
+        Assert.NotEqual(2, boardedOn[3]);
+        Assert.Equal(3, boardedOn[4]);
+        Assert.All(boardedOn.Where(kv => kv.Value == 1), kv => Assert.Equal(5, kv.Key));
         Assert.All(events.OfType<DoorsOpened>().Where(d => d.ElevatorId == 2), d => Assert.True(d.Floor is 1 or >= 12));
 
         var report = ReportBuilder.Build(events);

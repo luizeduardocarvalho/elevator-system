@@ -3,7 +3,6 @@ using Elevator.Domain.Events;
 
 namespace Elevator.Simulation.Tests;
 
-/// <summary>Elevator types as configuration (ADR-012): YAML, validation, and their effect on a run.</summary>
 public class ElevatorTypeScenarioTests
 {
     private const string Fleet = """
@@ -68,7 +67,6 @@ public class ElevatorTypeScenarioTests
     [Fact]
     public void Each_elevator_runs_with_its_type()
     {
-        // Trips between the lobby and the top floors, which every type serves.
         var s = ScenarioLoader.Load(Fleet + """
 
             passengers:
@@ -84,7 +82,6 @@ public class ElevatorTypeScenarioTests
         var result = SimEngine.Run(s);
         Assert.Equal(5, result.Delivered);
 
-        // The express never opens at a floor it does not serve; the freight takes 3 s per floor.
         Assert.All(result.Events.OfType<DoorsOpened>().Where(d => d.ElevatorId == 2), d => Assert.True(d.Floor is 1 or >= 12));
         var freightFloors = result.Events.OfType<FloorReached>().Where(f => f.ElevatorId == 3).Select(f => f.At.Ms).ToList();
         Assert.All(freightFloors.Zip(freightFloors.Skip(1)), p => Assert.True(p.Second - p.First >= 3_000));

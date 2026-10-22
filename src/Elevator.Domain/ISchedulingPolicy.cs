@@ -1,8 +1,5 @@
 namespace Elevator.Domain;
 
-/// <summary>
-/// What a scheduling policy decides for one elevator.
-/// </summary>
 /// <param name="Target">Floor to head for next (the elevator also always stops for drop-offs on the way); the
 /// current floor means "open here"; null means nothing to do.</param>
 /// <param name="ServeDirection">Lantern to show when it stops at <see cref="Target"/>. Null lets the mechanics

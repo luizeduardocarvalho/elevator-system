@@ -4,11 +4,6 @@ using ElevatorUnit = Elevator.Domain.Elevator;
 
 namespace Elevator.Policy.Tests;
 
-/// <summary>
-/// Eligibility tables (ADR-012): policy × request × elevator → allowed, or denied with the policy and reason. The
-/// fleet: E0 and E1 local (every floor, 10 units), E2 express (1 and 12-20), E3 freight (20 units). Floor 20 needs
-/// access level 2, floor 15 level 1; E1 is dedicated to VIPs.
-/// </summary>
 public class AccessPolicyTests
 {
     private const int Floors = 20;
@@ -37,7 +32,6 @@ public class AccessPolicyTests
 
     public static readonly TheoryData<string, Request, int, string?> Table = new()
     {
-        // case                                   request                          elevator  expected ("policy: reason", null = allowed)
         { "restricted destination, no access",    R(1, 20),                        0, "floor-restriction: floor 20 requires access level 2 (has 0)" },
         { "restricted destination, enough",       R(1, 20, level: 2),              0, null },
         { "restricted pickup, not enough",        R(15, 3, level: 0),              0, "floor-restriction: floor 15 requires access level 1 (has 0)" },
@@ -51,7 +45,6 @@ public class AccessPolicyTests
         { "non-VIP on the VIP elevator",          R(1, 3),                         1, "vip: E1 is dedicated to VIPs" },
         { "VIP on the VIP elevator",              R(1, 3, vip: true),              1, null },
         { "VIP on any other elevator",            R(1, 3, vip: true),              0, null },
-        // Composition: several policies deny; the first in pipeline order gives the reason.
         { "unserved and too heavy: served first", R(1, 5, load: 15),               2, "served-floors: E2 (express) does not serve floor 5" },
         { "too heavy and not VIP: capacity first",R(1, 3, load: 15),               1, "capacity: load 15 exceeds E1 (local) capacity 10" },
         { "restricted and not VIP",               R(1, 20),                        1, "floor-restriction: floor 20 requires access level 2 (has 0)" },

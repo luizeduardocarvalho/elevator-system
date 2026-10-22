@@ -24,11 +24,6 @@ public sealed class SimFaultInjector(SimEngine engine) : IFaultInjector
     }
 }
 
-/// <summary>
-/// Holds injected commands until their sim time (an engine internal, ADR-013). Handling <see cref="ScheduleFault"/> at
-/// <c>now</c> sends <see cref="ApplyFault"/> to the elevator with a delay of max(0, At − now): the engine's queue does
-/// the waiting, so there is no timer and no state here.
-/// </summary>
 internal sealed class FaultScheduler : IHandler
 {
     public static readonly Address Address = new(ActorKind.FaultScheduler);

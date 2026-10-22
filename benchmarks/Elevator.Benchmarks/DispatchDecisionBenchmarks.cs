@@ -7,11 +7,6 @@ using ElevatorUnit = Elevator.Domain.Elevator;
 
 namespace Elevator.Benchmarks;
 
-/// <summary>
-/// Cost of one dispatch decision as the backlog grows: four elevators on 20 floors, each holding
-/// <see cref="Backlog"/> assigned-but-not-picked-up requests (seeded), mid-route. A fresh dispatcher per call, as in
-/// a burst where every decision sees a new snapshot (no cache hits).
-/// </summary>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 10)]
 public class DispatchDecisionBenchmarks
@@ -33,7 +28,7 @@ public class DispatchDecisionBenchmarks
         {
             var elevator = new ElevatorUnit(e, Floors, ElevatorTiming.Default, _look, 1 + e * 5, capacity: 100_000, bypassThreshold: 1.0);
             for (var k = 0; k < Backlog; k++) elevator.AssignPickup(Random(rng, ++id));
-            elevator.Tick(new SimTime(3_000)); // mid-route
+            elevator.Tick(new SimTime(3_000));
             snapshots.Add(elevator.Snapshot());
         }
         _context = new DispatchContext(Random(rng, ++id), snapshots, new SimTime(3_000), ElevatorTiming.Default);

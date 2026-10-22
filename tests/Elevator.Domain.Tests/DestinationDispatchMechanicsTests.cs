@@ -14,7 +14,7 @@ public class DestinationDispatchMechanicsTests
     public void Requests_at_the_same_floor_and_direction_share_one_stop()
     {
         var e = Make();
-        e.EnterMaintenance(); // hold still
+        e.EnterMaintenance();
         e.AssignPickup(R(1, 5, 9));
         e.AssignPickup(R(2, 5, 7));
         e.AssignPickup(R(3, 5, 2));
@@ -38,24 +38,23 @@ public class DestinationDispatchMechanicsTests
     [Fact]
     public void Next_trip_a_full_elevator_keeps_its_pickups_bypasses_them_and_answers_once_riders_get_off()
     {
-        var e = Make(capacity: 5, threshold: 0.8); // full at 4
-        e.AssignPickup(R(10, 3, 9)); // someone waiting at 3, going up
-        for (var i = 1; i <= 4; i++) e.Board(R(i, 1, 4)); // four riders to 4: full
+        var e = Make(capacity: 5, threshold: 0.8);
+        e.AssignPickup(R(10, 3, 9));
+        for (var i = 1; i <= 4; i++) e.Board(R(i, 1, 4));
         e.DrainEvents();
         Assert.True(e.IsFull);
-        Assert.Single(e.HallCalls); // kept, not handed back
+        Assert.Single(e.HallCalls);
 
-        // Up 1→4 is 3 floors (6 s), doors fully open at 7 s.
         e.Tick(new SimTime(7_000));
         var events = e.DrainEvents();
         Assert.DoesNotContain(events, ev => ev is AssignmentReleased);
-        Assert.DoesNotContain(events, ev => ev is HallCallAnswered); // passed floor 3 while full
+        Assert.DoesNotContain(events, ev => ev is HallCallAnswered);
         var openAt4 = events.OfType<DoorsOpened>().Single(d => d.Floor == 4);
 
-        foreach (var i in Enumerable.Range(1, 4)) e.Alight(i); // riders get off at 4 as the doors open: room again
+        foreach (var i in Enumerable.Range(1, 4)) e.Alight(i);
         e.Tick(new SimTime(200_000));
         var answered = Assert.Single(e.DrainEvents().OfType<HallCallAnswered>());
-        Assert.Equal(3, answered.Floor); // it came back for them
+        Assert.Equal(3, answered.Floor);
         Assert.True(answered.At > openAt4.At);
     }
 
@@ -76,11 +75,11 @@ public class DestinationDispatchMechanicsTests
 
     [Theory]
     [InlineData(0)]
-    [InlineData(1_500)]  // mid travel segment
-    [InlineData(8_500)]  // doors opening at 5
-    [InlineData(12_300)] // dwell at 5
-    [InlineData(13_400)] // doors closing at 5
-    [InlineData(17_000)] // exactly at a floor
+    [InlineData(1_500)]
+    [InlineData(8_500)]
+    [InlineData(12_300)]
+    [InlineData(13_400)]
+    [InlineData(17_000)]
     public void Elevator_rebuilt_from_a_snapshot_behaves_identically(long snapshotAtMs)
     {
         var original = Make();
@@ -93,7 +92,7 @@ public class DestinationDispatchMechanicsTests
 
         foreach (var e in new[] { original, copy })
         {
-            e.Board(R(3, e.CurrentFloor == 10 ? 9 : e.CurrentFloor, 10)); // same input to both
+            e.Board(R(3, e.CurrentFloor == 10 ? 9 : e.CurrentFloor, 10));
             e.Tick(new SimTime(200_000));
         }
 

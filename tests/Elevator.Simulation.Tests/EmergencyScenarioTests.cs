@@ -5,7 +5,6 @@ using Elevator.Domain.Faults;
 
 namespace Elevator.Simulation.Tests;
 
-/// <summary>Emergency stops in the simulator (ADR-013): they preempt what is queued, and riders are kept safe.</summary>
 public class EmergencyScenarioTests
 {
     [Fact]
@@ -13,7 +12,7 @@ public class EmergencyScenarioTests
     {
         var engine = SimEngine.Create(Repo.Load("lunch.yaml"), options: new SimEngineOptions(FaultInjector: SimFaultInjector.Factory));
         engine.AdvanceTo(new SimTime(120_000));
-        for (var i = 0; i < 50; i++) // 50 assignments queued for E0 at this instant, ahead of the emergency
+        for (var i = 0; i < 50; i++)
             engine.Post(Address.Elevator(0), new Assign(Request.Create(1 + i % 19, 20, engine.Now, 20, id: 90_000 + i).Value!, null, Forced: true));
         engine.FaultInjector.EmergencyStop(0, engine.Now);
         var from = engine.Log.Count;
@@ -45,16 +44,12 @@ public class EmergencyScenarioTests
         var cleared = events.OfType<EmergencyCleared>().Single();
         Assert.Equal(stoppedAt.Ms + 90_000, cleared.At.Ms);
         var halt = events.OfType<StateChanged>().Single(s => s is { ElevatorId: 2, Trigger: Trigger.EmergencyHalt });
-        Assert.True(halt.At.Ms - stoppedAt.Ms <= ElevatorTiming.Default.FloorTravelMs); // the next floor, not further
+        Assert.True(halt.At.Ms - stoppedAt.Ms <= ElevatorTiming.Default.FloorTravelMs);
         Assert.DoesNotContain(events, e => e is DoorsOpened { ElevatorId: 2 } d && d.At > stoppedAt && d.At < cleared.At);
         Assert.All(events.OfType<PassengerAlighted>().Where(a => riders.Contains(a.PassengerId)), a => Assert.True(a.At >= cleared.At));
         Assert.DoesNotContain(events, e => e is AssignmentAccepted { ElevatorId: 2 } a && a.At >= stoppedAt && a.At < cleared.At);
     }
 
-    /// <summary>
-    /// Emergency commands keep their posting order among themselves (ADR-015): a clear posted before a stop at the same
-    /// instant is applied first (a no-op), then the stop, so the elevator ends up stopped.
-    /// </summary>
     [Fact]
     public void A_clear_posted_before_a_stop_at_the_same_instant_leaves_the_elevator_stopped()
     {

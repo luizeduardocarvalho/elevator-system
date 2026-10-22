@@ -19,7 +19,7 @@ public enum Tone { Normal, Dim, Accent, Good, Warn, Bad }
 
 public enum CellKind { Empty, Idle, Moving, Doors, OutOfService }
 
-/// <summary>Operating-mode marker drawn next to an elevator (D, M, E, F), from the v3 mode events.</summary>
+/// <summary>Operating-mode marker drawn next to an elevator (D, M, E, F).</summary>
 public enum ModeMarker { None, Draining, Maintenance, Emergency, Fault }
 
 public sealed record StatusBar(
@@ -57,7 +57,7 @@ public sealed record MetricsPanel(
 
 public sealed record ElevatorRow(string Name, string State, string Load, string Utilization, ModeMarker Marker, bool Selected);
 
-/// <summary>Operations (Hard stage): zeros until maintenance, emergency and fault events appear in the log.</summary>
+/// <summary>Operations: zeros until maintenance, emergency and fault events appear in the log.</summary>
 public sealed record OpsPanel(
     IReadOnlyList<OpsRow> Elevators,
     string EmergencyStops,

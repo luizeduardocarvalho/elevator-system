@@ -8,7 +8,6 @@ using FsCheck.Xunit;
 
 namespace Elevator.Simulation.Tests;
 
-/// <summary>The shared v3 contract (docs/contract-v3.md): types round-trip, seams preserve behaviour.</summary>
 public class SharedContractTests
 {
     [Fact]
@@ -100,7 +99,7 @@ public class SharedContractTests
             engine.AdvanceTo(new SimTime(5_000));
             var late = Request.Create(2, 6, engine.Now, 10, id: 99).Value!;
             engine.Post(Address.Passengers, new PassengerArrives(late));
-            engine.AdvanceTo(engine.Now); // deliver what was posted
+            engine.AdvanceTo(engine.Now);
             var arrived = Assert.IsType<PassengerArrived>(engine.Log.Last(e => e is PassengerArrived));
             Assert.Equal((99, 5_000L), (arrived.PassengerId, arrived.At.Ms));
             while (!engine.Finished && engine.Now < new SimTime(300_000)) engine.AdvanceTo(engine.Now.AddMs(1_000));
@@ -120,7 +119,6 @@ public class SharedContractTests
         while (!engine.Finished) engine.AdvanceTo(engine.Now.AddMs(100));
         var explained = engine.Finish().Events;
 
-        // Explanations are extra lines only: removing them gives the plain log back.
         Assert.Equal(Repo.ToJsonl(plain), Repo.ToJsonl(new SimulationResult(explained.Where(e => e is not DispatchEvaluated).ToList(), 0, 0, default)));
         Assert.DoesNotContain(plain.Events, e => e is DispatchEvaluated);
 
@@ -139,12 +137,10 @@ public class SharedContractTests
     public void Waiting_counts_are_exposed_per_floor_and_direction()
     {
         var engine = SimEngine.Create(Repo.Load("v1-basic.yaml"));
-        engine.AdvanceTo(new SimTime(2_500)); // P1 (5↑), P2 (3↓), P3 (7↑) waiting
+        engine.AdvanceTo(new SimTime(2_500));
         Assert.Equal(new Dictionary<(int, Direction), int> { [(5, Direction.Up)] = 1, [(3, Direction.Down)] = 1, [(7, Direction.Up)] = 1 },
             engine.Waiting);
     }
-
-    // ---- v3.1 amendment: optional fields, written only when set ----
 
     [Fact]
     public void Passenger_attributes_round_trip_and_are_absent_when_unset()
@@ -161,7 +157,7 @@ public class SharedContractTests
 
         Assert.Equal(events, JsonlEventLog.Read(new StringReader(writer.ToString())));
         Assert.Contains("\"load\":4", lines[0], StringComparison.Ordinal);
-        Assert.Equal("""{"seq":1,"type":"PassengerArrived","t":1000,"passengerId":2,"from":3,"to":7}""", lines[1]); // unchanged shape
+        Assert.Equal("""{"seq":1,"type":"PassengerArrived","t":1000,"passengerId":2,"from":3,"to":7}""", lines[1]);
         var read = (PassengerArrived)JsonlEventLog.Deserialize(lines[1]);
         Assert.Equal((1, false), (read.LoadUnits, read.IsVip));
     }
@@ -185,7 +181,6 @@ public class SharedContractTests
     [Fact]
     public void Logs_written_before_the_amendment_read_with_nulls_and_reserialise_unchanged()
     {
-        // Lines from a v2-medium log of lunch.yaml, before the v3.1 fields existed.
         const string started = """{"seq":0,"type":"SimulationStarted","t":0,"scenario":"lunch","seed":1,"floors":20,"scheduling":"look","passengers":264,"elevators":4,"dispatch":"cost","capacity":10,"bypassThreshold":0.8,"capacityMode":"next-trip"}""";
         const string arrived = """{"seq":1,"type":"PassengerArrived","t":1430,"passengerId":1,"from":16,"to":1}""";
 

@@ -3,7 +3,6 @@ using Elevator.Domain.Events;
 
 namespace Elevator.Cli;
 
-/// <summary>Human-readable one-liners for the event log (the spec's "simple logging of elevator actions").</summary>
 internal static class EventFormatter
 {
     public static string Format(DomainEvent e) => $"[{e.At.Seconds,8:0.0}s] " + e switch

@@ -5,7 +5,8 @@ var app = new CommandApp();
 app.Configure(config =>
 {
     config.SetApplicationName("elevator");
-    config.UseStrictParsing(); // an unknown option is an error: a removed flag (ADR-018) must not run a different experiment silently
+    // Spectre.Console.Cli ignores unknown options unless strict parsing is on.
+    config.UseStrictParsing();
     config.AddCommand<RunCommand>("run")
         .WithDescription("Run a YAML scenario headless, write the JSONL event log and print a report.")
         .WithExample("run", "scenarios/v1-basic.yaml", "--verbose");

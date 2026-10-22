@@ -6,10 +6,7 @@ namespace Elevator.Tui.Loop;
 /// <summary>
 /// The replay view's source: a cursor over a recorded log, folded with the same <see cref="BuildingState"/> as the
 /// live view, so a replay shows what the live run showed at the same sim time.
-///
-/// <b>Seek backward = re-fold from the start</b>, not re-simulate (ADR-011): the log is the source of truth
-/// (ADR-007); it may come from the non-deterministic actor runtime or an older build; and it does not carry the
-/// scenario YAML. Re-folding ~10k events takes milliseconds.
+/// <b>Seek backward = re-fold from the start</b>, not re-simulate (ADR-011).
 /// </summary>
 public sealed class ReplaySession : ISession
 {
@@ -53,11 +50,6 @@ public sealed class ReplaySession : ISession
 
     public string Command(TuiKey key, int elevator) => "replay is read-only: commands are already in the log";
 
-    /// <summary>
-    /// Folds every item up to <paramref name="target"/> in file order. Logs from the actor runtime can be a few ms
-    /// out of sim-time order (ADR-007); such an item is folded with the earliest cursor position that covers its
-    /// predecessors, and the clock never runs backwards.
-    /// </summary>
     private void FoldTo(SimTime target)
     {
         while (_next < _items.Count && _items[_next].At <= target) State.Apply(_items[_next++]);

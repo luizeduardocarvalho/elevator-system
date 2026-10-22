@@ -31,7 +31,6 @@ public class RequestValidationTests
     [InlineData(10, Direction.Up)]
     public void Elevator_refuses_invalid_hall_calls_and_stays_unchanged(int floor, Direction direction)
     {
-        // A precondition, not input handling: the shells validate requests before they reach an elevator (ADR-017).
         var h = new Harness();
         Assert.Throws<ArgumentOutOfRangeException>(() => h.Hall(0, floor, direction));
         Assert.DoesNotContain(h.Events, e => e is HallCallRegistered);
@@ -53,7 +52,7 @@ public class RequestValidationTests
     public void Pressing_a_lit_hall_button_again_registers_nothing_new()
     {
         var h = new Harness(startFloor: 5);
-        h.Elevator.EnterMaintenance(); // keep it from answering
+        h.Elevator.EnterMaintenance();
         h.Hall(0, 3, Direction.Up);
         h.Hall(100, 3, Direction.Up);
 

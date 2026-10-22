@@ -11,7 +11,6 @@ using Spectre.Console.Cli;
 
 namespace Elevator.Cli;
 
-/// <summary>"The shape of a working day": wait by floor × time of day, from an event log (or a scenario run headless).</summary>
 internal sealed class HeatmapCommand : Command<HeatmapCommand.Settings>
 {
     public sealed class Settings : CommandSettings

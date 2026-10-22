@@ -34,8 +34,8 @@ public class LookSchedulingTests
     [Fact]
     public void Down_call_above_while_moving_up_waits_for_up_stops_beyond_it()
     {
-        Expect(At(5, Direction.Up, [10], (8, Direction.Down)), 10, Direction.Up); // passes 8 on the way up
-        Expect(At(10, Direction.Up, [], (8, Direction.Down)), 8, Direction.Down);  // served on the way back down
+        Expect(At(5, Direction.Up, [10], (8, Direction.Down)), 10, Direction.Up);
+        Expect(At(10, Direction.Up, [], (8, Direction.Down)), 8, Direction.Down);
     }
 
     [Fact]
@@ -46,16 +46,16 @@ public class LookSchedulingTests
     public void Up_call_below_while_moving_up_is_served_after_the_down_sweep()
     {
         Expect(At(5, Direction.Up, [9], (2, Direction.Up)), 9, Direction.Up);
-        Expect(At(9, Direction.Up, [], (2, Direction.Up)), 2, Direction.Up); // turn, go down to the lowest up call
-        Expect(At(9, Direction.Up, [4], (2, Direction.Up), (6, Direction.Down)), 6, Direction.Down); // down stops first
+        Expect(At(9, Direction.Up, [], (2, Direction.Up)), 2, Direction.Up);
+        Expect(At(9, Direction.Up, [4], (2, Direction.Up), (6, Direction.Down)), 6, Direction.Down);
     }
 
     [Fact]
     public void Pickup_at_the_current_floor()
     {
-        Expect(At(5, Direction.Up, [9], (5, Direction.Up)), 5, Direction.Up);     // same direction: serve now
-        Expect(At(5, Direction.Up, [9], (5, Direction.Down)), 9, Direction.Up);   // opposite: later
-        Expect(At(5, Direction.Up, [], (5, Direction.Down)), 5, Direction.Down);  // opposite, nothing ahead: reverse here
+        Expect(At(5, Direction.Up, [9], (5, Direction.Up)), 5, Direction.Up);
+        Expect(At(5, Direction.Up, [9], (5, Direction.Down)), 9, Direction.Up);
+        Expect(At(5, Direction.Up, [], (5, Direction.Down)), 5, Direction.Down);
     }
 
     [Fact]

@@ -4,11 +4,6 @@ using Elevator.Domain.Faults;
 
 namespace Elevator.Runtime.Tests;
 
-/// <summary>
-/// The runtime fault injector applies commands in (At, injection order) (ADR-015), like the simulator's fault
-/// scheduler. 20 alternating stop/clear commands for one elevator: in order, every one takes effect; out of order,
-/// some become no-ops (a clear with nothing to clear, a stop on a stopped elevator) and the log shows fewer.
-/// </summary>
 public class FaultInjectorOrderTests
 {
     private static async Task<List<FaultKind>> Applied(ElevatorSystem system, int expected)
@@ -25,7 +20,7 @@ public class FaultInjectorOrderTests
     public async Task Commands_due_at_the_same_time_apply_in_injection_order()
     {
         await using var system = ElevatorSystem.Start(new RuntimeOptions(Floors: 20, Elevators: 1, Speed: 50));
-        var at = system.Clock.Now.AddMs(2_000); // 40 ms of wall time ahead
+        var at = system.Clock.Now.AddMs(2_000);
         for (var i = 0; i < 20; i++) system.FaultInjector.Inject(new FaultCommand(at, 0, Alternate(i), null));
 
         Assert.Equal(Enumerable.Range(0, 20).Select(Alternate), await Applied(system, 20));
@@ -36,7 +31,7 @@ public class FaultInjectorOrderTests
     {
         await using var system = ElevatorSystem.Start(new RuntimeOptions(Floors: 20, Elevators: 1, Speed: 50));
         var at = system.Clock.Now.AddMs(2_000);
-        for (var i = 19; i >= 0; i--) system.FaultInjector.Inject(new FaultCommand(at.AddMs(i * 50), 0, Alternate(i), null)); // injected last-first
+        for (var i = 19; i >= 0; i--) system.FaultInjector.Inject(new FaultCommand(at.AddMs(i * 50), 0, Alternate(i), null));
 
         Assert.Equal(Enumerable.Range(0, 20).Select(Alternate), await Applied(system, 20));
     }

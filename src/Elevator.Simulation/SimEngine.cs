@@ -17,8 +17,8 @@ public sealed record EngineHandover(IReadOnlyList<IHandler> Handlers, SimTime At
 public sealed record SimulationResult(IReadOnlyList<DomainEvent> Events, int Delivered, int Unserved, SimTime EndedAt);
 
 /// <param name="EmitDispatchEvaluations">Log every candidate's cost per dispatch decision (DispatchEvaluated). Off by
-/// default: logs are then identical to v2.</param>
-/// <param name="FaultInjector">Builds the fault injector for this engine (Hard stage). Null = <see cref="NoOpFaultInjector"/>.</param>
+/// default.</param>
+/// <param name="FaultInjector">Builds the fault injector for this engine. Null = <see cref="NoOpFaultInjector"/>.</param>
 public sealed record SimEngineOptions(bool EmitDispatchEvaluations = false, Func<SimEngine, IFaultInjector>? FaultInjector = null)
 {
     public static SimEngineOptions Default { get; } = new();
@@ -26,21 +26,18 @@ public sealed record SimEngineOptions(bool EmitDispatchEvaluations = false, Func
 
 /// <summary>
 /// The deterministic shell (ADR-005): delivers protocol messages to the shared handlers from one priority queue
-/// ordered by (sim time, sequence number). No threads, no decisions; same handlers as the actor runtime.
+/// ordered by (sim time, priority lane, sequence number). No threads, no decisions; same handlers as the actor runtime.
 ///
-/// The outer loop still moves a <see cref="SimClock"/> in fixed ticks (the future TUI's frame), but a tick only
+/// The outer loop still moves a <see cref="SimClock"/> in fixed ticks, but a tick only
 /// bounds how far the queue is drained, so the event log is identical for any tick size.
 /// </summary>
 public sealed class SimEngine
 {
     /// <summary>
-    /// Requests in flight above which the dispatcher falls back to Nearest (ADR-006). The most ever seen in the bench
-    /// profiles is 92 (FIFO saturating at down-peak), so 200 never triggers in normal operation.
+    /// Requests in flight above which the dispatcher falls back to Nearest (ADR-006).
     /// </summary>
     public const int OverloadThreshold = 200;
 
-    // Ordered by (sim time, priority, sequence). Priority 0 is only for emergency stops (ADR-013): they take effect
-    // before anything else due at the same instant, as the actor runtime's priority control channel does.
     private readonly PriorityQueue<Envelope, (long TimeMs, int Priority, long Seq)> _queue = new();
     private readonly Dictionary<Address, IHandler> _handlers = [];
     private readonly Dictionary<Address, SimTime> _scheduledWakeUps = [];
@@ -74,10 +71,10 @@ public sealed class SimEngine
         Scenario = scenario;
         Strategy = strategy;
         Options = options;
-        var scheduling = new LookScheduling(); // ADR-004
+        var scheduling = new LookScheduling();
         var dispatch = DispatchPolicies.Create(strategy.Dispatch, scheduling, scenario.Timing);
         var latency = scenario.Latency ?? MessageLatency.None;
-        var estimator = new StopProjection(scheduling, scenario.Timing); // each elevator's own view, for the staleness check
+        var estimator = new StopProjection(scheduling, scenario.Timing);
 
         var fleet = scenario.EffectiveFleet;
         if (fleet.Count != scenario.Elevators)
@@ -105,15 +102,13 @@ public sealed class SimEngine
         _expectedPassengers = passengers.Count;
         Log.Add(new SimulationStarted(SimTime.Zero, scenario.Name, scenario.Seed, scenario.Floors, scheduling.Name, passengers.Count,
             scenario.Elevators, dispatch.Name, scenario.Capacity,
-            scenario.BypassThreshold, "next-trip", // the log keeps the v3 fields; next-trip is the only capacity mode (ADR-018)
-            // v3.1: the per-elevator description, only for a configured (typed) fleet; null keeps default logs unchanged.
+            scenario.BypassThreshold, "next-trip",
             scenario.Fleet is null ? null : [.. fleet.Select((t, i) => new FleetEntry(i, t.Name, t.Capacity, scenario.BypassThreshold, t.ServedFloors))]));
 
         Register(new FaultScheduler());
 
         foreach (var e in _elevators) Enqueue(SimTime.Zero, new Envelope(e.Address, new Start()));
         foreach (var p in passengers) Enqueue(SimTime.Zero, new Envelope(Address.Passengers, new PassengerArrives(p.ToRequest()), p.ArrivesAt.Ms));
-        // The scenario's fault schedule (ADR-013): each command reaches its elevator at its sim time.
         foreach (var f in scenario.FaultSchedule)
         {
             if (f.ElevatorId < 0 || f.ElevatorId >= scenario.Elevators)
@@ -220,17 +215,10 @@ public sealed class SimEngine
 
     private void Enqueue(SimTime now, Envelope envelope)
     {
-        if (envelope.To.Kind == ActorKind.Client) return; // nobody waits on acks in a simulation
+        if (envelope.To.Kind == ActorKind.Client) return;
         _queue.Enqueue(envelope, (now.Ms + envelope.DelayMs, PriorityOf(envelope.Message), _seq++));
     }
 
-    /// <summary>
-    /// Emergency commands (stop and clear), on their way to the elevator (via the fault scheduler or directly), jump
-    /// ahead of messages due at the same instant: the simulator's equivalent of the actor runtime's priority channel
-    /// (ADR-013). Among themselves they keep (time, sequence) order, so a clear posted before a stop stays before it
-    /// (ADR-015). Every other message keeps the (time, sequence) order, so <see cref="Post"/> delivers after what is
-    /// already due.
-    /// </summary>
     private static int PriorityOf(Message message) =>
         message is ApplyFault { Command.Kind: FaultKind.EmergencyStop or FaultKind.EmergencyClear }
             or ScheduleFault { Command.Kind: FaultKind.EmergencyStop or FaultKind.EmergencyClear } ? 0 : 1;
@@ -239,7 +227,6 @@ public sealed class SimEngine
         _passengers.Arrived == _expectedPassengers && _passengers.Delivered + _passengers.Refused == _expectedPassengers
         && _elevators.All(e => e.Elevator.State is ElevatorState.Idle or ElevatorState.Maintenance && e.Elevator.NextDeadline is null);
 
-    /// <summary>Delivers every message due at or before <paramref name="target"/>; returns the finish time if the run completed.</summary>
     private SimTime? DrainUntil(SimTime target)
     {
         if (_expectedPassengers == 0) return SimTime.Zero;

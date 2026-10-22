@@ -3,12 +3,6 @@ using System.Numerics;
 
 namespace Elevator.Domain;
 
-/// <summary>
-/// An elevator type (ADR-012): Local, Express, Freight... Each elevator of the fleet has one. It sets the elevator's
-/// timing (speed and door times), its capacity in load units, and the floors it serves. The building's default config
-/// is a single "standard" type built from the scenario's timing and capacity, serving every floor, so a scenario
-/// without types behaves exactly as before.
-/// </summary>
 /// <param name="ServedFloors">Bit f = floor f (<see cref="FloorMask"/>); <see cref="FloorMask.All"/> = every floor.</param>
 public sealed record ElevatorType(string Name, ElevatorTiming Timing, int Capacity, ulong ServedFloors = FloorMask.All)
 {

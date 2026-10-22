@@ -1,6 +1,5 @@
 namespace Elevator.Domain;
 
-/// <summary>Why an assignment was rejected or released. Drives the wait-time attribution buckets (ADR-008).</summary>
 public enum AssignmentReason
 {
     /// <summary>The elevator's own ETA is much worse than the dispatcher's estimate (stale snapshot).</summary>

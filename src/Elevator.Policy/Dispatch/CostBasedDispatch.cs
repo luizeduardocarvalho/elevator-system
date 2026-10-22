@@ -4,7 +4,7 @@ namespace Elevator.Policy.Dispatch;
 
 /// <param name="Lambda">Weight of the delay the new pickup adds to people already assigned or riding (seconds per second).</param>
 /// <param name="Mu">Seconds of penalty for an elevator that would be completely full at pickup (scaled by L̂/C).</param>
-public sealed record CostWeights(double Lambda = 0.5, double Mu = 10.0) // tuned by bench sweep, ADR-006
+public sealed record CostWeights(double Lambda = 0.5, double Mu = 10.0)
 {
     public static CostWeights Default { get; } = new();
 }
@@ -37,8 +37,6 @@ public sealed class CostBasedDispatch(ISchedulingPolicy scheduling, ElevatorTimi
 {
     private readonly StopProjection _projection = new(scheduling, timing);
     private readonly CostWeights _weights = weights ?? CostWeights.Default;
-    // Latest per elevator, keyed by the snapshot object itself. Not by (version, time): the dispatcher's overlay builds
-    // derived snapshots (the same elevator with proposed pickups added) that share the version but not the content.
     private readonly Dictionary<int, (ElevatorSnapshot Snapshot, StopProjection.Outcome Result)> _baselines = [];
 
     public string Name => name;
@@ -58,8 +56,6 @@ public sealed class CostBasedDispatch(ISchedulingPolicy scheduling, ElevatorTimi
         }
         if (best is not null) return explained is null ? best : best with { Candidates = explained };
 
-        // A request is always given an elevator (ADR-010). If no projection reaches the pickup within its horizon
-        // (a huge backlog), rank by Nearest's effective distance instead of deferring; no ETA, so no staleness check.
         if (context.Candidates.Any(c => c.State != ElevatorState.Maintenance)
             && _beyondHorizon.Choose(context) is { } fallback)
             return fallback with { Cost = double.MaxValue, Eta = null, Candidates = explained };
@@ -76,8 +72,6 @@ public sealed class CostBasedDispatch(ISchedulingPolicy scheduling, ElevatorTimi
 
         var with = _projection.Project(s, r, now);
         if (with.PickupAt is not { } pickupAt) return CostEvaluation.Ineligible(with.LoadAtPickup);
-        // No capacity rule here: the projection already puts a full elevator's pickup on its next trip, so the ETA
-        // carries the wait (ADR-010).
 
         var addedDelayMs = StopProjection.AddedDelayMs(Baseline(s, now), with);
 
@@ -88,13 +82,8 @@ public sealed class CostBasedDispatch(ISchedulingPolicy scheduling, ElevatorTimi
         return new CostEvaluation(cost, etaS, addedDelayS, with.LoadAtPickup, pickupAt);
     }
 
-    /// <summary>
-    /// Projection without the new request. With no input its future does not depend on when we look, so it is
-    /// cached per snapshot; completions before <paramref name="now"/> appear in both projections and cancel out in ΔD.
-    /// </summary>
     private StopProjection.Outcome Baseline(ElevatorSnapshot s, SimTime now)
     {
-        // One entry per elevator (its latest snapshot): bounded memory however long the system runs.
         if (_baselines.TryGetValue(s.ElevatorId, out var cached) && ReferenceEquals(cached.Snapshot, s)) return cached.Result;
         var result = _projection.Project(s, null, now);
         _baselines[s.ElevatorId] = (s, result);

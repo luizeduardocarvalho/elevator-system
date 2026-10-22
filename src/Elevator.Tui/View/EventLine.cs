@@ -59,7 +59,6 @@ public static class EventLine
         return line is { } l2 ? new TailLine(time, l2.Kind, l2.Text, l2.Tone, []) : Generic(time, e.GetType().Name, LogReader.FieldsOf(e));
     }
 
-    /// <summary>The ASSIGN line: every candidate's cost (∞ = ineligible) with the winner marked (ADR-006 explained).</summary>
     private static TailLine Assign(string time, DispatchEvaluated d)
     {
         var costs = d.Candidates.Select(c => new CostCell(

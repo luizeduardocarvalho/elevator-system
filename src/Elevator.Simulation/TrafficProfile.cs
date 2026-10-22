@@ -17,7 +17,7 @@ public sealed record TrafficMix(double FromLobby, double ToLobby, double Interfl
 
 /// <summary>
 /// Time-varying passenger traffic: a non-homogeneous Poisson process with a piecewise-linear rate λ(t) and an
-/// origin/destination mix. Up-peak is mostly from the lobby, down-peak mostly to it, lunch is both. <paramref name="Mix"/>
+/// origin/destination mix. <paramref name="Mix"/>
 /// is the default; a rate point's own mix overrides it from that point on.
 /// </summary>
 public sealed record TrafficProfile(IReadOnlyList<RatePoint> Rate, TrafficMix Mix, int Lobby = Floors.Lowest)
@@ -48,9 +48,7 @@ public sealed record TrafficProfile(IReadOnlyList<RatePoint> Rate, TrafficMix Mi
     }
 
     /// <summary>
-    /// Thinning (Lewis–Shedler): generate candidate arrivals from a homogeneous process at the peak rate λmax
-    /// (exponential gaps, as in <see cref="PoissonTraffic"/>), and keep each candidate at time t with probability
-    /// λ(t)/λmax. The kept arrivals form a Poisson process with rate λ(t). Every draw comes from
+    /// Every draw comes from
     /// <paramref name="rng"/>, so the seed alone fixes the passengers (common random numbers across strategies).
     /// </summary>
     public IEnumerable<PassengerSpec> Generate(int floors, Random rng)
@@ -64,14 +62,13 @@ public sealed record TrafficProfile(IReadOnlyList<RatePoint> Rate, TrafficMix Mi
         {
             t += -Math.Log(1 - rng.NextDouble()) / lambdaMax;
             if (t >= end) yield break;
-            if (rng.NextDouble() * lambdaMax >= RatePerSecondAt(t)) continue; // thinned out
+            if (rng.NextDouble() * lambdaMax >= RatePerSecondAt(t)) continue;
 
             var (from, to) = Trip(MixAt(t), floors, rng);
             yield return new PassengerSpec(SimTime.FromSeconds(t), from, to);
         }
     }
 
-    /// <summary>Same random draws whatever the mix (only the comparisons change), so adding mixes never shifts the stream.</summary>
     private (int From, int To) Trip(TrafficMix mix, int floors, Random rng)
     {
         var u = rng.NextDouble() * mix.Total;

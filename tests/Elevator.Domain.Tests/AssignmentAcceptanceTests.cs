@@ -3,7 +3,6 @@ using Elevator.Domain.Events;
 
 namespace Elevator.Domain.Tests;
 
-/// <summary>ElevatorHandler's accept/reject rules (ADR-006): maintenance and capacity always win; aging only blocks staleness.</summary>
 public class AssignmentAcceptanceTests
 {
     private sealed class FixedEta(long ms) : IEtaEstimator
@@ -45,7 +44,7 @@ public class AssignmentAcceptanceTests
     public void Aged_or_forced_requests_cannot_be_rejected_as_stale()
     {
         var (h, o) = Make(ourEtaMs: 500_000);
-        h.Handle(new Assign(R(1, calledAtMs: 0), new SimTime(70_000), Forced: false), new SimTime(60_000), o); // waited 60 s
+        h.Handle(new Assign(R(1, calledAtMs: 0), new SimTime(70_000), Forced: false), new SimTime(60_000), o);
         Assert.Null(Outcome(o));
 
         (h, o) = Make(ourEtaMs: 500_000);
@@ -56,12 +55,12 @@ public class AssignmentAcceptanceTests
     [Fact]
     public void Next_trip_mode_a_full_elevator_accepts_for_a_later_trip_but_never_a_request_that_cannot_fit()
     {
-        var (h, o) = Make(ourEtaMs: 0, riders: 4); // full: 4 ≥ 0.8 × 5
+        var (h, o) = Make(ourEtaMs: 0, riders: 4);
         h.Handle(new Assign(R(1), null, Forced: false), SimTime.Zero, o);
         Assert.Null(Outcome(o));
 
         (h, o) = Make(ourEtaMs: 0);
-        var tooBig = Request.Create(5, 9, SimTime.Zero, 10, id: 2, load: 6).Value!; // load 6 > capacity 5
+        var tooBig = Request.Create(5, 9, SimTime.Zero, 10, id: 2, load: 6).Value!;
         h.Handle(new Assign(tooBig, null, Forced: true), new SimTime(120_000), o);
         Assert.Equal(AssignmentReason.Capacity, Outcome(o));
     }
@@ -70,8 +69,8 @@ public class AssignmentAcceptanceTests
     public void Capacity_and_maintenance_rejects_always_win()
     {
         var (h, o) = Make(ourEtaMs: 0, riders: 4);
-        var neverFits = Request.Create(5, 9, SimTime.Zero, 10, id: 1, load: 6).Value!; // load 6 > capacity 5
-        h.Handle(new Assign(neverFits, null, Forced: true), new SimTime(120_000), o); // forced and aged
+        var neverFits = Request.Create(5, 9, SimTime.Zero, 10, id: 1, load: 6).Value!;
+        h.Handle(new Assign(neverFits, null, Forced: true), new SimTime(120_000), o);
         Assert.Equal(AssignmentReason.Capacity, Outcome(o));
 
         (h, o) = Make(ourEtaMs: 0);

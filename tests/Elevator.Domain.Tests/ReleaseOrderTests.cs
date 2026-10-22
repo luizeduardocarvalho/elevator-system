@@ -3,12 +3,6 @@ using Elevator.Domain.Faults;
 
 namespace Elevator.Domain.Tests;
 
-/// <summary>
-/// Causality (ADR-013, ADR-015): before the dispatcher hears that a pickup was handed back, it must already have the
-/// snapshot that explains why (maintenance, emergency stop, or fault). Otherwise it re-dispatches against the
-/// old view and can propose the pickup straight back. Checked on every release path, with and without link latency:
-/// the snapshot is sent first, and no release travels faster than it.
-/// </summary>
 public class ReleaseOrderTests
 {
     private static Request R(int id, int from) => Request.Create(from, from + 2, SimTime.Zero, 12, id: id).Value!;

@@ -7,7 +7,7 @@ namespace Elevator.Simulation;
 
 /// <summary>
 /// The event log: one JSON object per line, <c>{"seq":n,"type":"...","t":ms,...}</c>. Enums use the spec's
-/// spelling (MOVING_UP, DOOR_OPEN...). It is the backbone: metrics, replay and the TUI read this, not the domain.
+/// spelling (MOVING_UP, DOOR_OPEN...).
 /// </summary>
 public static class JsonlEventLog
 {
@@ -20,7 +20,7 @@ public static class JsonlEventLog
 
     public static string Serialize(DomainEvent e, long seq)
     {
-        var json = JsonSerializer.Serialize(e, Options); // always an object: {"type":...}
+        var json = JsonSerializer.Serialize(e, Options);
         return $"{{\"seq\":{seq},{json[1..]}";
     }
 

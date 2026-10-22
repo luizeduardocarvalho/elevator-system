@@ -64,7 +64,7 @@ public class BuildingStateTests
         s.Apply(new DoorsOpened(S(4), 0, 2, Direction.Down));
         Assert.Equal(Direction.Down, s.Elevators[0].ShownDirection);
 
-        s.Apply(new HallCallAnswered(S(5), 0, 2, Direction.Up)); // adopted a caller's direction while open
+        s.Apply(new HallCallAnswered(S(5), 0, 2, Direction.Up));
         s.Apply(new StateChanged(S(7), 0, ElevatorState.DoorOpen, ElevatorState.DoorClosing, Trigger.StartClosing, 2));
         Assert.Equal(Direction.Up, s.Elevators[0].ShownDirection);
 
@@ -99,7 +99,7 @@ public class BuildingStateTests
         s.Apply(new EmergencyStopped(S(100), 0, 3));
         Assert.Equal(ElevatorMode.Emergency, s.Elevators[0].Mode);
         s.AdvanceTo(S(110));
-        Assert.Equal(10_000, s.Elevators[0].ModeMs(ElevatorMode.Emergency, s.Now)); // ongoing stretch counts
+        Assert.Equal(10_000, s.Elevators[0].ModeMs(ElevatorMode.Emergency, s.Now));
         s.Apply(new EmergencyCleared(S(130), 0));
         s.Apply(new FaultDetected(S(200), 0, 3, 30_000));
         Assert.Equal(ElevatorMode.Fault, s.Elevators[0].Mode);
@@ -155,20 +155,15 @@ public class BuildingStateTests
         var s = Fold(Started(elevators: 1), new FloorReached(S(1), 5, 3), new MaintenanceRequested(S(1), -1));
         s.Apply(new UnknownEvent(S(2), "X", []));
         Assert.Equal(S(2), s.Now);
-        Assert.Equal(6, s.Elevators.Count); // grown to show what the log says
+        Assert.Equal(6, s.Elevators.Count);
     }
 
     public static TheoryData<string, string> Runs => new()
     {
         { "lunch.yaml", "cost" }, { "up-peak.yaml", "nearest" }, { "down-peak.yaml", "nearest" }, { "v1-basic.yaml", "cost" }, { "demo.yaml", "cost" },
-        { "fleet.yaml", "cost" }, // typed fleet with freight loads (v3.1: load units, per-elevator capacity and type)
+        { "fleet.yaml", "cost" },
     };
 
-    /// <summary>
-    /// The fold is proved against the engine's own read-only views: at sampled times, every elevator's floor, state,
-    /// shown direction, riders and mode, and the waiting counts, match <see cref="SimEngine.Elevators"/> and
-    /// <see cref="SimEngine.Waiting"/>.
-    /// </summary>
     [Theory]
     [MemberData(nameof(Runs))]
     public void Fold_matches_the_engine_snapshots_at_sampled_times(string scenario, string dispatch)
@@ -179,7 +174,7 @@ public class BuildingStateTests
         var samples = 0;
         while (!engine.Finished)
         {
-            engine.AdvanceTo(engine.Now.AddMs(1_300 + (samples * 7_919 % 5_000))); // irregular sample times
+            engine.AdvanceTo(engine.Now.AddMs(1_300 + (samples * 7_919 % 5_000)));
             for (; folded < engine.Log.Count; folded++) state.Apply(engine.Log[folded]);
             state.AdvanceTo(engine.Now);
             samples++;
@@ -193,7 +188,6 @@ public class BuildingStateTests
         Assert.True(samples > 10);
     }
 
-    /// <summary>The documented display rule applied to a snapshot: travel direction, else the lantern while doors are open or closing.</summary>
     private static Direction? ShownFrom(ElevatorSnapshot s) => s.State switch
     {
         ElevatorState.MovingUp => Direction.Up,

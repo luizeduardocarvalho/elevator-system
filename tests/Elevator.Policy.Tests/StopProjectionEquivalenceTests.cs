@@ -7,24 +7,14 @@ using ElevatorUnit = Elevator.Domain.Elevator;
 
 namespace Elevator.Policy.Tests;
 
-/// <summary>
-/// Differential test: the per-stop <see cref="StopProjection"/> must give exactly the same pickup time, load at pickup
-/// and added delay as the per-passenger <see cref="RouteProjection"/> (the oracle, which runs the real elevator), on
-/// random elevators of random types (timing, served floors). That is what makes the dispatcher's decisions, and so the
-/// bench, byte-identical.
-/// </summary>
 public class StopProjectionEquivalenceTests
 {
-    /// <param name="Timing">The elevator type's timing (ADR-012); the projections are built with the default and must
-    /// take the snapshot's own.</param>
-    /// <param name="Served">The floors the elevator's type serves; every trip starts and ends on one of them.</param>
     public sealed record Case(int Capacity, double Threshold, int Start, (int From, int To, long AtMs)[] Assigned,
         int Boarded, long SnapshotAtMs, long NowDelayMs, (int From, int To) Extra, ElevatorTiming Timing, int[] Served,
         int[] Loads, int ExtraLoad);
 
     private const int Floors = 12;
 
-    // Elevator types: every floor; an express (lobby + top half); odd floors only; a low-rise local.
     private static readonly int[][] ServedSets =
     [
         [.. Enumerable.Range(1, Floors)],
@@ -36,8 +26,8 @@ public class StopProjectionEquivalenceTests
     private static readonly ElevatorTiming[] Timings =
     [
         ElevatorTiming.Default,
-        new(FloorTravelMs: 1_000, DoorOpeningMs: 800, DoorDwellMs: 2_000, DoorClosingMs: 800),  // express
-        new(FloorTravelMs: 3_000, DoorOpeningMs: 2_000, DoorDwellMs: 6_000, DoorClosingMs: 2_500), // freight
+        new(FloorTravelMs: 1_000, DoorOpeningMs: 800, DoorDwellMs: 2_000, DoorClosingMs: 800),
+        new(FloorTravelMs: 3_000, DoorOpeningMs: 2_000, DoorDwellMs: 6_000, DoorClosingMs: 2_500),
     ];
 
     private static Gen<(int, int)> TripIn(int[] floors) =>
@@ -57,7 +47,7 @@ public class StopProjectionEquivalenceTests
         from at in Gen.Choose(0, 90_000)
         from delay in Gen.Elements(0L, 0L, 1_500L, 9_000L)
         from extra in TripIn(served)
-        from heavy in Gen.Elements(false, false, true) // loads above one unit (freight, ADR-012)
+        from heavy in Gen.Elements(false, false, true)
         from loads in Gen.ArrayOf(heavy ? Gen.Elements(1, 1, 2, 3, 6) : Gen.Constant(1), n)
         from extraLoad in heavy ? Gen.Elements(1, 2, 4) : Gen.Constant(1)
         select new Case(capacity, threshold, start, assigned, boarded, at, delay, extra, timing, served, loads, extraLoad);
@@ -70,7 +60,7 @@ public class StopProjectionEquivalenceTests
         var now = snapshot.At.AddMs(c.NowDelayMs);
         var extra = Request.Create(c.Extra.From, c.Extra.To, now, Floors, id: 99_999, load: c.ExtraLoad).Value!;
 
-        var oracle = new RouteProjection(policy, ElevatorTiming.Default, StopProjection.DefaultHorizonMs); // same horizon
+        var oracle = new RouteProjection(policy, ElevatorTiming.Default, StopProjection.DefaultHorizonMs);
         var fast = new StopProjection(policy, ElevatorTiming.Default);
 
         var oWith = oracle.Project(snapshot, extra, now);
@@ -101,7 +91,6 @@ public class StopProjectionEquivalenceTests
         Assert.Equal(oracleDelay, fastDelay);
     });
 
-    /// <summary>A real elevator driven to a random state: assignments over time, some riders boarding, mid-route.</summary>
     private static ElevatorSnapshot BuildSnapshot(Case c, ISchedulingPolicy policy)
     {
         var e = new ElevatorUnit(0, Floors, c.Timing, policy, c.Start, c.Capacity, c.Threshold, FloorMask.Of(c.Served), "typed");
@@ -118,7 +107,6 @@ public class StopProjectionEquivalenceTests
         return e.Snapshot();
     }
 
-    /// <summary>Moves time forward, letting up to <paramref name="maxBoard"/> waiting requests board when answered.</summary>
     private static void Advance(ElevatorUnit e, long until, int maxBoard, ref int boarded)
     {
         var waiting = e.HallCalls.ToDictionary(h => (h.Floor, h.Direction), h => h.Requests.ToList());
@@ -133,7 +121,7 @@ public class StopProjectionEquivalenceTests
                     foreach (var r in list)
                     {
                         if (boarded >= maxBoard || e.IsFull) break;
-                        if (e.Load + r.Load > e.Capacity) break; // does not fit: left behind with everyone behind, as the passengers do
+                        if (e.Load + r.Load > e.Capacity) break;
                         e.Board(r);
                         boarded++;
                     }

@@ -5,10 +5,6 @@ using Elevator.Simulation;
 
 namespace Elevator.Runtime.Tests;
 
-/// <summary>
-/// The same scenario through the deterministic sim engine and through real actors on a real (accelerated) clock.
-/// Logs differ (thread interleaving, timer jitter), so we check outcome equivalence, not identical logs (ADR-005).
-/// </summary>
 public class CrossCheckTests
 {
     private static Scenario Light() => new(
@@ -30,17 +26,15 @@ public class CrossCheckTests
             await Task.Delay(50);
         Assert.Null(system.Fault);
 
-        var events = system.Events.OrderBy(e => e.At).ToList(); // chronological for attribution; stable for equal times
+        var events = system.Events.OrderBy(e => e.At).ToList();
         var actors = ReportBuilder.Build(events);
 
-        // Served exactly once, at the right floors, with every invariant intact.
         Assert.Equal(passengers.Count, actors.Delivered);
         var byId = passengers.ToDictionary(p => p.Id);
         Assert.Equal(byId.Keys.Order(), events.OfType<PassengerBoarded>().Select(b => b.PassengerId).Order());
         Assert.All(events.OfType<PassengerAlighted>(), a => Assert.Equal(byId[a.PassengerId].To, a.Floor));
         Invariants.Check(system.Events, scenario.Capacity);
 
-        // Light load: the two shells should agree on the experience, within timer jitter.
         Assert.Equal(sim.Delivered, actors.Delivered);
         Assert.InRange(actors.Wait.Avg!.Value, sim.Wait.Avg!.Value * 0.7 - 3, sim.Wait.Avg!.Value * 1.3 + 3);
         Assert.InRange(actors.Ride.Avg!.Value, sim.Ride.Avg!.Value * 0.8 - 3, sim.Ride.Avg!.Value * 1.2 + 3);

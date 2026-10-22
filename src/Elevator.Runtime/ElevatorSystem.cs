@@ -37,15 +37,7 @@ public sealed record Assignment(int RequestId, int ElevatorId, WallDuration Late
 
 /// <summary>
 /// The spec's ElevatorSystem, as a running, thread-safe system (ADR-005).
-/// <list type="bullet">
-/// <item><c>requestQueue</c> → <see cref="RequestQueueCapacity"/>: a bounded channel read by the single dispatcher;
-/// submitters wait when it is full.</item>
-/// <item><c>assignRequest()</c> → <see cref="AssignRequest"/>: submit and await the accepted assignment.</item>
-/// <item><c>findBestElevator()</c> → the dispatch policy inside the dispatcher actor (<see cref="DispatchPolicy"/>).</item>
-/// <item><c>balanceLoad()</c> → the cost function's load term, applied to every decision (ADR-006).</item>
-/// </list>
 /// Elevators, the dispatcher and the passengers are actors running the same pure handlers as the simulator.
-/// This class only moves messages and time: it makes no decisions.
 /// </summary>
 public sealed class ElevatorSystem : IAsyncDisposable
 {
@@ -82,7 +74,7 @@ public sealed class ElevatorSystem : IAsyncDisposable
         }
 
         var timing = options.EffectiveTiming;
-        var scheduling = new LookScheduling(); // ADR-004
+        var scheduling = new LookScheduling();
         var dispatch = DispatchPolicies.Create(options.Dispatch, scheduling, timing);
         DispatchPolicy = dispatch.Name;
         var latency = options.Latency ?? MessageLatency.None;
@@ -156,12 +148,6 @@ public sealed class ElevatorSystem : IAsyncDisposable
         _loops.Add(Supervise(_delayed.Run(_stop.Token)));
     }
 
-    /// <summary>
-    /// Fail-stop supervision (ADR-017). A handler that throws may have left its state half-updated, and the other actors
-    /// wait on its replies, so carrying on would serve requests from a broken building. Instead the first exception
-    /// stops the whole system: it becomes <see cref="Fault"/>, every pending call fails with it, later calls fail at once,
-    /// and the request queue is closed so submitters waiting for room are released too. Nothing hangs.
-    /// </summary>
     private async Task Supervise(Task loop)
     {
         try
@@ -170,7 +156,6 @@ public sealed class ElevatorSystem : IAsyncDisposable
         }
         catch (OperationCanceledException) when (_stop.IsCancellationRequested)
         {
-            // stopping
         }
         catch (Exception e)
         {
@@ -180,7 +165,7 @@ public sealed class ElevatorSystem : IAsyncDisposable
 
     private void OnFault(Exception e)
     {
-        if (Interlocked.CompareExchange(ref _fault, e, null) is not null) return; // only the first fault is the cause
+        if (Interlocked.CompareExchange(ref _fault, e, null) is not null) return;
         var error = new ElevatorSystemFaultedException(e);
         _requests.Writer.TryComplete(error);
         foreach (var id in _pending.Keys)
@@ -201,7 +186,6 @@ public sealed class ElevatorSystem : IAsyncDisposable
         if (Fault is { } fault) throw new ElevatorSystemFaultedException(fault);
     }
 
-    /// <summary>Refuses a request this building cannot serve before it reaches any actor (ADR-017).</summary>
     private void Validate(Request request, bool log)
     {
         if (request.Check(_options.Floors) is not { } error) return;
@@ -253,15 +237,12 @@ public sealed class ElevatorSystem : IAsyncDisposable
         if (!_pending.TryAdd(request.Id, (tcs, started)))
             throw new InvalidOperationException($"request {request.Id} is already pending");
         Interlocked.Increment(ref _inFlight);
-        // A fault between the check above and TryAdd: OnFault sets the fault before sweeping, so either its sweep saw
-        // this entry or this read sees the fault. Both are full fences.
         if (Fault is { } fault)
         {
             if (_pending.TryRemove(request.Id, out _)) Interlocked.Decrement(ref _inFlight);
             throw new ElevatorSystemFaultedException(fault);
         }
 
-        // Backpressure stays with the caller (spec requestQueue): wait while the bounded request queue is full.
         try
         {
             if (!await _requests.Writer.WaitToWriteAsync(ct).ConfigureAwait(false))
@@ -272,9 +253,6 @@ public sealed class ElevatorSystem : IAsyncDisposable
             if (_pending.TryRemove(request.Id, out _)) Interlocked.Decrement(ref _inFlight);
             throw;
         }
-        // Causality by construction (ADR-015): the passengers actor logs PassengerArrived and then submits the request,
-        // in one handler call, so nothing about the request can be logged before its passenger. (Registering the passenger
-        // and writing the request from here let the dispatcher log it first whenever the passengers actor was busy.)
         _actors[Address.Passengers].Mailbox.Writer.TryWrite(new PassengerArrives(request));
         using (ct.Register(() => tcs.TrySetCanceled(ct)))
             return await tcs.Task.ConfigureAwait(false);
@@ -287,12 +265,12 @@ public sealed class ElevatorSystem : IAsyncDisposable
     /// </summary>
     public async Task<int?> FindBestElevator(Request request, CancellationToken ct = default)
     {
-        Validate(request, log: false); // a query changes nothing, so it leaves nothing in the log
+        Validate(request, log: false);
         ThrowIfFaulted();
         var id = Interlocked.Increment(ref _nextQuery);
         var tcs = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
         _queries[id] = tcs;
-        if (Fault is { } fault && _queries.TryRemove(id, out _)) throw new ElevatorSystemFaultedException(fault); // faulted meanwhile
+        if (Fault is { } fault && _queries.TryRemove(id, out _)) throw new ElevatorSystemFaultedException(fault);
         _actors[Address.Dispatcher].Mailbox.Writer.TryWrite(new FindBestQuery(id, request));
         using (ct.Register(() => tcs.TrySetCanceled(ct)))
             return await tcs.Task.ConfigureAwait(false);
@@ -367,7 +345,7 @@ public sealed class ElevatorSystem : IAsyncDisposable
     {
         if (envelope.DelayMs > 0)
         {
-            _delayed.Schedule(envelope); // link latency, FIFO per sender for equal delays (ADR-015)
+            _delayed.Schedule(envelope);
             return;
         }
 
@@ -401,7 +379,7 @@ public sealed class ElevatorSystem : IAsyncDisposable
             case { To.Kind: ActorKind.Client }:
                 break;
             case { To.Kind: ActorKind.Dispatcher, Message: SubmitRequest submit }:
-                await _requests.Writer.WriteAsync(submit, ct).ConfigureAwait(false); // passengers' submissions share the bounded queue
+                await _requests.Writer.WriteAsync(submit, ct).ConfigureAwait(false);
                 break;
             default:
                 Route(envelope.To, envelope.Message);
@@ -430,7 +408,6 @@ public sealed class ElevatorSystem : IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
-            // stopping
         }
         _log.Writer.TryComplete();
         await _logWriter.ConfigureAwait(false);
