@@ -21,17 +21,11 @@ namespace Elevator.Policy;
 /// </list>
 /// Going down is symmetric. When idle, it heads for the nearest stop (ties: oldest pickup, then lower floor).
 /// The returned serve direction is the lantern at the target, so the right riders board.
-///
-/// Written with plain loops (no LINQ): it runs inside every route projection, so it is on the dispatch hot path.
 /// </summary>
 public sealed class LookScheduling : IFastSchedulingPolicy
 {
     public string Name => "look";
 
-    /// <summary>
-    /// The same rules on floor bitmasks. "Lowest stop above" is a trailing-zero count, "highest below" a leading-zero
-    /// count: O(1) per decision instead of a scan over every stop.
-    /// </summary>
     public PolicyDecision Decide(in StopSet s)
     {
         if (s.IsEmpty) return PolicyDecision.None;
@@ -68,7 +62,7 @@ public sealed class LookScheduling : IFastSchedulingPolicy
     {
         servedHere = null;
         var f = s.Floor;
-        Direction? hereDir = null; // oldest pickup at this floor
+        Direction? hereDir = null;
         foreach (var p in s.Pickups)
             if (p.Floor == f) { hereDir = p.Direction; break; }
         if (hereDir is not null && s.CarCalls == 0)
@@ -77,7 +71,6 @@ public sealed class LookScheduling : IFastSchedulingPolicy
             return null;
         }
 
-        // Nearest stop elsewhere; ties: drop-offs first, then the oldest pickup, then the lower floor.
         int? nearest = null;
         var bestKey = (Distance: int.MaxValue, Order: long.MaxValue, Floor: int.MaxValue);
         var cars = s.CarCalls & ~StopSet.Bit(f);
@@ -109,18 +102,16 @@ public sealed class LookScheduling : IFastSchedulingPolicy
 
         Direction? servedHere = null;
         var direction = s.CommittedDirection ?? InitialDirection(s, out servedHere);
-        if (direction is null) return new PolicyDecision(s.CurrentFloor, servedHere); // a pickup right here
+        if (direction is null) return new PolicyDecision(s.CurrentFloor, servedHere);
 
         return Sweep(s, direction.Value) ?? Sweep(s, Opposite(direction.Value)) ?? PolicyDecision.None;
     }
 
-    /// <summary>Target and lantern when sweeping in <paramref name="d"/>, or null when nothing at all is served by sweeping that way.</summary>
     private static PolicyDecision? Sweep(ElevatorSnapshot s, Direction d)
     {
         var f = s.CurrentFloor;
         var up = d == Direction.Up;
 
-        // 1. Same-direction stops ahead: drop-offs strictly ahead, pickups ahead or here. Nearest one wins.
         int? best = null;
         foreach (var c in s.CarCalls)
             if ((up ? c > f : c < f) && (best is null || (up ? c < best : c > best))) best = c;
@@ -128,7 +119,6 @@ public sealed class LookScheduling : IFastSchedulingPolicy
             if (h.Direction == d && (up ? h.Floor >= f : h.Floor <= f) && (best is null || (up ? h.Floor < best : h.Floor > best))) best = h.Floor;
         if (best is { } same) return new PolicyDecision(same, d);
 
-        // 2. Opposite-direction pickups ahead: the farthest one is where this sweep turns.
         int? turn = null;
         foreach (var h in s.HallCalls)
             if (h.Direction != d && (up ? h.Floor >= f : h.Floor <= f) && (turn is null || (up ? h.Floor > turn : h.Floor < turn))) turn = h.Floor;
@@ -141,7 +131,7 @@ public sealed class LookScheduling : IFastSchedulingPolicy
     {
         servedHere = null;
         var f = s.CurrentFloor;
-        HallCall? here = null; // oldest pickup at this floor
+        HallCall? here = null;
         foreach (var h in s.HallCalls)
             if (h.Floor == f) { here = h; break; }
         if (here is not null && s.CarCalls.Count == 0)
@@ -150,7 +140,6 @@ public sealed class LookScheduling : IFastSchedulingPolicy
             return null;
         }
 
-        // Nearest stop elsewhere; ties: drop-offs first (order −1), then the oldest pickup, then the lower floor.
         int? nearest = null;
         var bestKey = (Distance: int.MaxValue, Order: long.MaxValue, Floor: int.MaxValue);
         foreach (var c in s.CarCalls)

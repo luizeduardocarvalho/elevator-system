@@ -33,7 +33,7 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
 {
     private readonly ElevatorHandlerOptions _options = options ?? ElevatorHandlerOptions.Default;
     private long _publishedVersion = -1;
-    private SimTime? _unstickAt; // a timed Stuck command ends here
+    private SimTime? _unstickAt;
 
     public Elevator Elevator { get; } = elevator;
 
@@ -45,7 +45,7 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
     {
         if (_unstickAt is { } unstickAt && unstickAt <= now)
         {
-            Elevator.Tick(unstickAt); // the stuck command ends exactly on time, whenever we are woken
+            Elevator.Tick(unstickAt);
             _unstickAt = null;
             Elevator.Unstick();
         }
@@ -59,7 +59,7 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
                 break;
             case FaultDeclared declared:
                 Elevator.DeclareFault(declared.SilentForMs);
-                Publish(outbox); // Fault mode visible before the released pickups reach the dispatcher
+                Publish(outbox);
                 Flush(outbox);
                 break;
             case Assign assign:
@@ -88,11 +88,6 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
         outbox.Send(Address.Dispatcher, new SnapshotPublished(Elevator.Snapshot()), _options.SnapshotDelayMs);
     }
 
-    /// <summary>
-    /// Applies a fault or operator command (ADR-013). Only a command that changes something is logged, as
-    /// <see cref="FaultCommandApplied"/>, before whatever it causes. The new snapshot is published before the pickups it
-    /// hands back, so the dispatcher already sees the elevator out of service when it reassigns them.
-    /// </summary>
     private void ApplyCommand(FaultCommand command, SimTime now, Outbox outbox)
     {
         var applied = command.Kind switch
@@ -111,7 +106,6 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
         Flush(outbox);
     }
 
-    /// <summary>Stuck for DurationMs, or until Unstick; a new Stuck command replaces the previous one's end.</summary>
     private bool Stick(FaultCommand command, SimTime now)
     {
         Elevator.Stick();
@@ -137,14 +131,13 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
         }
 
         outbox.Emit(new AssignmentAccepted(now, request.Id, Elevator.Id));
-        outbox.Send(Address.Passengers, new AssignmentAcceptedMsg(request.Id, Elevator.Id)); // before any answer below
+        outbox.Send(Address.Passengers, new AssignmentAcceptedMsg(request.Id, Elevator.Id));
         Elevator.AssignPickup(request);
         outbox.Send(Address.Dispatcher, new AssignmentAcceptedMsg(request.Id, Elevator.Id, Elevator.Version));
     }
 
     private AssignmentReason? RejectionReason(Assign assign, SimTime now)
     {
-        // Out of service (ADR-013): always wins, even over a forced assignment.
         switch (Elevator.Mode)
         {
             case ElevatorMode.Draining or ElevatorMode.Maintenance: return AssignmentReason.Maintenance;
@@ -152,7 +145,6 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
             case ElevatorMode.Fault: return AssignmentReason.Fault;
         }
         if (Elevator.State == ElevatorState.Maintenance) return AssignmentReason.Maintenance;
-        // Defer mode: full now means no. NextTrip mode: a full elevator takes it for a later trip, unless it can never fit.
         if (Elevator.CapacityMode == CapacityMode.Defer ? Elevator.IsFull : assign.Request.Load > Elevator.Capacity)
             return AssignmentReason.Capacity;
         if (assign.Forced || estimator is null || assign.EtaEstimate is not { } estimate) return null;
@@ -170,11 +162,6 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
         SendRelease(requestId, reason, outbox);
     }
 
-    /// <summary>
-    /// Causality (ADR-013, ADR-015): the dispatcher must hold the snapshot that explains a release (pickup removed, out
-    /// of service, full) before the release itself, or it re-dispatches against the old view. So the snapshot is
-    /// published first, and the release travels with the same link delay: it can never overtake it.
-    /// </summary>
     private void SendRelease(int requestId, AssignmentReason reason, Outbox outbox)
     {
         Publish(outbox);
@@ -195,7 +182,7 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
                 case FloorReached reached when _options.ReportProgress:
                     outbox.Send(Address.Dispatcher, new ProgressReported(Elevator.Id, reached.Floor, reached.At), _options.SnapshotDelayMs);
                     break;
-                case AssignmentReleased released: // raised by the elevator itself (full-load bypass, out of service)
+                case AssignmentReleased released:
                     SendRelease(released.RequestId, released.Reason, outbox);
                     break;
             }

@@ -2,14 +2,12 @@ using Elevator.Domain.Events;
 
 namespace Elevator.Domain.Tests;
 
-/// <summary>Elevator types (ADR-012): their own timing and capacity, and the floors they serve.</summary>
 public class ElevatorTypeTests
 {
     private static Request R(int id, int from, int to) => Request.Create(from, to, SimTime.Zero, Harness.Floors, id: id).Value!;
 
     private static readonly ElevatorTiming Fast = new(FloorTravelMs: 1_000, DoorOpeningMs: 500, DoorDwellMs: 2_000, DoorClosingMs: 500);
 
-    // Express: lobby plus the top half (floors 1 and 6-10).
     private static readonly ulong Express = FloorMask.Of([1, 6, 7, 8, 9, 10]);
 
     private static Elevator Make(ulong served = FloorMask.All, ElevatorTiming? timing = null, int start = 1, string type = "express") =>
@@ -47,7 +45,7 @@ public class ElevatorTypeTests
     public void Uses_its_own_timing()
     {
         var e = Make(timing: Fast);
-        e.Board(R(1, 1, 4));                      // 3 floors at 1 s each
+        e.Board(R(1, 1, 4));
         e.Tick(new SimTime(3_000));
         Assert.Contains(e.DrainEvents(), ev => ev is StateChanged { Trigger: Trigger.ArriveAndOpen, Floor: 4, At.Ms: 3_000 });
     }
@@ -55,7 +53,6 @@ public class ElevatorTypeTests
     [Fact]
     public void Passes_floors_it_does_not_serve_without_stopping()
     {
-        // Express at 1 with a rider to 9 and a car call... the only stops it may make are served floors.
         var e = Make(Express);
         e.Board(R(1, 1, 9));
         e.Tick(new SimTime(60_000));
@@ -67,14 +64,13 @@ public class ElevatorTypeTests
     [Fact]
     public void Losing_its_target_between_unserved_floors_it_carries_on_to_the_next_served_floor()
     {
-        // Going up from the lobby for a pickup at 8; the pickup is taken away while it is passing floor 3.
         var e = Make(Express);
         e.AssignPickup(R(1, 8, 10));
-        e.Tick(new SimTime(3_000)); // between 2 and 3
+        e.Tick(new SimTime(3_000));
         Assert.True(e.Unassign(1));
         e.Tick(new SimTime(60_000));
         var opened = Assert.Single(e.DrainEvents().OfType<DoorsOpened>());
-        Assert.Equal(6, opened.Floor); // first served floor ahead, never 3, 4 or 5
+        Assert.Equal(6, opened.Floor);
     }
 
     [Fact]

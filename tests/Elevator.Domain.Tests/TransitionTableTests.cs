@@ -2,8 +2,6 @@ namespace Elevator.Domain.Tests;
 
 public class TransitionTableTests
 {
-    // Written out by hand on purpose: the test is an independent statement of the intended machine,
-    // not a copy of TransitionTable's dictionary.
     public static readonly TheoryData<ElevatorState, Trigger, ElevatorState> Legal = new()
     {
         { ElevatorState.Idle, Trigger.StartMoveUp, ElevatorState.MovingUp },
@@ -17,7 +15,6 @@ public class TransitionTableTests
         { ElevatorState.DoorClosing, Trigger.Reopen, ElevatorState.DoorOpening },
         { ElevatorState.Idle, Trigger.EnterMaintenance, ElevatorState.Maintenance },
         { ElevatorState.Maintenance, Trigger.ExitMaintenance, ElevatorState.Idle },
-        // Emergency stop (ADR-013): halt at the next floor with the doors closed; doors in a cycle close and stay closed.
         { ElevatorState.MovingUp, Trigger.EmergencyHalt, ElevatorState.Idle },
         { ElevatorState.MovingDown, Trigger.EmergencyHalt, ElevatorState.Idle },
         { ElevatorState.DoorOpening, Trigger.EmergencyClose, ElevatorState.DoorClosing },
@@ -77,8 +74,8 @@ public class TransitionTableTests
     public void Elevator_rejects_spec_method_called_in_wrong_state()
     {
         var h = new Harness();
-        Assert.Throws<IllegalTransitionException>(() => h.Elevator.CloseDoor()); // Idle: doors already closed
+        Assert.Throws<IllegalTransitionException>(() => h.Elevator.CloseDoor());
         h.Elevator.MoveUp();
-        Assert.Throws<IllegalTransitionException>(() => h.Elevator.MoveDown()); // no reversing mid-flight
+        Assert.Throws<IllegalTransitionException>(() => h.Elevator.MoveDown());
     }
 }

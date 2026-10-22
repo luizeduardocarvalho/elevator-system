@@ -33,7 +33,7 @@ public sealed class PassengersHandler : IHandler
         public int? RidingOn { get; set; }
     }
 
-    private readonly Dictionary<(int Floor, Direction Direction), List<Passenger>> _waiting = []; // per floor and direction, arrival order
+    private readonly Dictionary<(int Floor, Direction Direction), List<Passenger>> _waiting = [];
     private readonly Dictionary<int, Passenger> _byId = [];
     private readonly Dictionary<int, List<Passenger>> _riding = [];
 
@@ -41,7 +41,6 @@ public sealed class PassengersHandler : IHandler
 
     public SimTime? NextWakeUp => null;
 
-    /// <summary>People waiting per floor and direction (shared v3 contract: the TUI's ▲/▼ counts).</summary>
     public IReadOnlyDictionary<(int Floor, Direction Direction), int> WaitingCounts =>
         _waiting.Where(kv => kv.Value.Count > 0).ToDictionary(kv => kv.Key, kv => kv.Value.Count);
 
@@ -91,8 +90,8 @@ public sealed class PassengersHandler : IHandler
         _byId.Add(request.Id, p);
         Arrived++;
         outbox.Emit(new PassengerArrived(now, request.Id, request.PickupFloor, request.DestinationFloor,
-            Load: request.Load != 1 ? request.Load : null,           // v3.1: written only when set, so default logs
-            Vip: request.Vip ? true : null,                          // stay byte-identical
+            Load: request.Load != 1 ? request.Load : null,
+            Vip: request.Vip ? true : null,
             AccessLevel: request.AccessLevel > 0 ? request.AccessLevel : null));
     }
 
@@ -112,13 +111,13 @@ public sealed class PassengersHandler : IHandler
     private void GetOn(HallCallAnswered answered, SimTime now, Outbox outbox)
     {
         if (!_waiting.TryGetValue((answered.Floor, answered.Direction), out var here)) return;
-        var candidates = here.Where(p => p.AssignedTo == answered.ElevatorId).ToList(); // arrival order
+        var candidates = here.Where(p => p.AssignedTo == answered.ElevatorId).ToList();
         if (candidates.Count == 0) return;
 
         var riders = _riding.TryGetValue(answered.ElevatorId, out var list) ? list : _riding[answered.ElevatorId] = [];
         var load = riders.Sum(r => r.Request.Load);
         var capacity = _capacityOf(answered.ElevatorId);
-        var blocked = false; // strict arrival order: once someone does not fit, nobody behind them overtakes (ADR-012)
+        var blocked = false;
         foreach (var p in candidates)
         {
             if (!blocked && load + p.Request.Load <= capacity)

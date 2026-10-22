@@ -60,7 +60,7 @@ public class FifoSchedulingTests
             var floors = s.CarCalls.Concat(s.HallCalls.Select(c => c.Floor)).ToHashSet();
             Assert.Equal(floors.Count == 0, goal is null);
             if (goal is { } g) Assert.Contains(g, floors);
-            Assert.Equal(goal, Fifo.Decide(s).Target); // pure: same input, same answer
+            Assert.Equal(goal, Fifo.Decide(s).Target);
         });
     }
 }

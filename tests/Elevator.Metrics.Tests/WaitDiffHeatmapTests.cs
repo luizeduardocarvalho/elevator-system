@@ -16,7 +16,6 @@ public class WaitDiffHeatmapTests
         new PassengerArrived(S(80), 4, 2, 4),
     ];
 
-    /// <summary>Waits under A: 10, 30, 5, never boards. Under B: 40, 20, 5, 15.</summary>
     private static readonly DomainEvent[] A =
     [
         .. Arrivals,
@@ -39,7 +38,7 @@ public class WaitDiffHeatmapTests
     {
         var map = WaitDiffHeatmap.FromEvents(A, B, binS: 60);
         Assert.Equal((4, 2), (map.Floors, map.Bins));
-        Assert.Equal(-10.0, map.Cell(4, 0)!.Value, 6);   // ((10 − 40) + (30 − 20)) / 2
+        Assert.Equal(-10.0, map.Cell(4, 0)!.Value, 6);
         Assert.Equal(0.0, map.Cell(1, 1)!.Value, 6);
         Assert.Equal(2, map.Count(4, 0));
     }
@@ -49,7 +48,7 @@ public class WaitDiffHeatmapTests
     {
         var map = WaitDiffHeatmap.FromEvents(A, B, binS: 60);
         Assert.Equal((4, 3, 1), (map.Passengers, map.Paired, map.Excluded));
-        Assert.Null(map.Cell(2, 1)); // passenger 4 never boarded under A
+        Assert.Null(map.Cell(2, 1));
     }
 
     [Fact]
@@ -57,7 +56,7 @@ public class WaitDiffHeatmapTests
     {
         var map = WaitDiffHeatmap.FromEvents(A, B, binS: 60);
         Assert.Equal(-10.0, map.FloorStat(4)!.Value, 6);
-        Assert.Equal(-20.0 / 3, map.Overall!.Value, 6);    // (−30 + 10 + 0) / 3
+        Assert.Equal(-20.0 / 3, map.Overall!.Value, 6);
         Assert.Equal(-10.0, map.BinStat(0)!.Value, 6);
     }
 
@@ -65,7 +64,7 @@ public class WaitDiffHeatmapTests
     public void P95_is_the_difference_of_the_two_p95s()
     {
         var map = WaitDiffHeatmap.FromEvents(A, B, binS: 60, HeatStat.P95);
-        Assert.Equal(-10.0, map.Cell(4, 0)!.Value, 6); // p95(10, 30) − p95(40, 20) = 30 − 40
+        Assert.Equal(-10.0, map.Cell(4, 0)!.Value, 6);
     }
 
     [Fact]

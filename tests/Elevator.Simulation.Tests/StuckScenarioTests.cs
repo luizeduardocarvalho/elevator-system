@@ -4,7 +4,6 @@ using Elevator.Domain.Faults;
 
 namespace Elevator.Simulation.Tests;
 
-/// <summary>A stuck elevator mid-route, end to end (ADR-013): detected within T, calls reassigned, recovered, riders delivered.</summary>
 public class StuckScenarioTests
 {
     [Fact]
@@ -18,25 +17,22 @@ public class StuckScenarioTests
         var stuckAt = engine.Now;
         var riders = engine.Elevators[E].Riders.Select(r => r.Id).ToHashSet();
         var pickups = engine.Elevators[E].HallCalls.SelectMany(c => c.Requests).Select(r => r.Id).ToHashSet();
-        engine.FaultInjector.Stick(E, stuckAt);                       // until Unstick
+        engine.FaultInjector.Stick(E, stuckAt);
         engine.FaultInjector.Unstick(E, stuckAt.AddMs(120_000));
         while (!engine.Finished) engine.AdvanceTo(engine.Now.AddMs(100));
         var result = engine.Finish();
         var events = result.Events;
 
-        // Detected within T of getting stuck, with how long it had been silent.
         var detected = events.OfType<FaultDetected>().Single();
         Assert.Equal(E, detected.ElevatorId);
         Assert.InRange(detected.At.Ms - stuckAt.Ms, 1, Scenario.DefaultWatchdogTimeoutMs);
         Assert.True(detected.SilentForMs >= Scenario.DefaultWatchdogTimeoutMs);
 
-        // Its pickups are handed back at detection and served by other elevators.
         var released = events.OfType<AssignmentReleased>().Where(r => r.Reason == AssignmentReason.Fault).ToList();
         Assert.True(pickups.IsSubsetOf(released.Select(r => r.RequestId)));
         Assert.All(released, r => Assert.Equal(detected.At, r.At));
         Assert.All(events.OfType<PassengerBoarded>().Where(b => released.Any(r => r.RequestId == b.PassengerId)), b => Assert.NotEqual(E, b.ElevatorId));
 
-        // Nothing assigned to it while faulty; it recovers once it moves again, and delivers its riders.
         var recovered = events.OfType<FaultRecovered>().Single();
         Assert.InRange(recovered.At.Ms - (stuckAt.Ms + 120_000), 0, ElevatorTiming.Default.FloorTravelMs);
         Assert.DoesNotContain(events, e => e is AssignmentAccepted { ElevatorId: E } a && a.At >= detected.At && a.At < recovered.At);

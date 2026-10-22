@@ -4,8 +4,8 @@ public static class Percentile
 {
     /// <summary>
     /// Nearest-rank percentile: the smallest sample such that at least p% of samples are ≤ it,
-    /// i.e. sorted[ceil(p/100 · n) − 1]. Always an observed value (no interpolation), which keeps
-    /// reported numbers traceable to a real passenger in the event log. Null for an empty sample.
+    /// i.e. sorted[ceil(p/100 · n) − 1]. Always an observed value (no interpolation).
+    /// Null for an empty sample.
     /// </summary>
     public static double? NearestRank(IEnumerable<double> samples, double p)
     {

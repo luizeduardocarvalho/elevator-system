@@ -9,12 +9,11 @@ public class PacerTests
     [Fact]
     public void Half_speed_at_20_fps_runs_one_tick_every_fourth_frame()
     {
-        // 50 ms × 0.5 = 25 sim ms per frame; a tick is 100 ms.
         Assert.Equal([0, 0, 0, 1, 0, 0, 0, 1], Frames(new Pacer(0.5), 8));
     }
 
     [Theory]
-    [InlineData(0.25, 1)]  // 12.5 ms per frame: 1 tick in 8 frames
+    [InlineData(0.25, 1)]
     [InlineData(1.0, 4)]
     [InlineData(2.0, 8)]
     [InlineData(10.0, 40)]
@@ -35,9 +34,9 @@ public class PacerTests
     public void A_huge_frame_is_capped_and_the_excess_is_dropped_not_carried()
     {
         var p = new Pacer(50);
-        Assert.Equal(Pacer.MaxTicksPerFrame, p.TicksDue(10 * 60_000)); // a 10-minute stall at 50× owes 300,000 ticks
+        Assert.Equal(Pacer.MaxTicksPerFrame, p.TicksDue(10 * 60_000));
         Assert.Equal(0, p.AccumulatorMs);
-        Assert.Equal(25, p.TicksDue(50)); // next frame is normal again
+        Assert.Equal(25, p.TicksDue(50));
     }
 
     [Fact]
@@ -105,9 +104,9 @@ public class PacerTests
     {
         var m = new SpeedMeter();
         Assert.Null(m.Achieved);
-        for (var frame = 0; frame <= 40; frame++) m.Record(TimeSpan.FromMilliseconds(frame * 50), frame * 500); // 10×
+        for (var frame = 0; frame <= 40; frame++) m.Record(TimeSpan.FromMilliseconds(frame * 50), frame * 500);
         Assert.Equal(10.0, m.Achieved!.Value, 6);
-        for (var frame = 41; frame <= 80; frame++) m.Record(TimeSpan.FromMilliseconds(frame * 50), 20_000 + (frame - 40) * 100); // now 2×
-        Assert.Equal(2.0, m.Achieved!.Value, 6); // the window forgot the 10× second
+        for (var frame = 41; frame <= 80; frame++) m.Record(TimeSpan.FromMilliseconds(frame * 50), 20_000 + (frame - 40) * 100);
+        Assert.Equal(2.0, m.Achieved!.Value, 6);
     }
 }

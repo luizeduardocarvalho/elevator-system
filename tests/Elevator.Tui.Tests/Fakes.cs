@@ -3,7 +3,6 @@ using Elevator.Tui.View;
 
 namespace Elevator.Tui.Tests;
 
-/// <summary>A frame clock that never sleeps: a delay just moves time forward (no Thread.Sleep in tests).</summary>
 internal sealed class FakeClock : IFrameClock
 {
     public TimeSpan Now { get; set; }
@@ -17,7 +16,6 @@ internal sealed class FakeClock : IFrameClock
     }
 }
 
-/// <summary>Keys pressed at given frame numbers (counted by TryRead calls that return false, i.e. once per frame).</summary>
 internal sealed class ScriptedKeys(params (int Frame, TuiKey Key)[] script) : IKeySource
 {
     private readonly Queue<(int Frame, TuiKey Key)> _script = new(script.OrderBy(s => s.Frame));

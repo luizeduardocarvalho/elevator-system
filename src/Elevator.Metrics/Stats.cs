@@ -31,13 +31,11 @@ public static class Stats
 
     /// <summary>
     /// Paired comparison under common random numbers: for every seed both strategies ran, d = strategy − baseline,
-    /// then a CI on the mean of d. Pairing cancels the seed-to-seed variation in traffic, which is much larger than
-    /// the strategy effect, so differences are detected with far fewer seeds than comparing two independent means.
+    /// then a CI on the mean of d.
     /// </summary>
     public static Estimate PairedDifference(IReadOnlyDictionary<int, double> strategyBySeed, IReadOnlyDictionary<int, double> baselineBySeed) =>
         MeanCi(strategyBySeed.Keys.Where(baselineBySeed.ContainsKey).Order().Select(s => strategyBySeed[s] - baselineBySeed[s]).ToList());
 
-    // Two-sided 95% critical values of Student's t (0.975 quantile), from standard tables.
     private static readonly (int Df, double T)[] Table =
     [
         (1, 12.706), (2, 4.303), (3, 3.182), (4, 2.776), (5, 2.571), (6, 2.447), (7, 2.365), (8, 2.306), (9, 2.262),
@@ -61,6 +59,6 @@ public static class Stats
             }
         }
         var last = Table[^1];
-        return 1.960 + (last.T - 1.960) * last.Df / df; // linear in 1/df towards the normal quantile
+        return 1.960 + (last.T - 1.960) * last.Df / df;
     }
 }

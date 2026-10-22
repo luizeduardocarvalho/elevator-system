@@ -4,7 +4,6 @@ using Elevator.Domain.Faults;
 
 namespace Elevator.Domain.Tests;
 
-/// <summary>A stuck drive (ADR-013): its timed phases freeze, and resume with the time they had left.</summary>
 public class StuckMechanicsTests
 {
     private static Request R(int id, int from, int to) => Request.Create(from, to, SimTime.Zero, Harness.Floors, id: id).Value!;
@@ -15,19 +14,19 @@ public class StuckMechanicsTests
     public void Phases_freeze_while_stuck_and_resume_with_the_time_left()
     {
         var e = Make();
-        e.Board(R(1, 1, 3));            // 1 -> 2 at 2 s, 2 -> 3 at 4 s
-        e.Tick(new SimTime(2_500));     // passed 2, half a second into the next segment
+        e.Board(R(1, 1, 3));
+        e.Tick(new SimTime(2_500));
         Assert.True(e.Stick());
-        Assert.False(e.Stick());        // already stuck
+        Assert.False(e.Stick());
         Assert.Null(e.NextDeadline);
         Assert.Null(e.Snapshot().PhaseEndsAt);
 
-        e.Tick(new SimTime(60_000));    // a minute later: still between 2 and 3
+        e.Tick(new SimTime(60_000));
         Assert.DoesNotContain(e.DrainEvents(), ev => ev is FloorReached { Floor: 3 });
         Assert.Equal((2, ElevatorState.MovingUp), (e.CurrentFloor, e.State));
 
         Assert.True(e.Unstick());
-        Assert.Equal(new SimTime(61_500), e.NextDeadline); // the 1.5 s it had left
+        Assert.Equal(new SimTime(61_500), e.NextDeadline);
         e.Tick(new SimTime(61_500));
         Assert.Contains(e.DrainEvents(), ev => ev is FloorReached { Floor: 3, At.Ms: 61_500 });
     }
@@ -38,27 +37,27 @@ public class StuckMechanicsTests
         var e = Make();
         Assert.True(e.Stick());
         e.AssignPickup(R(1, 4, 9));
-        Assert.Equal(ElevatorState.MovingUp, e.State); // the controller commands it, the drive does not move
+        Assert.Equal(ElevatorState.MovingUp, e.State);
         e.Tick(new SimTime(30_000));
         Assert.Equal(1, e.CurrentFloor);
         e.Unstick();
         e.Tick(new SimTime(30_000 + 2_000));
-        Assert.Equal(2, e.CurrentFloor); // a full floor of travel after the unstick
+        Assert.Equal(2, e.CurrentFloor);
     }
 
     [Fact]
     public void Doors_reopening_after_a_stuck_closing_take_as_long_as_they_had_closed()
     {
         var e = Make();
-        e.AssignPickup(R(1, 1, 5));     // opens at once at 1 (open 1 s, dwell 3 s, closing from 4 s)
-        e.Tick(new SimTime(4_400));     // closing for 0.4 s
+        e.AssignPickup(R(1, 1, 5));
+        e.Tick(new SimTime(4_400));
         e.Stick();
         e.Tick(new SimTime(20_000));
         e.Unstick();
-        e.Tick(new SimTime(20_200));    // closing for 0.6 s in total
-        e.AssignPickup(R(2, 1, 6));     // same floor, same direction: reopen
+        e.Tick(new SimTime(20_200));
+        e.AssignPickup(R(2, 1, 6));
         Assert.Equal(ElevatorState.DoorOpening, e.State);
-        Assert.Equal(new SimTime(20_800), e.NextDeadline); // 0.6 s to open again (opening and closing both 1 s)
+        Assert.Equal(new SimTime(20_800), e.NextDeadline);
     }
 
     [Fact]
@@ -74,7 +73,7 @@ public class StuckMechanicsTests
         Assert.Equal(new SimTime(11_000), h.NextWakeUp);
 
         o.Clear();
-        h.Handle(new WakeUp(), new SimTime(11_000), o); // unstuck: 1 s of travel left
+        h.Handle(new WakeUp(), new SimTime(11_000), o);
         Assert.Equal(new SimTime(12_000), h.NextWakeUp);
         h.Handle(new WakeUp(), new SimTime(12_000), o);
         Assert.Contains(o.Events, ev => ev is FloorReached { Floor: 2, At.Ms: 12_000 });

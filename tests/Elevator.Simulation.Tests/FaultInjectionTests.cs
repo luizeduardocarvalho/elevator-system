@@ -7,7 +7,6 @@ using FsCheck.Xunit;
 
 namespace Elevator.Simulation.Tests;
 
-/// <summary>Fault and operator commands in the simulator (ADR-013): scenario schedule and live injection, in sim time.</summary>
 public class FaultInjectionTests
 {
     private static Scenario Lunch(params FaultCommand[] faults) => Repo.Load("lunch.yaml") with { Faults = faults };
@@ -28,8 +27,8 @@ public class FaultInjectionTests
         var engine = SimEngine.Create(Lunch(), options: new SimEngineOptions(FaultInjector: SimFaultInjector.Factory));
         Assert.False(engine.FaultInjector.IsNoOp);
         engine.AdvanceTo(new SimTime(100_000));
-        engine.FaultInjector.Stick(1, new SimTime(150_000), 5_000); // future: applied then
-        engine.FaultInjector.Stick(3, new SimTime(40_000), 5_000);  // past: applied now
+        engine.FaultInjector.Stick(1, new SimTime(150_000), 5_000);
+        engine.FaultInjector.Stick(3, new SimTime(40_000), 5_000);
         Assert.Throws<ArgumentOutOfRangeException>(() => engine.FaultInjector.Stick(4, engine.Now));
         while (!engine.Finished) engine.AdvanceTo(engine.Now.AddMs(100));
         Assert.Equal([(100_000L, 3), (150_000L, 1)], Applied(engine.Finish().Events).Select(a => (a.At.Ms, a.ElevatorId)));

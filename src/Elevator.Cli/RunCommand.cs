@@ -106,7 +106,6 @@ internal sealed class RunCommand : Command<RunCommand.Settings>
             foreach (var e in result.Events)
                 AnsiConsole.WriteLine(EventFormatter.Format(e));
 
-        // The report is built from the log file just written: the log alone must be enough to measure a run.
         using var reader = new StreamReader(logPath);
         var report = ReportBuilder.Build(JsonlEventLog.Read(reader));
         AnsiConsole.Write(Render(report));
@@ -137,7 +136,7 @@ internal sealed class RunCommand : Command<RunCommand.Settings>
         table.AddRow("Wait avg", S(r.Wait.Avg));
         table.AddRow("Wait p95", S(r.Wait.P95));
         table.AddRow("Wait max", S(r.Wait.Max));
-        if (r.VipWait is { } vip && r.NonVipWait is { } other) // only when the run had VIPs (v3.1)
+        if (r.VipWait is { } vip && r.NonVipWait is { } other)
         {
             table.AddRow("VIP wait avg / p95", $"{S(vip.Avg)} / {S(vip.P95)} ({vip.Count})");
             table.AddRow("Non-VIP wait avg / p95", $"{S(other.Avg)} / {S(other.P95)} ({other.Count})");
@@ -158,7 +157,6 @@ internal sealed class RunCommand : Command<RunCommand.Settings>
         return table;
     }
 
-    /// <summary>Operations (ADR-013): only shown when something operational happened, so plain runs print as before.</summary>
     private static void AddOps(Table table, OpsReport o)
     {
         static string S(double? seconds) => seconds is { } s ? s.ToString("0.0", CultureInfo.InvariantCulture) + " s" : "–";

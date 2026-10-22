@@ -5,14 +5,12 @@ using Elevator.Domain.Faults;
 
 namespace Elevator.Runtime.Tests;
 
-/// <summary>The actor runtime's priority control channel (ADR-013).</summary>
 public class EmergencyPreemptionTests
 {
     [Fact]
     public async Task An_emergency_behind_50_queued_commands_takes_effect_first()
     {
         await using var system = ElevatorSystem.Start(new RuntimeOptions(Floors: 20, Elevators: 2, Speed: 50) { StartPaused = true });
-        // Pre-fill E0's mailbox with 50 assignments, then post the emergency, all before any actor runs.
         for (var i = 0; i < 50; i++)
             system.Post(Address.Elevator(0), new Assign(Request.Create(1 + i % 19, 20, SimTime.Zero, 20, id: 90_000 + i).Value!, null, Forced: true));
         system.FaultInjector.EmergencyStop(0, SimTime.Zero);
@@ -41,19 +39,14 @@ public class EmergencyPreemptionTests
         var deadline = DateTime.UtcNow.AddSeconds(10);
         while (!system.Events.Any(e => e is FaultCommandApplied) && DateTime.UtcNow < deadline) await Task.Delay(20);
         var e0 = system.Events.Where(e => e is FaultCommandApplied or AssignmentAccepted).ToList();
-        Assert.Equal(5, e0.TakeWhile(e => e is AssignmentAccepted).Count()); // accepted first, then maintenance
+        Assert.Equal(5, e0.TakeWhile(e => e is AssignmentAccepted).Count());
     }
 
-    /// <summary>
-    /// Emergency commands share one lane and keep their order among themselves (ADR-015): a clear posted before a stop
-    /// is applied before it, so the elevator ends up stopped. (With only the stop on the priority lane, the stop
-    /// overtook the clear and the elevator ended up running.)
-    /// </summary>
     [Fact]
     public async Task A_clear_posted_before_a_stop_does_not_overtake_or_get_overtaken()
     {
         await using var system = ElevatorSystem.Start(new RuntimeOptions(Floors: 20, Elevators: 1, Speed: 50) { StartPaused = true });
-        system.FaultInjector.ClearEmergency(0, SimTime.Zero); // nothing to clear yet: a no-op, not logged
+        system.FaultInjector.ClearEmergency(0, SimTime.Zero);
         system.FaultInjector.EmergencyStop(0, SimTime.Zero);
         system.Resume();
 
@@ -65,7 +58,6 @@ public class EmergencyPreemptionTests
         Assert.DoesNotContain(system.Events, e => e is EmergencyCleared);
     }
 
-    /// <summary>Records what it handles, in order.</summary>
     private sealed class Probe : IHandler
     {
         public List<string> Seen { get; } = [];
@@ -83,11 +75,6 @@ public class EmergencyPreemptionTests
         });
     }
 
-    /// <summary>
-    /// The runtime's lanes (ADR-015): emergency commands first, then the mailbox (control traffic: snapshots, acks,
-    /// releases), then new requests; FIFO within each lane. The mailbox-before-requests rule is urgency: the
-    /// dispatcher brings its view up to date before taking new work.
-    /// </summary>
     [Fact]
     public async Task Lanes_are_emergency_then_mailbox_then_new_requests_each_fifo()
     {

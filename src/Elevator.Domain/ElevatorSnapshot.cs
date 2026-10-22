@@ -56,12 +56,8 @@ public sealed record ElevatorSnapshot(
     /// </summary>
     public ElevatorTiming? Timing { get; init; }
 
-    // ---- Shared v3 contract (docs/contract-v3.md) ----
-
-    /// <summary>Operating mode (maintenance, emergency, fault). Always Normal until the Hard stage sets it.</summary>
     public ElevatorMode Mode { get; init; } = ElevatorMode.Normal;
 
-    /// <summary>Elevator type (Local, Express, Freight...); "standard" until the Hard stage configures types.</summary>
     public string TypeName { get; init; } = "standard";
 
     /// <summary>Floors this elevator serves: bit f = floor f. Default: every floor.</summary>
@@ -74,7 +70,6 @@ public sealed record ElevatorSnapshot(
 
     public bool IsMoving => State is ElevatorState.MovingUp or ElevatorState.MovingDown;
 
-    /// <summary>Snapshot with only the fields a scheduling policy needs; handy in tests.</summary>
     public static ElevatorSnapshot ForPolicy(int floor, ElevatorState state, Direction? committed, IReadOnlyList<int> carCalls,
         IReadOnlyList<HallCall> hallCalls, int floors, int elevatorId = 0) =>
         new(elevatorId, floor, state, committed, carCalls, hallCalls, floors, [], int.MaxValue, 1.0, SimTime.Zero, null, SimTime.Zero, 0);

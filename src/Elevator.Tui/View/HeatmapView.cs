@@ -17,7 +17,7 @@ public sealed record HeatmapOptions(string Title, TimeSpan? ClockStart = null, b
 /// <param name="Signed">Values are differences: margins print with a sign.</param>
 public sealed record HeatScale(double[] Thresholds, string[] Colours, char[] Glyphs, char Empty, bool Signed, string[] Labels)
 {
-    /// <summary>Waits: [0, 15), [15, 30), [30, 45), [45, 60), [60, ∞). The top level starts at the TUI's "long wait" threshold.</summary>
+    /// <summary>Waits: [0, 15), [15, 30), [30, 45), [45, 60), [60, ∞).</summary>
     public static HeatScale Wait { get; } = new(
         [15, 30, 45, 60],
         ["dodgerblue2", "green3", "gold1", "darkorange", "red1"],
@@ -114,7 +114,6 @@ public static class HeatmapView
         return lines;
     }
 
-    /// <summary>Bins where an hour starts (on the clock when there is one, else every elapsed hour), with that hour.</summary>
     private static List<(int Bin, int Hour)> HourStarts(IHeatGrid map, TimeSpan? clockStart)
     {
         var offsetMs = (long)(clockStart?.TotalMilliseconds ?? 0);
@@ -136,13 +135,12 @@ public static class HeatmapView
         foreach (var (bin, hour) in starts)
         {
             var label = clockStart is null ? $"{hour}h" : (hour % 24).ToString("00", CultureInfo.InvariantCulture);
-            if (bin > 0 && axis[bin - 1] != ' ') continue; // would touch the previous label
+            if (bin > 0 && axis[bin - 1] != ' ') continue;
             for (var i = 0; i < label.Length && bin + i < axis.Length; i++) axis[bin + i] = label[i];
         }
         return new string(axis).TrimEnd();
     }
 
-    /// <summary>Under each hour, that hour's value for all floors, in whole seconds when it fits before the next hour.</summary>
     private static string HourValues(IHeatGrid map, List<(int Bin, int Hour)> starts, bool signed)
     {
         var row = new char[map.Bins + 8];

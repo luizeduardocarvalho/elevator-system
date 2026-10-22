@@ -10,7 +10,6 @@ public class HeatmapViewTests
 {
     private static SimTime S(double seconds) => SimTime.FromSeconds(seconds);
 
-    /// <summary>3 floors, 10-minute bins over 2 hours. Floor 3 waits 70 s at 0:00; floor 1 waits 20 s at 1:00.</summary>
     private static WaitHeatmap Small() => WaitHeatmap.FromEvents(
     [
         new SimulationStarted(S(0), "small", 1, 3, "look", 2),
@@ -52,7 +51,6 @@ public class HeatmapViewTests
         var elapsed = HeatmapView.Render(Small(), new HeatmapOptions("small", Plain: true));
         Assert.Contains("     0h    1h", elapsed);
 
-        // 07:30 start: the first full hour (08) begins three bins in.
         var half = HeatmapView.Render(Small(), new HeatmapOptions("small", new TimeSpan(7, 30, 0), Plain: true));
         Assert.Contains("        08    09", half);
     }
@@ -81,10 +79,6 @@ public class HeatmapViewTests
         Assert.DoesNotContain(HeatmapView.Render(map, new HeatmapOptions("small", Plain: true)), l => l.Contains("[/]", StringComparison.Ordinal));
     }
 
-    /// <summary>
-    /// The working day under LOOK + Cost: the evening down-peak strands people on the upper floors and the morning
-    /// up-peak warms the lobby, each compared with a quiet stretch of the same day.
-    /// </summary>
     [Fact]
     public void The_working_day_shows_its_peaks_where_they_happen()
     {
@@ -100,7 +94,7 @@ public class HeatmapViewTests
         var lateMorningLobby = map.RegionStat(1, 1, Bin(10), Bin(11.5))!.Value;
         Assert.True(morningLobby > lateMorningLobby, $"morning lobby {morningLobby:0.0} s vs late morning {lateMorningLobby:0.0} s");
 
-        Assert.Equal(map.Passengers, map.Boarded); // everyone served by the end of the day
+        Assert.Equal(map.Passengers, map.Boarded);
         Assert.Equal(HeatmapView.Render(map, new HeatmapOptions("day", Plain: true)), HeatmapView.Render(map, new HeatmapOptions("day", Plain: true)));
     }
 
@@ -118,7 +112,6 @@ public class HeatmapViewTests
     public void The_difference_scale_diverges_around_a_5_second_neutral_band(double seconds, int level) =>
         Assert.Equal(level, HeatScale.Difference.Level(seconds));
 
-    /// <summary>Same arrivals as <see cref="Small"/>; under B floor 3 waits 10 s (A: 70 s) and floor 1 waits 40 s (A: 20 s).</summary>
     private static WaitDiffHeatmap SmallDifference()
     {
         DomainEvent[] arrivals =
@@ -155,7 +148,6 @@ public class HeatmapViewTests
             _ = new Spectre.Console.Markup(line);
     }
 
-    /// <summary>On the working day, cost dispatch beats Nearest overall and where Nearest hurts most: the evening upper floors.</summary>
     [Fact]
     public void On_the_working_day_cost_waits_less_than_nearest_overall_and_in_the_evening()
     {

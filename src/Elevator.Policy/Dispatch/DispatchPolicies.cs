@@ -2,7 +2,6 @@ using Elevator.Domain;
 
 namespace Elevator.Policy.Dispatch;
 
-/// <summary>Every dispatch strategy stays selectable by name forever (<c>--dispatch</c>).</summary>
 public static class DispatchPolicies
 {
     private static readonly Dictionary<string, Func<ISchedulingPolicy, ElevatorTiming, IDispatchPolicy>> Factories =

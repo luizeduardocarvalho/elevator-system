@@ -5,15 +5,10 @@ using Elevator.Simulation;
 
 namespace Elevator.Runtime.Tests;
 
-/// <summary>
-/// FIFO per sender (ADR-015): whatever the number of concurrent senders, each sender's messages reach a receiver in
-/// the order it sent them, both straight into a mailbox and through delayed delivery (link latency).
-/// </summary>
 public class MessageOrderTests
 {
     private sealed record Numbered(int Sender, int N) : Message;
 
-    /// <summary>Records what it handles, in order. Runs on one actor loop only.</summary>
     private sealed class Probe : IHandler
     {
         public ConcurrentQueue<Numbered> Seen { get; } = new();
@@ -64,15 +59,11 @@ public class MessageOrderTests
         AssertFifoPerSender(probe.Seen, senders, each);
     }
 
-    /// <summary>
-    /// Link latency: equal delays from one sender keep their order. The old path (one Task.Run + Task.Delay per
-    /// message) gave no ordering at all; a delayed snapshot could arrive after the release it explains.
-    /// </summary>
     [Fact]
     public async Task Delayed_delivery_is_fifo_per_sender_for_equal_delays()
     {
         const int senders = 16, each = 500;
-        var clock = new RealClock(speed: 1_000); // 50 sim ms = 0.05 wall ms
+        var clock = new RealClock(speed: 1_000);
         var delivered = new ConcurrentQueue<Numbered>();
         using var stop = new CancellationTokenSource();
         var delays = new DelayedDelivery(clock, (envelope, _) =>

@@ -6,7 +6,6 @@ using Elevator.Tui.View;
 
 namespace Elevator.Tui.Tests;
 
-/// <summary>The Spectre layer is a dumb mapping; these only check it renders the model at any terminal size.</summary>
 public class RendererTests
 {
     private static BuildingState MidLunch()

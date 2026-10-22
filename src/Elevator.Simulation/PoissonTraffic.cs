@@ -4,13 +4,11 @@ namespace Elevator.Simulation;
 
 /// <summary>
 /// Random passenger arrivals at a constant average rate (a homogeneous Poisson process), uniform origin and
-/// destination. Time-varying rates (morning up-peak, lunch...) come in v2.
+/// destination.
 /// </summary>
 public sealed record PoissonTraffic(double RatePerMinute, double DurationS, double StartS = 0)
 {
     /// <summary>
-    /// In a Poisson process the gaps between arrivals are exponentially distributed with mean 1/λ, so each gap is
-    /// drawn by inverse-transform sampling: gap = −ln(1 − U) / λ with U uniform in [0, 1).
     /// All randomness comes from <paramref name="rng"/>, so a seed fixes the whole arrival sequence.
     /// </summary>
     public IEnumerable<PassengerSpec> Generate(int floors, Random rng)

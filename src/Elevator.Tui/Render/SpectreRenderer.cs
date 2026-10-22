@@ -5,8 +5,8 @@ using Spectre.Console.Rendering;
 namespace Elevator.Tui.Render;
 
 /// <summary>
-/// Turns a <see cref="ScreenModel"/> into Spectre renderables: a dumb mapping from tones and kinds to styles, with
-/// no logic worth testing beyond "it renders at any size". It never sees the engine or the BuildingState (ADR-011).
+/// Turns a <see cref="ScreenModel"/> into Spectre renderables: a mapping from tones and kinds to styles.
+/// It never sees the engine or the BuildingState (ADR-011).
 /// </summary>
 public static class SpectreRenderer
 {

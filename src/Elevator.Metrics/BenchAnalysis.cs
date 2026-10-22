@@ -112,7 +112,6 @@ public static class BenchAnalysis
                 sb.AppendLine($"| {r.Strategy} | " + string.Join(" | ", buckets.Select(b => r.Buckets[b].ToString("0.0", CultureInfo.InvariantCulture))) + " |");
             sb.AppendLine();
 
-            // Operations (ADR-013): only when something operational happened, so fault-free results are unchanged.
             if (scenario.Any(r => r.Ops is not null))
             {
                 static string F(double? v) => v is { } x ? x.ToString("0.0", CultureInfo.InvariantCulture) : "–";

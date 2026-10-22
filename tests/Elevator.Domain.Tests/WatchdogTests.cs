@@ -3,10 +3,6 @@ using Elevator.Domain.Events;
 
 namespace Elevator.Domain.Tests;
 
-/// <summary>
-/// Watchdog and fault mode (ADR-013): the dispatcher notices an elevator with work that makes no progress for T and
-/// declares it faulty; the elevator hands its pickups back, keeps its riders, and recovers when it moves again.
-/// </summary>
 public class WatchdogTests
 {
     private const long T = 30_000;
@@ -15,28 +11,26 @@ public class WatchdogTests
 
     private static Elevator Make() => new(0, Harness.Floors, ElevatorTiming.Default, TestPolicies.NearestCarCallThenOldestHallCall, 1, capacity: 10);
 
-    // ---- The elevator side --------------------------------------------------------------------------------
-
     [Fact]
     public void Declared_faulty_it_hands_back_its_pickups_keeps_its_riders_and_recovers_when_it_moves_again()
     {
         var e = Make();
         e.Board(R(1, 1, 6));
         e.AssignPickup(R(2, 8, 2));
-        e.Tick(new SimTime(3_000)); // between 2 and 3
+        e.Tick(new SimTime(3_000));
         e.Stick();
         e.Tick(new SimTime(33_000));
         e.DrainEvents();
 
         Assert.True(e.DeclareFault(30_000));
-        Assert.False(e.DeclareFault(30_000)); // already
+        Assert.False(e.DeclareFault(30_000));
         var detected = e.DrainEvents();
         Assert.Equal(new FaultDetected(new SimTime(33_000), 0, 2, 30_000), detected[0]);
         Assert.Equal([(2, AssignmentReason.Fault)], detected.OfType<AssignmentReleased>().Select(r => (r.RequestId, r.Reason)));
         Assert.Equal((ElevatorMode.Fault, 1), (e.Mode, e.Riders.Count));
 
         e.Tick(new SimTime(50_000));
-        e.Unstick();                // 1 s of the segment left
+        e.Unstick();
         e.Tick(new SimTime(51_000));
         var moved = e.DrainEvents();
         Assert.Equal(new FaultRecovered(new SimTime(51_000), 0), moved[0]);
@@ -66,7 +60,7 @@ public class WatchdogTests
         var version = e.Version;
         Assert.False(e.DeclareFault(30_000));
         Assert.Empty(e.DrainEvents());
-        Assert.True(e.Version > version); // still acknowledged: the dispatcher gets a fresh snapshot
+        Assert.True(e.Version > version);
     }
 
     [Fact]
@@ -88,8 +82,6 @@ public class WatchdogTests
         Assert.Equal(AssignmentReason.Fault, o.Events.OfType<AssignmentRejected>().Single().Reason);
     }
 
-    // ---- The dispatcher side ------------------------------------------------------------------------------
-
     private sealed class LowestId : IDispatchPolicy
     {
         public string Name => "lowest";
@@ -103,7 +95,6 @@ public class WatchdogTests
 
     private static ElevatorSnapshot Idle(int id) => new Elevator(id, Harness.Floors, ElevatorTiming.Default, TestPolicies.NearestCarCallThenOldestHallCall).Snapshot();
 
-    /// <summary>A snapshot of an elevator moving up from <paramref name="floor"/>, taken at <paramref name="at"/>.</summary>
     private static ElevatorSnapshot Moving(int id, int floor, long at, long version) =>
         Idle(id) with { CurrentFloor = floor, State = ElevatorState.MovingUp, CommittedDirection = Direction.Up, At = new SimTime(at), Version = version, CarCalls = [9] };
 
@@ -126,15 +117,14 @@ public class WatchdogTests
         var o = new Outbox();
         d.Handle(new SnapshotPublished(Idle(1)), SimTime.Zero, o);
         d.Handle(new SnapshotPublished(Moving(0, 2, 4_000, 5)), new SimTime(4_000), o);
-        Assert.Equal((Address.Dispatcher, T), (Timer(o)!.To, Timer(o)!.DelayMs)); // due at 4 s + T, sent at 4 s
-        d.Handle(new SnapshotPublished(Moving(0, 2, 4_000, 6) with { HallCalls = [] }), new SimTime(9_000), o); // a change, no progress
+        Assert.Equal((Address.Dispatcher, T), (Timer(o)!.To, Timer(o)!.DelayMs));
+        d.Handle(new SnapshotPublished(Moving(0, 2, 4_000, 6) with { HallCalls = [] }), new SimTime(9_000), o);
         o.Clear();
 
         d.Handle(new WatchdogTimer(), new SimTime(4_000 + T), o);
         var declared = Assert.Single(o.Messages);
         Assert.Equal((Address.Elevator(0), new FaultDeclared(T)), (declared.To, declared.Message));
 
-        // Excluded from dispatch until it answers with a newer snapshot; never declared twice.
         o.Clear();
         d.Handle(new SubmitRequest(R(7, 3, 8)), new SimTime(4_000 + T), o);
         Assert.Equal(1, o.Events.OfType<AssignmentProposed>().Single().ElevatorId);
@@ -148,10 +138,10 @@ public class WatchdogTests
         var d = Dispatcher(1);
         var o = new Outbox();
         d.Handle(new SnapshotPublished(Moving(0, 2, 0, 1)), SimTime.Zero, o);
-        d.Handle(new SnapshotPublished(Moving(0, 3, 2_000, 2)), new SimTime(2_000), o); // moved a floor
+        d.Handle(new SnapshotPublished(Moving(0, 3, 2_000, 2)), new SimTime(2_000), o);
         o.Clear();
         d.Handle(new WatchdogTimer(), new SimTime(T), o);
-        Assert.Equal(T + 2_000, T + Timer(o)!.DelayMs); // not declared: re-armed for 2 s + T
+        Assert.Equal(T + 2_000, T + Timer(o)!.DelayMs);
         Assert.DoesNotContain(o.Messages, m => m.Message is FaultDeclared);
     }
 }

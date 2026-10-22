@@ -11,7 +11,6 @@ using Spectre.Console.Cli;
 
 namespace Elevator.Cli;
 
-/// <summary>"The shape of a working day": wait by floor × time of day, from an event log (or a scenario run headless).</summary>
 internal sealed class HeatmapCommand : Command<HeatmapCommand.Settings>
 {
     public sealed class Settings : CommandSettings
@@ -109,7 +108,6 @@ internal sealed class HeatmapCommand : Command<HeatmapCommand.Settings>
             title = $"{scenario.Name} · {nameA} · seed {scenario.Seed}";
             if (settings.Vs is { } vs)
             {
-                // "look+nearest" names both policies; a bare name is a dispatch policy under the scenario's scheduling.
                 var parts = vs.ToLowerInvariant().Split('+');
                 var (scheduling, dispatchB) = parts.Length == 2 ? (parts[0], parts[1]) : (scenario.Scheduling, parts[0]);
                 if (parts.Length > 2 || !SchedulingPolicies.Names.Contains(scheduling, StringComparer.OrdinalIgnoreCase) || !DispatchPolicies.IsKnown(dispatchB))

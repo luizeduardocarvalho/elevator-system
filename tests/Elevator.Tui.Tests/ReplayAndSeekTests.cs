@@ -12,7 +12,6 @@ namespace Elevator.Tui.Tests;
 
 public class ReplayAndSeekTests
 {
-    /// <summary>What must match between two screens of the same sim instant: everything but who is driving.</summary>
     private static string Content(ScreenModel m) =>
         JsonSerializer.Serialize(new { m.Building, m.Metrics, m.Ops, m.Tail, m.Status.Clock, m.Status.Title, m.Status.Finished });
 
@@ -20,7 +19,6 @@ public class ReplayAndSeekTests
 
     private static ReplaySession ReplayOf(IEnumerable<DomainEvent> log) => new(LogReader.Read(new StringReader(Repo.ToJsonl(log))));
 
-    /// <summary>Records (sim time, screen) every <paramref name="every"/> frames.</summary>
     private sealed class SamplingPresenter(Func<ISession> session, int every) : IPresenter
     {
         private int _frame;
@@ -43,10 +41,6 @@ public class ReplayAndSeekTests
         return (session, presenter.Samples);
     }
 
-    /// <summary>
-    /// Record a live run driven by the TUI loop, write its log as JSONL, replay it: at every sampled sim time the
-    /// replay's screen equals the live screen (building, metrics, ops, tail, clock).
-    /// </summary>
     [Theory]
     [InlineData("lunch.yaml")]
     [InlineData("demo.yaml")]
@@ -137,10 +131,6 @@ public class ReplayAndSeekTests
         Assert.Equal(Repo.ToJsonl(fresh.Log), Repo.ToJsonl(seeked.Log));
     }
 
-    /// <summary>
-    /// A stand-in for the Hard stage's injector with a visible effect: each command posts a new passenger, so a
-    /// command re-applied at the wrong time (or not at all) changes the log.
-    /// </summary>
     private sealed class PostingInjector(SimEngine engine) : IFaultInjector
     {
         private int _count;
@@ -172,12 +162,12 @@ public class ReplayAndSeekTests
         StepTo(fresh, 450_000);
         Assert.Equal(Repo.ToJsonl(fresh.Log), Repo.ToJsonl(seeked.Log));
         Assert.Contains(seeked.Log, e => e is PassengerArrived { PassengerId: 10_000, At.Ms: 300_000 });
-        Assert.IsType<PostingInjector>(seeked.Engine.FaultInjector); // the re-created engine keeps the injector
-        Assert.IsType<SimFaultInjector>(new LiveSession(scenario).Engine.FaultInjector); // and the default is the real one
+        Assert.IsType<PostingInjector>(seeked.Engine.FaultInjector);
+        Assert.IsType<SimFaultInjector>(new LiveSession(scenario).Engine.FaultInjector);
 
         StepTo(seeked, 700_000);
         StepTo(fresh, 700_000);
-        Assert.Equal(Repo.ToJsonl(fresh.Log), Repo.ToJsonl(seeked.Log)); // the dropped 600 s command never comes back
+        Assert.Equal(Repo.ToJsonl(fresh.Log), Repo.ToJsonl(seeked.Log));
     }
 
     [Fact]
@@ -188,7 +178,6 @@ public class ReplayAndSeekTests
             new ScriptedKeys((100, TuiKey.Pause), (101, TuiKey.SeekBack), (102, TuiKey.SeekForward), (103, TuiKey.SeekForward), (104, TuiKey.SeekBack)),
             new CapturingPresenter(), new LoopOptions(MaxFrames: 106));
         await loop.RunAsync();
-        // 99 frames × 50 ms × 50 = 247.5 s, tick-aligned; then −60 +60 +60 −60.
         Assert.Equal(new SimTime(247_500), session.Now);
         var fresh = new LiveSession(Repo.Load("lunch.yaml"));
         StepTo(fresh, 247_500);

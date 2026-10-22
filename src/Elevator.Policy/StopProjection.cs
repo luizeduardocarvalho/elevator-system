@@ -32,10 +32,6 @@ namespace Elevator.Policy;
 /// </summary>
 public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming timing, long horizonMs = StopProjection.DefaultHorizonMs) : IEtaEstimator
 {
-    /// <summary>
-    /// Count and drop-off time of each group, in flat arrays indexed [source + 1, destination]. Source −1 means already
-    /// riding; source i means pickup stop i of the snapshot (the new request's own stop, if new, is the last index).
-    /// </summary>
     public sealed class Outcome
     {
         internal Outcome(int sources, int floors)
@@ -67,10 +63,6 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
             .Select(i => $"({i / Width - 1}, {i % Width})x{Counts[i]}@{Done[i]}"));
     }
 
-    /// <summary>
-    /// How far ahead a projection looks (sim time). Under a large backlog with capacity binding, an elevator needs many
-    /// trips to clear its queue and the projection would replay all of them; the horizon bounds that work.
-    /// </summary>
     public const long DefaultHorizonMs = 600_000;
 
     public SimTime? EstimatePickup(ElevatorSnapshot snapshot, Request request, SimTime now) => Project(snapshot, request, now).PickupAt;
@@ -79,10 +71,10 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
     {
         var start = snapshot.At > now ? snapshot.At : now;
         var run = new Run(snapshot, scheduling, timing, extra);
-        run.AdvanceTo(start.Ms, fastForward: false); // exact floor by floor: the request may arrive mid-route
+        run.AdvanceTo(start.Ms, fastForward: false);
         if (extra is not null) run.Insert(extra);
         var horizon = start.AddMs(horizonMs);
-        run.AdvanceTo(horizon.Ms, fastForward: true); // nothing else changes from here: travel stop to stop
+        run.AdvanceTo(horizon.Ms, fastForward: true);
         run.Result.Horizon = horizon;
         return run.Result;
     }
@@ -98,7 +90,7 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
         {
             var wCount = without.Counts[i];
             var wDone = without.Done[i];
-            if (wCount == 0 || wDone < 0) continue; // nobody, or did not finish within the horizon (as in RouteProjection)
+            if (wCount == 0 || wDone < 0) continue;
             var xCount = i < with.Counts.Length ? with.Counts[i] : 0;
             var xDone = i < with.Done.Length && with.Done[i] >= 0 ? with.Done[i] : with.Horizon.Ms;
             var both = Math.Min(wCount, xCount);
@@ -109,7 +101,7 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
 
     private sealed class Pickup(int source, HallCall call)
     {
-        public int Source { get; } = source; // index in the snapshot's hall calls (stable across both projections)
+        public int Source { get; } = source;
         public int Floor { get; } = call.Floor;
         public Direction Direction { get; } = call.Direction;
         public SimTime RegisteredAt { get; } = call.RegisteredAt;
@@ -117,14 +109,9 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
         public Request? Extra { get; set; }
         public bool HasRequests => Call.Requests.Count > 0 || Extra is not null;
         public HallCall PolicyView { get; } = new(call.Floor, call.Direction, call.RegisteredAt);
-        /// <summary>The heaviest load waiting here (as <see cref="HallCall.MaxLoad"/>, including the new request).</summary>
         public int MaxLoad => Extra is { } x ? Math.Max(Call.MaxLoad, x.Load) : Call.MaxLoad;
     }
 
-    /// <summary>
-    /// The elevator's mechanics (see <see cref="Domain.Elevator"/>) replayed over the compact state, with the elevator's
-    /// own type: its timing and the floors it serves (ADR-012).
-    /// </summary>
     private sealed class Run
     {
         private readonly ISchedulingPolicy _policy;
@@ -134,11 +121,11 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
         private readonly double _threshold;
         private readonly bool _nextTrip;
         private bool _viewBypassing;
-        private long _viewRoom = long.MinValue; // room left when the policy view was built (pickups that do not fit are hidden)
+        private long _viewRoom = long.MinValue;
         private readonly Request? _extra;
         private readonly bool[] _carCalls;
         private readonly List<Pickup> _pickups = [];
-        private readonly List<int>[] _aboardByDest; // group slots on board, by drop-off floor
+        private readonly List<int>[] _aboardByDest;
         private readonly int[] _loadByDest;
         private int _load;
         private int _floor;
@@ -149,16 +136,15 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
         private long _closingStartedAt;
         private bool _level;
         private int _nextSource;
-        private ElevatorSnapshot? _view;     // compact snapshot for the policy; rebuilt only after a change
+        private ElevatorSnapshot? _view;
         private readonly List<int> _viewCarCalls = [];
         private readonly List<HallCall> _viewPickups = [];
-        // Fast path (LOOK/FIFO, up to 63 floors): stops as bitmasks, so each policy decision is O(1).
         private readonly IFastSchedulingPolicy? _fast;
         private ulong _carMask, _upMask, _downMask;
         private PickupRef[] _pickupRefs = [];
         private int _visiblePickups;
         private bool _pickupsDirty = true;
-        private int? _target;                // policy target since the last change
+        private int? _target;
         private bool _targetValid;
 
         public Outcome Result { get; }
@@ -168,7 +154,7 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
             Result = new Outcome(s.HallCalls.Count + 1, s.Floors);
             _policy = policy;
             _fast = s.Floors <= StopSet.MaxFloors ? policy as IFastSchedulingPolicy : null;
-            _t = s.Timing ?? timing; // the elevator's own type timing (ADR-012)
+            _t = s.Timing ?? timing;
             _served = s.ServedFloors;
             _floors = s.Floors;
             _capacity = s.Capacity;
@@ -199,8 +185,6 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
             }
         }
 
-        // ---- time ----
-
         private bool _fastForward;
         private long _until;
 
@@ -208,7 +192,7 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
         {
             _fastForward = fastForward;
             _until = until;
-            DecideFromIdle(); // Resume()
+            DecideFromIdle();
             while (_deadline is { } d && d <= until)
             {
                 _now = d;
@@ -223,8 +207,6 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
             switch (_state)
             {
                 case ElevatorState.MovingUp or ElevatorState.MovingDown:
-                    // Travel to the next stop. Once nothing can change any more (fast-forward), floors without a stop
-                    // are passed in this loop instead of one event each: time accumulates as a sum over the stop list.
                     var direction = _state == ElevatorState.MovingUp ? Direction.Up : Direction.Down;
                     while (true)
                     {
@@ -267,17 +249,11 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
             }
         }
 
-        /// <summary>
-        /// Same rule as the elevator. The policy is not re-asked at every floor: between two changes of stops or
-        /// direction only the floor changes, and FIFO's and LOOK's target is the same from every floor on the way to it.
-        /// (Any stop nearer than the target would have been the target.) The differential test against the oracle
-        /// checks this.
-        /// </summary>
         private bool ShouldStopHere(Direction direction)
         {
             if (_carCalls[_floor]) return true;
             if (_floor == Floors.Lowest || _floor == _floors) return true;
-            if (!FloorMask.Contains(_served, _floor)) return false; // as the elevator: unserved floors are passed
+            if (!FloorMask.Contains(_served, _floor)) return false;
             if (!_targetValid)
             {
                 _target = Decide().Target;
@@ -286,7 +262,6 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
             return _target is null || _target == _floor || !direction.IsAhead(_floor, _target.Value);
         }
 
-        /// <summary>NextTrip mode and full: pickups are bypassed until riders make room (ADR-010).</summary>
         private bool Bypassing => _nextTrip && _load >= _threshold * _capacity;
 
         private void Changed()
@@ -352,11 +327,8 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
             return decision.ServeDirection ?? _pickups.FirstOrDefault(p => p.Floor == _floor)?.Direction;
         }
 
-        // ---- people ----
-
         private void Alight()
         {
-            // Everyone headed here gets off, including the new request (which is not part of any group).
             var wasBypassing = Bypassing;
             _load -= _loadByDest[_floor];
             _loadByDest[_floor] = 0;
@@ -366,7 +338,6 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
                 foreach (var slot in groups) Result.Done[slot] = _now;
                 groups.Clear();
             }
-            // As Elevator.Alight: room made while the doors are open answers a bypassed pickup here.
             if (_nextTrip && _state == ElevatorState.DoorOpen && AnswerHere()) _deadline = _now + _t.DoorDwellMs;
         }
 
@@ -384,16 +355,12 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
             var extraLoad = stop.Extra?.Load ?? 0;
             if (_load + totals.TotalLoad + extraLoad <= _capacity)
             {
-                // Everyone fits: board per destination from the totals, no per-passenger work.
                 for (var d = 1; d < totals.Span; d++)
                     if (totals.CountTo(d) > 0) Board(stop.Source, d, totals.CountTo(d), totals.LoadTo(d));
                 if (stop.Extra is { } x) BoardExtra(x);
             }
             else
             {
-                // Not everyone fits: walk the arrival order (as the passengers do) until the first who does not fit;
-                // they and everyone behind them are left behind. So those who board are always a prefix of the arrival
-                // order, which is what makes the per-group ΔD exact. At most about `capacity` requests are looked at.
                 var blocked = false;
                 foreach (var r in stop.Call.Requests)
                 {
@@ -407,8 +374,8 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
                 if (!blocked && stop.Extra is { } x && _load + x.Load <= _capacity) BoardExtra(x);
             }
 
-            if (!_nextTrip && _load >= _threshold * _capacity) ReleaseAll(); // Defer mode: hand pickups back
-            else if (Bypassing) Changed();                                    // NextTrip: the policy stops seeing pickups
+            if (!_nextTrip && _load >= _threshold * _capacity) ReleaseAll();
+            else if (Bypassing) Changed();
             return true;
         }
 
@@ -429,7 +396,7 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
             Result.Done[slot] = -1;
             _load += load;
             _loadByDest[dest] += load;
-            if (source >= 0) AddDropOff(dest); // riders already on board: their drop-offs are in the snapshot's car calls
+            if (source >= 0) AddDropOff(dest);
         }
 
         /// <summary>Elevator.AddRequest: a drop-off for the floor it stands at is ignored.</summary>
@@ -454,7 +421,7 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
             Changed();
             if (existing is not null)
             {
-                existing.Extra = r; // joins the stop, last in arrival order
+                existing.Extra = r;
                 return;
             }
 
@@ -467,8 +434,8 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
 
             var hereInDoorCycle = r.PickupFloor == _floor && _state is ElevatorState.DoorOpening or ElevatorState.DoorOpen or ElevatorState.DoorClosing;
             if (!hereInDoorCycle) return;
-            if (Bypassing) return; // full: served on a later trip
-            if (_load + r.Load > _capacity) return; // as the elevator: a load that cannot fit now is not answered at the door
+            if (Bypassing) return;
+            if (_load + r.Load > _capacity) return;
             _dir ??= r.Direction;
             Changed();
             if (_dir != r.Direction) return;
@@ -484,8 +451,6 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
             }
         }
 
-        // ---- the scheduling policy, on a compact snapshot (at most `floors` drop-offs and 2·floors pickups) ----
-
         private PolicyDecision Decide()
         {
             Result.Steps++;
@@ -496,7 +461,6 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
                 _view = null;
                 _pickupsDirty = true;
             }
-            // As the elevator: a pickup where someone would not fit in the room left is bypassed too (heavy loads, ADR-012).
             var room = (long)_capacity - _load;
             if (room != _viewRoom)
             {
@@ -527,7 +491,6 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
 
             if (_view is null)
             {
-                // The policy is pure and synchronous, so it can read buffers that are refilled in place.
                 _viewCarCalls.Clear();
                 for (var f = 1; f <= _floors; f++) if (_carCalls[f]) _viewCarCalls.Add(f);
                 _viewPickups.Clear();

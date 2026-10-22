@@ -11,17 +11,12 @@ internal sealed class StubPolicy(Func<ElevatorSnapshot, int?> nextGoal) : ISched
 
 internal static class TestPolicies
 {
-    /// <summary>
-    /// Minimal policy to drive the mechanics without depending on Elevator.Policy:
-    /// nearest car call first, otherwise the oldest hall call.
-    /// </summary>
     public static readonly ISchedulingPolicy NearestCarCallThenOldestHallCall = new StubPolicy(s =>
         s.CarCalls.Count > 0 ? s.CarCalls.MinBy(c => Math.Abs(c - s.CurrentFloor))
         : s.HallCalls.Count > 0 ? s.HallCalls[0].Floor
         : null);
 }
 
-/// <summary>Wraps a controller and records every event it produces.</summary>
 internal sealed class Harness
 {
     public const int Floors = 10;

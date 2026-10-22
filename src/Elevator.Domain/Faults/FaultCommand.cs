@@ -1,6 +1,5 @@
 namespace Elevator.Domain.Faults;
 
-/// <summary>What an operator or a fault schedule can do to an elevator. Shared v3 contract.</summary>
 public enum FaultKind
 {
     MaintenanceOn,
@@ -19,19 +18,13 @@ public enum FaultKind
 /// <param name="DurationMs">Only for <see cref="FaultKind.Stuck"/>: how long it stays stuck; null = until Unstick.</param>
 public sealed record FaultCommand(SimTime At, int ElevatorId, FaultKind Kind, long? DurationMs = null);
 
-/// <summary>
-/// Injects maintenance, emergency stops and faults into a running system (TUI keys m / e / s, fault schedules).
-/// Shared v3 contract: the TUI calls it; the Hard stage implements it for the sim engine and the actor runtime.
-/// </summary>
 public interface IFaultInjector
 {
-    /// <summary>True for <see cref="NoOpFaultInjector"/>: commands are ignored (the TUI shows "(no-op)").</summary>
     bool IsNoOp { get; }
 
     void Inject(FaultCommand command);
 }
 
-/// <summary>Ignores every command. The default until a real injector is wired in.</summary>
 public sealed class NoOpFaultInjector : IFaultInjector
 {
     public static NoOpFaultInjector Instance { get; } = new();

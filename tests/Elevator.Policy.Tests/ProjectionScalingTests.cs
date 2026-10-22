@@ -3,11 +3,6 @@ using ElevatorUnit = Elevator.Domain.Elevator;
 
 namespace Elevator.Policy.Tests;
 
-/// <summary>
-/// The cost of a dispatch decision must not grow with the backlog (ADR-006). Timing is measured with
-/// BenchmarkDotNet (docs/results.md); here the deterministic work units are pinned: policy decisions made by the
-/// per-stop projection, which are bounded by the number of stops (two per floor), not by the people queued.
-/// </summary>
 public class ProjectionScalingTests
 {
     private static int StepsFor(int backlog)
@@ -33,10 +28,8 @@ public class ProjectionScalingTests
     {
         var steps = new[] { 25, 100, 400, 1_600 }.ToDictionary(b => b, StepsFor);
 
-        // Once every floor has stops in both directions (around 100 queued), more people add essentially no work:
-        // the few decisions of difference come from where the extra request lands in the sweep.
         Assert.InRange(steps[1_600], steps[400] * 0.9, steps[400] * 1.1);
         Assert.InRange(steps[1_600], 1, steps[100] * 1.25);
-        Assert.True(steps[1_600] < 20 * 2 * 10, $"steps {steps[1_600]} not bounded by floors"); // a few decisions per stop, 2 stops per floor
+        Assert.True(steps[1_600] < 20 * 2 * 10, $"steps {steps[1_600]} not bounded by floors");
     }
 }
