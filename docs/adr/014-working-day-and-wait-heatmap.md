@@ -68,3 +68,29 @@ command only loads, runs and prints.
 - **Limits.** With 10-minute bins, off-peak cells hold one or two passengers, so single cells are noisy; the margins
   and the hourly row are the numbers to quote. A cell reflects one seed; the paired bench is the evidence for
   differences between strategies.
+
+## Amendment: the difference map (`--vs`)
+
+`elevator heatmap day --vs look+nearest` draws strategy A minus strategy B on the same passengers. Two logs work too:
+`heatmap a.jsonl --vs b.jsonl`.
+- **Paired.** A cell groups passengers by origin floor and call time, which do not depend on the strategy, so it holds
+  the same people in both runs. Its value is the mean of their paired differences (wait under A − wait under B), the
+  same common-random-numbers pairing as the bench.
+- **Only people who boarded in both runs** are paired; the rest are counted in the footer. Runs with different
+  passengers are refused, since that would not be a paired comparison.
+- **P95** is p95(A) − p95(B) per cell.
+- **A fixed diverging scale**, neutral for −5 ≤ Δ < 5 s, then steps at 5, 15 and 30 s on each side. Blue means A waits
+  less. Blank means nobody called, which is different from "no difference" (`~`).
+- **One renderer.** `HeatmapView` draws any `IHeatGrid` with a `HeatScale`, so wait maps and difference maps share
+  layout and margins.
+
+**What it showed on the working day** (seed 1, [d1-day-heatmaps](../results/d1-day-heatmaps.md)). LOOK + Cost against
+LOOK + Nearest:
+- 6.2 s less per passenger overall;
+- less wait in 286 cells, more in 76, within ±5 s in 481.
+
+The largest gains are not on the top floors but on the low-middle floors (floor 3: −21 s, floor 4: −15 s), during lunch
+and the evening down-peak. Under Nearest, elevators coming down from the top fill up and pass the low floors. Cost
+dispatch predicts each elevator's load at pickup (ADR-006) and sends another one. This is one seed, so it is a
+hypothesis; the paired bench across seeds is the evidence for the day-wide difference ([d1-day](../results/d1-day.md)).
+

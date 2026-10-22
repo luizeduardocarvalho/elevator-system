@@ -42,6 +42,7 @@ The v2 results above regenerate byte-identically with the Hard stage in place (f
 |---|---|---|
 | How does each strategy cope with a whole day? | [d1-day](results/d1-day.md) | wait avg / p95: FIFO + Nearest 114.8 / 532.8 s, LOOK + Nearest 21.0 / 70.0 s, LOOK + Cost 15.7 / 41.5 s; nobody left behind under Cost |
 | Where and when do people wait? | [d1-day-heatmaps](results/d1-day-heatmaps.md) | evening down-peak and the lunch run strand the upper floors; the morning up-peak barely shows as wait (it costs ride time instead) |
+| Where in the day does Cost beat Nearest? (difference map, seed 1) | [d1-day-heatmaps](results/d1-day-heatmaps.md#difference-lookcost--looknearest) | −6.2 s per passenger; less wait in 286 cells, more in 76; largest gains on floors 3–8 at lunch and in the evening (full elevators from above pass them under Nearest) |
 
 ## 2. The cost of a dispatch decision (BenchmarkDotNet)
 

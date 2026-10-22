@@ -116,3 +116,43 @@ average wait by origin floor × time of call · 10 min bins · sim seconds
 ░ < 15 s   ▒ 15–30 s   ▓ 30–45 s   █ 45–60 s   X ≥ 60 s
 3233 passengers · 3233 boarded · 0 never boarded (not in any cell) · (· nobody called)
 ```
+
+## Difference: look+cost − look+nearest
+
+- **Command:** `elevator heatmap day --vs look+nearest --plain`
+
+Paired on the same passengers: each cell is the mean over its passengers of (wait under LOOK + Cost − wait under
+LOOK + Nearest). `≡ = -` mark where Cost waits less, `+ * #` where it waits more, `~` within ±5 s; blank: nobody called.
+
+```
+day · seed 1 · look+cost vs look+nearest
+Δ average wait = A − B on the same passengers, by origin floor × time of call · 10 min bins · A = look+cost, B = look+nearest · blue: A waits less
+
+     07    08    09    10    11    12    13    14    15    16    17    18
+  20│        -~  *    ~  ~~~~~~~~ ---~-~+~  ~    ~ -~ ~~~~*   - -~~~*~+-~+~ ~│ -1.4 s
+  19│    ~   ~- +     ~=  -~~  ~ =-+*-≡~-~* ~~ ~~~ ~  ~ ≡~   #~~-+=~*+~=- -~ │ -3.0 s
+  18│ ~    ~-   ~= ≡* ~~ ~~~~ * ~  ~-=~=  ~ ~~ ~~ ~~≡ ~ ~ ~ ≡ ~ +~#~=≡---*-  │ -6.4 s
+  17│~     +≡=~*~   - ~~ ~~ ~   ~ +~+~≡    ~      ~   -~~~~~  - ~=---~=--=~+ │ -5.1 s
+  16│  ~  ~~ *- ~ ~ ~~=~   ~  ~~- ~~=   ~  ~    ~-~     ~      ~~=~~==+--~   │ -5.3 s
+  15│  -      -~~=~ ≡     ~    + ~~=*+ ~~ ~   ~~ ~  ~~~~~~~~  - -~≡++--=-    │ -5.7 s
+  14│   + ~~≡=-       ~~~~   ~ =- ≡=~~~ -~ ~~~ ~ ~~~   ~ ~  ~~ ~-*≡~=+-++≡ ~ │ -7.0 s
+  13│ ~  ≡ ≡ -  ~  ≡~ ~~~~~ ~ ~  ----~ ~*~~ ~ ~    -~~~~~~~     +=~-*--~ ~   │ -5.8 s
+  12│      -≡= ~      ~~   +~~  ~ ====~=~      ~=~~ - ~ ~ ~ ≡- ~=-=~--~#*~-  │ -9.8 s
+  11│    ~ ~=- +   ~~~~~ -~ ~  ~~~+~+-      ~~  ~  -  ~~  ~  =  ≡≡+ +~-≡=~ ≡~│ -7.1 s
+  10│~≡    ~≡* ≡+=  ~~ ~~   ~~~ ≡~≡-=-≡ ≡   ~~ ~~     ~~~~~~ ~ ~≡-=+-+--~~~  │ -9.1 s
+   9│   ~    = -   ~~   ~~   ~~  ~-~=- -~~ ~ ~ ~ ~ ~~ ~~ ~-~  ~ -+=~+== -~   │ -6.3 s
+   8│  -     ≡ +~ =  ~~      ~  ~~+-=-~+~ - ~~ ≡-  ~ ~~~-~=~ +=~-≡--≡~=~=~ ~~│ -10.8 s
+   7│  -   -≡ ≡ -+  ~  -~ +~  ~  ~~=~~ =++-  ~     ~ -    -   ~ =--=-=~≡≡+ ~ │ -11.0 s
+   6│     =~ **≡~  ≡~  ~    ~  ~~ -=-~ ≡    ~~~~ ~  =~~~ ~~~~-  ≡~≡-+-+= ~   │ -10.5 s
+   5│   -   ≡~  ~≡~   --  ~~~ ~~  =≡-~*=≡= ~~  ~~   ≡~     ~ ~  --=~-=-=~  ~ │ -13.5 s
+   4│     + ≡   =≡   *~    ~ ~~ ~ ~≡≡~~-~  ~ ~ ~~~ ~≡-   ~ ~~-   +~~≡≡----≡  │ -15.2 s
+   3│  #    ≡≡~ ~   ≡≡ ~~~~= ~ ~  ≡≡=~  *~~~  ~--~~ ≡~        ~ ==≡-=-=~~~~  │ -21.3 s
+   2│        ≡ ~~~ ~-  ~~~~~~~-  ~~ =~ -~~     ~ ~ ~~~~~-~~ ~~≡ ~~-≡++~~= ~  │ -9.3 s
+   1│~~~~~~~---~~~~~~~~~~~-~~~~~~~~~-~~~~~-~~~~~~~~~~-~~~~~~~-~~~++-~==--~   │ -2.9 s
+    └────────────────────────────────────────────────────────────────────────┘
+ all│~~~~~~~=--~~~~~-~~~~~~~~~~~~~---~--~~~~~~~~~~~~=~~~~~~~-~-~--=------~--~│ -6.2 s
+     -2s   -6s   -4s   -1s   -4s   -8s   -1s   -5s   -2s   -7s   -9s   -8s
+
+≡ A ≥ 30 s less   = 15–30 less   - 5–15 less   ~ within ±5 s   + 5–15 more   * 15–30 more   # A ≥ 30 s more
+3233 passengers boarded in both runs · 0 left out (not boarded in one) · A waits less in 286 cells, more in 76, within ±5 s in 481 · (blank: nobody called)
+```
