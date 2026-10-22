@@ -17,6 +17,10 @@ app.Configure(config =>
     config.AddCommand<TuiCommand>("tui")
         .WithDescription("Live terminal UI: building, metrics, ops and event tail. space pause · n step · +/- speed · ←/→ select · m/e/s faults · [[ ]] seek · q quit.")
         .WithExample("tui", "scenarios/lunch.yaml", "--seed", "3", "--dispatch", "nearest");
+    config.AddCommand<HeatmapCommand>("heatmap")
+        .WithDescription("The shape of a working day: wait by floor × time of day, as a coloured heatmap (from a scenario or a log).")
+        .WithExample("heatmap", "day")
+        .WithExample("heatmap", "day", "--dispatch", "nearest");
     config.AddCommand<ReplayCommand>("replay")
         .WithDescription("The same view driven from a JSONL event log; seeking re-folds the log.")
         .WithExample("replay", "out/lunch-seed1.jsonl", "--speed", "50");
