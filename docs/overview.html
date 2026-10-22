@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Elevator System Overview</title>
-<meta name="description" content="Architecture, simulation, concurrency, performance, error handling and test evidence for the elevator system (v3-hard).">
+<meta name="description" content="Architecture, simulation, concurrency, performance, error handling and test evidence for the elevator system (main).">
 <style>
 :root {
   --bg: #f7f7f5; --surface: #ffffff; --surface-2: #f0efeb; --text: #1d1d1b; --muted: #5f5e58;
@@ -106,9 +106,9 @@ header { position: relative; }
 <body>
 <header>
   <h1>Elevator System</h1>
-  <p>Easy → Medium → Hard, built as an experiment: build, simulate, measure, evolve. State at tag <code>v3-hard</code>.</p>
+  <p>Easy → Medium → Hard, built as an experiment: build, simulate, measure, evolve. State at <code>main</code> (code as of commit <code>d6b3ea3</code>).</p>
   <div class="badges">
-    <span class="badge">.NET 10</span><span class="badge">577 tests passing</span><span class="badge">18 ADRs</span>
+    <span class="badge">.NET 10</span><span class="badge">587 tests passing</span><span class="badge">18 ADRs</span>
     <span class="badge">deterministic sim + actor runtime</span><span class="badge">p99 12.2 ms @ 100 concurrent (perf run)</span>
   </div>
   <div class="theme-toggle"><button id="theme" type="button" aria-label="Toggle colour theme">Theme</button></div>
@@ -164,6 +164,7 @@ flowchart TB
   CLI["Elevator.Cli&lt;br/&gt;run · tui · replay · heatmap · bench · perf"] --> SIM
   CLI --> RT
   </pre></div>
+  <p class="legend"><code>PassengersHandler</code> is a model of people (the plant), kept in the core so both shells simulate passengers identically; a real controller would get registrations from panels and boarding from door and load sensors. Perfect sensing is a stated simplification.</p>
 
   <h3>The system and the lab</h3>
   <p>The projects split into <strong>the system</strong>, which is what would ship, and <strong>the lab</strong>, which is what we use to study it. Dependencies point one way: the lab depends on the system, never the reverse. An architecture test checks the declared project graph, the compiled references and the namespaces of every system project (ADR-019).</p>
@@ -446,7 +447,7 @@ average wait by origin floor × time of call · 10 min bins · sim seconds
   <ul>
     <li><strong>Evening down-peak and the lunch run to the lobby</strong> strand people on the upper floors: solid "≥ 60 s" walls under FIFO + Nearest, faint under LOOK + Cost.</li>
     <li><strong>The morning up-peak barely shows as wait</strong> under any strategy: elevators keep coming back to the lobby, so its callers board quickly. Up-peak costs ride time and crowding instead, which the journey metrics capture.</li>
-    <li><strong>The difference map</strong> (<code>heatmap day --vs look+nearest</code>) is LOOK + Cost minus LOOK + Nearest on the same passengers: each cell is the mean of its passengers' paired differences. Blue: Cost waits less; red: more; grey: within ±5 s. Cost waits 6.2 s less per passenger overall, less in 286 cells and more in 76, and gains most on floors 3–8 at lunch and in the evening, where Nearest's full elevators coming down from above pass them by. One seed, so a hypothesis; the bench above is the evidence across seeds.</li>
+    <li><strong>The difference map</strong> (<code>heatmap day --vs look+nearest</code>) is LOOK + Cost minus LOOK + Nearest on the same passengers: each cell is the mean of its passengers' paired differences. Blue: Cost waits less; red: more; grey: within ±5 s. Cost waits 6.2 s less per passenger overall, less in 286 cells and more in 76, and gains most on floors 3–8 at lunch and in the evening, where Nearest's full elevators coming down from above pass them by. The 76 cells where it waits more cluster in the 17:00 hour (25 of them) but spread across floors (42 on floors 12–20); their cause is a hypothesis still to check with the wait buckets. One seed, so a hypothesis; the bench above is the evidence across seeds.</li>
     <li>Off-peak cells hold one or two passengers, so single cells are noisy; quote the margins and the hourly row. Paired evidence across seeds is in <code>docs/results/d1-day.md</code>.</li>
   </ul>
 
@@ -458,19 +459,22 @@ average wait by origin floor × time of call · 10 min bins · sim seconds
 <section role="tabpanel" id="p-conc" aria-labelledby="t-conc">
   <h2>Thread safety: single writers, not locks</h2>
   <p class="lede">The spec asks for "appropriate locks/mutexes", atomic state changes and no races in request assignment. We get all three without a single domain lock: every piece of mutable state has exactly one owner, and owners only talk through messages (ADR-005).</p>
+  <p><strong>Alternative considered:</strong> one loop thread owning the whole building, fed by a concurrent request queue. That is the simplest correct option for one bank. We chose actors instead, to model independent controllers and stale information; the cost is snapshots, rejections, the pending-assignment overlay and caller correlation.</p>
 
   <div class="diagram"><pre class="mermaid">
 flowchart LR
-  C1["caller 1"] & C2["caller 2"] & CN["caller N"] -- "AssignRequest" --> RQ[["bounded request channel&lt;br/&gt;FullMode.Wait = backpressure"]]
+  C1["caller 1"] & C2["caller 2"] & CN["caller N"] -- "AssignRequest:&lt;br/&gt;wait for room, then PassengerArrives" --> P["Passengers actor&lt;br/&gt;(logs the arrival)"]
+  P -- "SubmitRequest" --> RQ[["bounded request channel&lt;br/&gt;FullMode.Wait = backpressure"]]
   RQ --> D["Dispatcher actor&lt;br/&gt;(single reader)"]
   D -- "Assign" --> E0["Elevator 0 actor&lt;br/&gt;mailbox + control channel"]
   D -- "Assign" --> E1["Elevator 1 actor"]
   D -- "Assign" --> E3["Elevator 3 actor"]
   E0 & E1 & E3 -- "Accept / Reject + snapshot" --> D
   E0 & E1 & E3 -- "events" --> L["Log writer&lt;br/&gt;(assigns seq)"]
-  D -- "events" --> L
-  D -- "accepted" --> P["Passengers actor"]
-  P -- "TaskCompletionSource" --> C1
+  E0 & E1 & E3 -- "accepted · boarding notices" --> P
+  D & P -- "events" --> L
+  D -- "RequestAssigned" --> K["Deliver (shell)&lt;br/&gt;completes the caller's TaskCompletionSource"]
+  K --> C1
   </pre></div>
 
   <h3>Why it is thread safe</h3>
@@ -533,6 +537,7 @@ flowchart LR
     <div class="stat card good"><div class="num">0 / 0</div><div class="lbl">requests lost / duplicated, at every load</div></div>
     <div class="stat card good"><div class="num">+0.9%</div><div class="lbl">heap growth over a 60 s soak (1.06 → 1.10 MB)</div></div>
   </div>
+  <p><strong>Why the burst p99 (12.2 ms) is above the sustained p99 (7.7 ms at 40k/s):</strong> the number in flight differs. A burst puts 100 requests in the queue at once, so the last one waits for all the others, each a full cost decision against a growing backlog; the ramp holds about 12 in flight (12.4 sampled at 40k/s).</p>
 
   <h3>Spec SLOs</h3>
   <p class="legend">Source: <strong>perf run</strong>, one <code>elevator perf --levels 100,1000,10000 --soak-seconds 60</code> (<code>docs/results/perf.md</code>), each level measured once, in one process.</p>
@@ -627,7 +632,7 @@ flowchart LR
   <h3>Invalid input</h3>
   <div class="table-wrap"><table>
     <tr><th>Case</th><th>Handling</th></tr>
-    <tr><td>Hall or car call to a floor that doesn't exist, or a direction that's impossible (Up at the top floor)</td><td><code>RequestRejected</code> event with kind and reason; <code>RequestResult.Rejected(reason)</code> to the caller; counted as "Invalid requests".</td></tr>
+    <tr><td>Hall or car call to a floor that doesn't exist, or a direction that's impossible (Up at the top floor)</td><td>Runtime (<code>AssignRequest</code>): logs a <code>RequestRejected</code> event with kind and reason, then throws <code>ArgumentException</code>; <code>FindBestElevator</code> throws without logging (ADR-017). Counted as "Invalid requests". (The Easy-level <code>ElevatorController</code> returned <code>RequestResult.Rejected(reason)</code>; it lives at tag <code>v1-easy</code>.)</td></tr>
     <tr><td>The same request id submitted twice while pending</td><td><code>InvalidOperationException</code> ("already pending").</td></tr>
     <tr><td>A request every elevator's access policy refuses (restricted floor without access, express not serving the floor)</td><td><code>AccessDenied</code> with no elevator; in the runtime the caller's task fails with <code>RequestRefusedException(policy, reason)</code>. Reported as "refused by policy", <em>not</em> as unserved.</td></tr>
     <tr><td>Invalid scenario YAML</td><td>The loader collects every validation error (not just the first); the CLI prints them all and exits with code 2.</td></tr>
@@ -659,15 +664,17 @@ flowchart LR
 <!-- ============================== TESTS ============================== -->
 <section role="tabpanel" id="p-tests" aria-labelledby="t-tests">
   <h2>Test results</h2>
-  <p class="lede">Now: <code>dotnet build -warnaserror</code> clean, 577 tests passing (480 at the <code>v3-hard</code> merge, plus the working day, the heatmaps, the ordering audit, the architecture test, the log-compatibility test and two regression fixes). Tests came first for the domain and the policies; no test uses <code>Thread.Sleep</code>.</p>
+  <p class="lede">Now: <code>dotnet build -warnaserror</code> clean, 587 tests passing (480 at the <code>v3-hard</code> merge, plus the working day, the heatmaps, the ordering audit, the architecture test, the log-compatibility test and two regression fixes). Tests came first for the domain and the policies; no test uses <code>Thread.Sleep</code>.</p>
 
   <div class="grid">
-    <div class="stat card good"><div class="num">189</div><div class="lbl">Domain: transition table, mechanics, handlers</div></div>
-    <div class="stat card good"><div class="num">85</div><div class="lbl">Policy: FIFO, LOOK, dispatch, projections</div></div>
-    <div class="stat card good"><div class="num">111</div><div class="lbl">Simulation: engine, scenarios, traffic, properties, contract</div></div>
-    <div class="stat card good"><div class="num">117</div><div class="lbl">TUI: fold, view model, pacer, replay, seek, heatmap views</div></div>
+    <div class="stat card good"><div class="num">191</div><div class="lbl">Domain: transition table, mechanics, handlers</div></div>
+    <div class="stat card good"><div class="num">67</div><div class="lbl">Policy: LOOK, dispatch, access policies, projections</div></div>
+    <div class="stat card good"><div class="num">109</div><div class="lbl">Simulation: engine, scenarios, traffic, properties, contract</div></div>
+    <div class="stat card good"><div class="num">127</div><div class="lbl">TUI: fold, view model, pacer, replay, seek, heatmap views</div></div>
     <div class="stat card good"><div class="num">39</div><div class="lbl">Metrics: report, lifecycle, buckets, ops, heatmaps</div></div>
-    <div class="stat card good"><div class="num">18</div><div class="lbl">Runtime: stress, cross-check, preemption, perf gate</div></div>
+    <div class="stat card good"><div class="num">30</div><div class="lbl">Runtime: stress, cross-checks, preemption, causality, supervision</div></div>
+    <div class="stat card good"><div class="num">16</div><div class="lbl">Architecture: system never depends on the lab (ADR-019)</div></div>
+    <div class="stat card good"><div class="num">8</div><div class="lbl">Lab: perf gate, ramp smoke and analysis</div></div>
   </div>
 
   <h3>Kinds of evidence</h3>
@@ -685,7 +692,7 @@ flowchart LR
   <h3>Merge verification (v2 → TUI ∥ Hard → v3)</h3>
   <div class="table-wrap"><table>
     <tr><th>Check</th><th>Result</th></tr>
-    <tr><td>All tests with warnings as errors (at the merge; 577 / 577 now)</td><td class="pass">480 / 480</td></tr>
+    <tr><td>All tests with warnings as errors (at the merge; 587 / 587 now)</td><td class="pass">480 / 480</td></tr>
     <tr><td>Same seed across TUI speeds (0.5×, 10×, MAX, headless)</td><td class="pass">identical hash</td></tr>
     <tr><td>v2 results with faults off</td><td class="pass">12 / 12 byte-identical</td></tr>
     <tr><td>chaos.yaml in the TUI: maintenance / emergency / fault markers and the ops panel</td><td class="pass">live; 9 / 9 commands applied; 264 / 264 served</td></tr>

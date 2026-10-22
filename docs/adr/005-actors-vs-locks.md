@@ -15,8 +15,13 @@ The options:
 - **Locks around a shared building model.** Every elevator, the dispatcher and the callers touch the same objects
   under mutexes. That is easy to start and hard to reason about: lock ordering, holding a lock across a wait,
   dispatcher decisions made under a lock, and no way to replay a run.
+- **One loop thread owning the whole building**, fed by a concurrent request queue. No locks and no stale reads:
+  the loop sees every elevator's true state when it decides. This is the simplest correct option for one bank.
 - **Actors.** Each elevator, the dispatcher and the passengers are owned by exactly one loop. They communicate only
   by messages and immutable snapshots, so there is no shared mutable state to lock.
+
+We chose actors over the single loop to model what a real group controller faces: independent elevator controllers
+and stale information about them. The single loop would hide both.
 
 ## Decision
 
@@ -45,9 +50,11 @@ protocol** (`Messages.cs`): Assign, accept, reject, release, snapshots, boarding
     without assigning;
   - `balanceLoad()` is `BalanceLoad`: the cost function's load terms always apply (ADR-006), and this also asks the
     dispatcher for an immediate rebalancing pass when rebalancing is enabled.
-- **Causality, not locks, orders a caller's request.** `AssignRequest` posts `PassengerWaiting` to the passengers
-  actor *before* writing to the request channel. Every later notice about that request is caused by the submission,
-  so it reaches the passengers actor after the passenger exists.
+- **Causality, not locks, orders a caller's request.** `AssignRequest` waits for room in the request channel, then
+  posts `PassengerArrives` to the passengers actor, which logs the arrival and sends `SubmitRequest` (written to the
+  request channel) in the same handler call. Every later notice about that request is caused by the submission, so
+  it reaches the passengers actor after the passenger exists. The caller's task is completed by the shell when the
+  dispatcher's `RequestAssigned` arrives.
 
 **This is deterministic simulation testing.**
 - Logic correctness is tested deterministically, in the sim (properties over thousands of random buildings and
@@ -75,6 +82,8 @@ protocol** (`Messages.cs`): Assign, accept, reject, release, snapshots, boarding
   - Every state change publishes a snapshot message, so there are more messages than with a shared-memory read.
   - The dispatcher works from snapshots that may be stale. That is handled explicitly by the accept/reject protocol
     (ADR-006) rather than hidden by a lock.
+  - Compared with the single-loop alternative, the price is snapshots, rejections, the pending-assignment overlay
+    and correlating acknowledgements with callers.
 
 ## Performance (M6, measured)
 
