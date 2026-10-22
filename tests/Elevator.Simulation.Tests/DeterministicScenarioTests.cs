@@ -44,6 +44,8 @@ public class DeterministicScenarioTests
     [Theory]
     [InlineData("v1-basic.yaml")]
     [InlineData("v1-poisson.yaml")]
+    [InlineData("lunch.yaml")] // the default system: LOOK + Cost, 4 elevators
+    [InlineData("chaos.yaml")]
     public void Same_seed_gives_byte_identical_event_log(string scenario)
     {
         var a = Repo.ToJsonl(ScenarioRunner.Run(Repo.Load(scenario)));
@@ -54,6 +56,8 @@ public class DeterministicScenarioTests
     [Theory]
     [InlineData("v1-basic.yaml")]
     [InlineData("v1-poisson.yaml")]
+    [InlineData("lunch.yaml")]
+    [InlineData("chaos.yaml")]
     public void Event_log_does_not_depend_on_tick_size(string scenario)
     {
         var reference = Repo.ToJsonl(ScenarioRunner.Run(Repo.Load(scenario), tickMs: 100));
@@ -87,5 +91,20 @@ public class DeterministicScenarioTests
         Assert.Equal(20_000, result.EndedAt.Ms); // P1 is riding (boarded at 9 s), P2 and P3 still waiting
         Assert.Equal((0, 3), (result.Delivered, result.Unserved));
         Assert.Equal(3, ReportBuilder.Build(result.Events).Unserved);
+    }
+
+    /// <summary>
+    /// Golden logs of the default system (LOOK + Cost, 4 elevators) and of the chaos schedule (ADR-015): any change in
+    /// what the simulator does, or in the order it logs it, changes the hash. When a change is intended, measure it
+    /// (docs/results), explain it in an ADR, then update the hash here.
+    /// </summary>
+    [Theory]
+    [InlineData("lunch.yaml", "54e7f3b1733d60170b5db50d67e4468c034a3bdcb7c58c2906c3a7d8dd9e7e29")]
+    [InlineData("chaos.yaml", "b180d1ede5f6707001a10bfc45e2aa3722b98c2f6c710e27323f71179274c5ea")]
+    public void Golden_event_log_hash(string scenario, string sha256)
+    {
+        var jsonl = Repo.ToJsonl(ScenarioRunner.Run(Repo.Load(scenario)));
+        var hash = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(jsonl)));
+        Assert.Equal(sha256, hash);
     }
 }
