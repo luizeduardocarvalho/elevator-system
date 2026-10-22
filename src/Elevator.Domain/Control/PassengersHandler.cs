@@ -62,9 +62,6 @@ public sealed class PassengersHandler : IHandler
                 Arrive(arrives.Request, now, outbox);
                 outbox.Send(Address.Dispatcher, new SubmitRequest(arrives.Request));
                 break;
-            case PassengerWaiting waiting:
-                Arrive(waiting.Request, now, outbox);
-                break;
             case AssignmentAcceptedMsg accepted when _byId.GetValueOrDefault(accepted.RequestId) is { RidingOn: null } waiting:
                 waiting.AssignedTo = accepted.ElevatorId;
                 break;

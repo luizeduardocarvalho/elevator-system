@@ -18,7 +18,7 @@ public class MultiElevatorProperties
     public static readonly string[] Schedulings = ["fifo", "look"];
     public static readonly string[] Dispatches = ["roundrobin", "nearest", "cost"];
 
-    private static Gen<Case> CaseGen() =>
+    internal static Gen<Case> CaseGen() =>
         from floors in Gen.Choose(3, 20)
         from elevators in Gen.Choose(1, 5)
         from capacity in Gen.Choose(1, 8)

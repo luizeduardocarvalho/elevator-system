@@ -139,9 +139,21 @@ public sealed class ElevatorSystem : IAsyncDisposable
         if (!_pending.TryAdd(request.Id, (tcs, started)))
             throw new InvalidOperationException($"request {request.Id} is already pending");
 
-        // The passenger exists before the request does: every notice about it then reaches them afterwards.
-        _actors[Address.Passengers].Mailbox.Writer.TryWrite(new PassengerWaiting(request));
-        await _requests.Writer.WriteAsync(new SubmitRequest(request), ct).ConfigureAwait(false);
+        // Backpressure stays with the caller (spec requestQueue): wait while the bounded request queue is full.
+        try
+        {
+            if (!await _requests.Writer.WaitToWriteAsync(ct).ConfigureAwait(false))
+                throw new InvalidOperationException("the system is stopping");
+        }
+        catch
+        {
+            _pending.TryRemove(request.Id, out _);
+            throw;
+        }
+        // Causality by construction (ADR-015): the passengers actor logs PassengerArrived and then submits the request,
+        // in one handler call, so nothing about the request can be logged before its passenger. (Registering the passenger
+        // and writing the request from here let the dispatcher log it first whenever the passengers actor was busy.)
+        _actors[Address.Passengers].Mailbox.Writer.TryWrite(new PassengerArrives(request));
         using (ct.Register(() => tcs.TrySetCanceled(ct)))
             return await tcs.Task.ConfigureAwait(false);
     }
