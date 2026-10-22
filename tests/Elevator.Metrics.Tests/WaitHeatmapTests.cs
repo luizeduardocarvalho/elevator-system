@@ -5,11 +5,11 @@ namespace Elevator.Metrics.Tests;
 
 public class WaitHeatmapTests
 {
-    private static SimTime S(double seconds) => SimTime.FromSeconds(seconds);
+    private static Instant S(double seconds) => Instant.FromSeconds(seconds);
 
     private static readonly DomainEvent[] Log =
     [
-        new SimulationStarted(S(0), "synthetic", 1, 5, "look", 6),
+        new RunStarted(S(0), "synthetic", 1, 5, "look", 6),
         new PassengerArrived(S(0), 1, 1, 5),
         new PassengerArrived(S(59.9), 2, 1, 3),
         new PassengerArrived(S(60), 3, 1, 4),
@@ -21,7 +21,7 @@ public class WaitHeatmapTests
         new PassengerBoarded(S(110), 3, 0, 1),
         new PassengerBoarded(S(90), 4, 1, 4),
         new PassengerBoarded(S(135), 6, 1, 3),
-        new SimulationEnded(S(200), 5, 1),
+        new RunEnded(S(200), 5, 1),
     ];
 
     [Fact]
@@ -84,7 +84,7 @@ public class WaitHeatmapTests
     [Fact]
     public void A_log_without_passengers_gives_an_empty_map()
     {
-        var map = WaitHeatmap.FromEvents([new SimulationStarted(S(0), "empty", 1, 4, "look", 0), new SimulationEnded(S(1), 0, 0)], binS: 60);
+        var map = WaitHeatmap.FromEvents([new RunStarted(S(0), "empty", 1, 4, "look", 0), new RunEnded(S(1), 0, 0)], binS: 60);
         Assert.Equal((4, 0, 0), (map.Floors, map.Bins, map.Passengers));
         Assert.Null(map.Overall);
     }

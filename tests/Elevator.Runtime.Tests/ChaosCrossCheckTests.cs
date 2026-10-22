@@ -10,16 +10,16 @@ namespace Elevator.Runtime.Tests;
 public class ChaosCrossCheckTests
 {
     private static Scenario LightChaos() => new(
-        "light-chaos", 7, 20, ElevatorTiming.Default, SimTime.FromSeconds(3_600), [], null,
+        "light-chaos", 7, 20, ElevatorTiming.Default, Instant.FromSeconds(3_600), [], null,
         Elevators: 4, Capacity: 10, BypassThreshold: 0.8, Dispatch: "cost",
         Profile: new TrafficProfile([new RatePoint(0, 6), new RatePoint(600, 6)], new TrafficMix(0.4, 0.4, 0.2)),
         Faults:
         [
-            new FaultCommand(SimTime.FromSeconds(120), 1, FaultKind.MaintenanceOn),
-            new FaultCommand(SimTime.FromSeconds(200), 2, FaultKind.EmergencyStop),
-            new FaultCommand(SimTime.FromSeconds(260), 2, FaultKind.EmergencyClear),
-            new FaultCommand(SimTime.FromSeconds(300), 1, FaultKind.MaintenanceOff),
-            new FaultCommand(SimTime.FromSeconds(320), 3, FaultKind.Stuck, 90_000),
+            new FaultCommand(Instant.FromSeconds(120), 1, FaultKind.MaintenanceOn),
+            new FaultCommand(Instant.FromSeconds(200), 2, FaultKind.EmergencyStop),
+            new FaultCommand(Instant.FromSeconds(260), 2, FaultKind.EmergencyClear),
+            new FaultCommand(Instant.FromSeconds(300), 1, FaultKind.MaintenanceOff),
+            new FaultCommand(Instant.FromSeconds(320), 3, FaultKind.Stuck, 90_000),
         ]);
 
     [Fact]

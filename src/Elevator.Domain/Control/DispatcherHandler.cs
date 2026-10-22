@@ -74,8 +74,8 @@ public sealed class DispatcherHandler(
     private readonly Dictionary<int, ElevatorSnapshot> _overlaid = [];
     private sealed class Watch
     {
-        public (int Floor, ElevatorState State, SimTime? PhaseEndsAt) Progress;
-        public SimTime Since;
+        public (int Floor, ElevatorState State, Instant? PhaseEndsAt) Progress;
+        public Instant Since;
         public bool Watching;
         public long? DeclaredAtVersion;
     }
@@ -86,14 +86,14 @@ public sealed class DispatcherHandler(
 
     public Address Address => Address.Dispatcher;
 
-    public SimTime? NextWakeUp => null;
+    public Instant? NextWakeUp => null;
 
     public IDispatchPolicy Policy => policy;
 
     /// <summary>Requests not yet picked up.</summary>
     public int InFlight => _requests.Count;
 
-    public void Handle(Message message, SimTime now, Outbox outbox)
+    public void Handle(Message message, Instant now, Outbox outbox)
     {
         switch (message)
         {
@@ -165,7 +165,7 @@ public sealed class DispatcherHandler(
 
     private Tracked? Find(int requestId) => _requests.GetValueOrDefault(requestId);
 
-    private void OnSubmit(Request request, SimTime now, Outbox outbox)
+    private void OnSubmit(Request request, Instant now, Outbox outbox)
     {
         if (_requests.ContainsKey(request.Id))
         {
@@ -195,13 +195,13 @@ public sealed class DispatcherHandler(
         t.OnlyStaleRejections = true;
     }
 
-    private void RetryPending(SimTime now, Outbox outbox)
+    private void RetryPending(Instant now, Outbox outbox)
     {
         foreach (var (_, id) in _pending.ToList())
             if (Find(id) is { Status: Status.Pending } t) TryDispatch(t, now, outbox);
     }
 
-    private void TryDispatch(Tracked t, SimTime now, Outbox outbox)
+    private void TryDispatch(Tracked t, Instant now, Outbox outbox)
     {
         if (_snapshots.Count < elevatorCount) return;
         if (t.Denied is null && !CheckAccess(t, now, outbox)) return;
@@ -255,7 +255,7 @@ public sealed class DispatcherHandler(
 
     private bool Available(Tracked t, ElevatorSnapshot s) => InService(s) && !t.Denied!.ContainsKey(s.ElevatorId);
 
-    private void Observe(ElevatorSnapshot s, SimTime now, Outbox outbox)
+    private void Observe(ElevatorSnapshot s, Instant now, Outbox outbox)
     {
         if (_options.WatchdogTimeoutMs is not { } limit) return;
         if (!_watch.TryGetValue(s.ElevatorId, out var w)) _watch[s.ElevatorId] = w = new Watch();
@@ -279,17 +279,17 @@ public sealed class DispatcherHandler(
         ScheduleWatchdog(w.Since.AddMs(limit), now, outbox);
     }
 
-    private void ScheduleWatchdog(SimTime due, SimTime now, Outbox outbox)
+    private void ScheduleWatchdog(Instant due, Instant now, Outbox outbox)
     {
         if (_watchdogScheduled) return;
         _watchdogScheduled = true;
         outbox.Send(Address.Dispatcher, new WatchdogTimer(), Math.Max(0, due.Ms - now.Ms));
     }
 
-    private void CheckWatchdog(SimTime now, Outbox outbox)
+    private void CheckWatchdog(Instant now, Outbox outbox)
     {
         if (_options.WatchdogTimeoutMs is not { } limit) return;
-        SimTime? next = null;
+        Instant? next = null;
         foreach (var (id, w) in _watch.OrderBy(kv => kv.Key))
         {
             if (!w.Watching) continue;
@@ -306,7 +306,7 @@ public sealed class DispatcherHandler(
         if (next is { } at) ScheduleWatchdog(at, now, outbox);
     }
 
-    private bool CheckAccess(Tracked t, SimTime now, Outbox outbox)
+    private bool CheckAccess(Tracked t, Instant now, Outbox outbox)
     {
         var pipeline = _options.Access;
         Dictionary<int, AccessDenial>? denied = null;

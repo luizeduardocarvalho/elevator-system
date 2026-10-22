@@ -8,12 +8,12 @@ namespace Elevator.Tui.Tests;
 
 public class ViewModelTests
 {
-    private static SimTime S(double seconds) => SimTime.FromSeconds(seconds);
+    private static Instant S(double seconds) => Instant.FromSeconds(seconds);
 
     private static BuildingState Fold(params DomainEvent[] events)
     {
         var state = new BuildingState();
-        state.Apply(new SimulationStarted(SimTime.Zero, "unit", 3, 6, "look", 10, 3, "cost", 10));
+        state.Apply(new RunStarted(Instant.Zero, "unit", 3, 6, "look", 10, 3, "cost", 10));
         foreach (var e in events) state.Apply(e);
         return state;
     }
@@ -61,7 +61,7 @@ public class ViewModelTests
     public void Unbounded_capacity_shows_the_rider_count_only()
     {
         var state = new BuildingState();
-        state.Apply(new SimulationStarted(SimTime.Zero, "v1", 1, 10, "look", 3));
+        state.Apply(new RunStarted(Instant.Zero, "v1", 1, 10, "look", 3));
         Assert.Equal("■ 0", Build(state).Building.Rows.Single(r => r.Floor == 1).Shafts[0].Text);
     }
 
@@ -117,7 +117,7 @@ public class ViewModelTests
         var t = S(1);
         DomainEvent[] all =
         [
-            new SimulationEnded(t, 1, 0), new PassengerArrived(t, 1, 1, 2), new PassengerBoarded(t, 1, 0, 1), new PassengerAlighted(t, 1, 0, 2),
+            new RunEnded(t, 1, 0), new PassengerArrived(t, 1, 1, 2), new PassengerBoarded(t, 1, 0, 1), new PassengerAlighted(t, 1, 0, 2),
             new HallCallRegistered(t, 2, Direction.Up), new HallCallAnswered(t, 0, 2, Direction.Down), new CarCallRegistered(t, 0, 4),
             new RequestRejected(t, "HallCall", 9, Direction.Up, "no"), new DoorsOpened(t, 0, 2, null), new RequestSubmitted(t, 1, 1, 2),
             new AssignmentProposed(t, 1, 0, 2, null, true), new AssignmentAccepted(t, 1, 0), new AssignmentRejected(t, 1, 0, AssignmentReason.Stale),

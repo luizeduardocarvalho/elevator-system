@@ -108,7 +108,7 @@ header { position: relative; }
   <h1>Elevator System</h1>
   <p>Easy → Medium → Hard, built as an experiment: build, simulate, measure, evolve. State at tag <code>v3-hard</code>.</p>
   <div class="badges">
-    <span class="badge">.NET 10</span><span class="badge">571 tests passing</span><span class="badge">18 ADRs</span>
+    <span class="badge">.NET 10</span><span class="badge">573 tests passing</span><span class="badge">18 ADRs</span>
     <span class="badge">deterministic sim + actor runtime</span><span class="badge">p99 12.2 ms @ 100 concurrent (perf run)</span>
   </div>
   <div class="theme-toggle"><button id="theme" type="button" aria-label="Toggle colour theme">Theme</button></div>
@@ -639,7 +639,7 @@ flowchart LR
 <!-- ============================== TESTS ============================== -->
 <section role="tabpanel" id="p-tests" aria-labelledby="t-tests">
   <h2>Test results</h2>
-  <p class="lede">Now: <code>dotnet build -warnaserror</code> clean, 571 tests passing (480 at the <code>v3-hard</code> merge, plus the working day, the heatmaps, the ordering audit and the architecture test). Tests came first for the domain and the policies; no test uses <code>Thread.Sleep</code>.</p>
+  <p class="lede">Now: <code>dotnet build -warnaserror</code> clean, 573 tests passing (480 at the <code>v3-hard</code> merge, plus the working day, the heatmaps, the ordering audit, the architecture test and the log-compatibility test). Tests came first for the domain and the policies; no test uses <code>Thread.Sleep</code>.</p>
 
   <div class="grid">
     <div class="stat card good"><div class="num">189</div><div class="lbl">Domain: transition table, mechanics, handlers</div></div>
@@ -665,7 +665,7 @@ flowchart LR
   <h3>Merge verification (v2 → TUI ∥ Hard → v3)</h3>
   <div class="table-wrap"><table>
     <tr><th>Check</th><th>Result</th></tr>
-    <tr><td>All tests with warnings as errors (at the merge; 571 / 571 now)</td><td class="pass">480 / 480</td></tr>
+    <tr><td>All tests with warnings as errors (at the merge; 573 / 573 now)</td><td class="pass">480 / 480</td></tr>
     <tr><td>Same seed across TUI speeds (0.5×, 10×, MAX, headless)</td><td class="pass">identical hash</td></tr>
     <tr><td>v2 results with faults off</td><td class="pass">12 / 12 byte-identical</td></tr>
     <tr><td>chaos.yaml in the TUI: maintenance / emergency / fault markers and the ops panel</td><td class="pass">live; 9 / 9 commands applied; 264 / 264 served</td></tr>

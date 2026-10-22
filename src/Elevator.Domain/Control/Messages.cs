@@ -42,7 +42,7 @@ public sealed record WakeUp : Message;
 
 /// <param name="EtaEstimate">The dispatcher's pickup estimate, for the staleness check.</param>
 /// <param name="Forced">Every eligible elevator rejected as stale: accept unless full or in maintenance.</param>
-public sealed record Assign(Request Request, SimTime? EtaEstimate, bool Forced) : Message;
+public sealed record Assign(Request Request, Instant? EtaEstimate, bool Forced) : Message;
 
 public sealed record Boarded(Request Rider) : Message;
 
@@ -78,7 +78,7 @@ public sealed record WatchdogTimer : Message;
 /// floor without stopping changes nothing a snapshot shows, so without this a long run between stops looks silent.
 /// Only the watchdog reads it; it never triggers a dispatch decision.
 /// </summary>
-public sealed record ProgressReported(int ElevatorId, int Floor, SimTime At) : Message;
+public sealed record ProgressReported(int ElevatorId, int Floor, Instant At) : Message;
 
 /// <summary>Spec's findBestElevator(): which elevator would the dispatcher choose now? Answered, nothing assigned.</summary>
 public sealed record FindBestQuery(int QueryId, Request Request) : Message;

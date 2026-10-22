@@ -87,7 +87,7 @@ public static class OpsMetrics
             var at = e.At.Ms;
             switch (e)
             {
-                case SimulationStarted started:
+                case RunStarted started:
                     for (var i = 0; i < started.Elevators; i++) E(i);
                     break;
                 case FaultCommandApplied { Kind: FaultKind.Stuck } stuck:

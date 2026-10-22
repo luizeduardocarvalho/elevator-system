@@ -42,7 +42,7 @@ public sealed class LiveSession : ISession
 
     public BuildingState State { get; private set; }
 
-    public SimTime Now => Engine.Now;
+    public Instant Now => Engine.Now;
 
     public bool AtEnd => Engine.Finished;
 
@@ -51,14 +51,14 @@ public sealed class LiveSession : ISession
     /// <summary>Operator commands injected so far, in order (re-applied on a backward seek).</summary>
     public IReadOnlyList<FaultCommand> Commands => _commands;
 
-    /// <summary>The full event log so far (SimulationEnded included once finished).</summary>
+    /// <summary>The full event log so far (RunEnded included once finished).</summary>
     public IReadOnlyList<DomainEvent> Log => Engine.Log;
 
     private (SimEngine, BuildingState) Fresh()
     {
         _folded = 0;
         var engine = SimEngine.Create(_scenario, _strategy, new SimEngineOptions(EmitDispatchEvaluations: true, _injector));
-        engine.AdvanceTo(SimTime.Zero);
+        engine.AdvanceTo(Instant.Zero);
         return (engine, new BuildingState());
     }
 
@@ -69,10 +69,10 @@ public sealed class LiveSession : ISession
         Fold();
     }
 
-    public void SeekTo(SimTime target)
+    public void SeekTo(Instant target)
     {
-        if (target < SimTime.Zero) target = SimTime.Zero;
-        target = new SimTime(target.Ms / Pacer.TickMs * Pacer.TickMs);
+        if (target < Instant.Zero) target = Instant.Zero;
+        target = new Instant(target.Ms / Pacer.TickMs * Pacer.TickMs);
         if (target < Engine.Now)
         {
             var replay = _commands.Where(c => c.At <= target).ToList();

@@ -5,11 +5,11 @@ namespace Elevator.Metrics.Tests;
 
 public class WaitDiffHeatmapTests
 {
-    private static SimTime S(double seconds) => SimTime.FromSeconds(seconds);
+    private static Instant S(double seconds) => Instant.FromSeconds(seconds);
 
     private static readonly DomainEvent[] Arrivals =
     [
-        new SimulationStarted(S(0), "pair", 1, 4, "look", 4),
+        new RunStarted(S(0), "pair", 1, 4, "look", 4),
         new PassengerArrived(S(0), 1, 4, 1),
         new PassengerArrived(S(10), 2, 4, 1),
         new PassengerArrived(S(70), 3, 1, 3),

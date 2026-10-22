@@ -76,6 +76,21 @@ Runtime and Metrics it checks three things. Each catches a case the others miss:
 A fourth test requires every `src/` project to be classified as system or lab, so a new project cannot skip the rule.
 Each check was seen failing on a deliberate probe before the test was committed.
 
+### Renames that follow from the split
+
+Once the runtime stopped depending on the simulator, two names said "simulation" about things the system owns:
+
+- **`SimTime` → `Instant`.** The runtime derives the same type from the wall clock (`RealClock`), so it is a point in
+  a run's time, not only a simulated one. It is still a distinct integer-millisecond type that never mixes with
+  wall-clock durations (ADR-008). The `t` field in the log is unchanged.
+- **`SimulationStarted`/`SimulationEnded` → `RunStarted`/`RunEnded`, in code only.** The JSON discriminators keep the
+  old strings (`[JsonDerivedType(typeof(RunStarted), "SimulationStarted")]`), so new logs are byte-identical and every
+  old log replays without a reader change or a schema bump. A schema bump would have broken the byte-identity check.
+  A test reads lines from a pre-rename log and writes them back identically.
+
+Names that describe the lab (`SimClock`, `SimEngine`, `MaxSimTime`, the report's `SimTimeS`) and parameter names such
+as `Tick(simTime)` are unchanged.
+
 ### Alternatives considered
 
 - **A shared `Elevator.Shell` project for everything both shells need.** It would keep Simulation from seeing

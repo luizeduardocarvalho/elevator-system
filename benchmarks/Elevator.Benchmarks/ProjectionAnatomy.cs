@@ -37,10 +37,10 @@ public static class ProjectionAnatomy
             {
                 var elevator = new ElevatorUnit(e, 20, ElevatorTiming.Default, new LookScheduling(), 1 + e * 5, 100_000, 1.0);
                 for (var k = 0; k < backlog; k++) elevator.AssignPickup(Random(rng, ++id));
-                elevator.Tick(new SimTime(3_000));
+                elevator.Tick(new Instant(3_000));
                 snapshots.Add(elevator.Snapshot());
             }
-            var context = new DispatchContext(Random(rng, ++id), snapshots, new SimTime(3_000), ElevatorTiming.Default);
+            var context = new DispatchContext(Random(rng, ++id), snapshots, new Instant(3_000), ElevatorTiming.Default);
 
             var oracle = new RouteProjection(counting, ElevatorTiming.Default);
             foreach (var s in snapshots) { oracle.Project(s, context.Request, context.Now); oracle.Project(s, null, context.Now); }
@@ -58,6 +58,6 @@ public static class ProjectionAnatomy
         var from = rng.Next(1, 21);
         int to;
         do to = rng.Next(1, 21); while (to == from);
-        return Request.Create(from, to, SimTime.Zero, 20, id: id).Value!;
+        return Request.Create(from, to, Instant.Zero, 20, id: id).Value!;
     }
 }

@@ -43,7 +43,7 @@ public class HardStageProperties
         from vip in Gen.Elements(false, false, false, false, true)
         from level in Gen.Elements(0, 0, 0, 1, 2)
         from load in Gen.Elements(1, 1, 1, 1, 2, 3, 12)
-        select new PassengerSpec(new SimTime(at), from_, (from_ - 1 + offset) % floors + 1) { Vip = vip, AccessLevel = level, Load = load };
+        select new PassengerSpec(new Instant(at), from_, (from_ - 1 + offset) % floors + 1) { Vip = vip, AccessLevel = level, Load = load };
 
     private static Gen<FaultCommand[]> FaultsGen(int elevators) =>
         from n in Gen.Choose(0, 4)
@@ -54,10 +54,10 @@ public class HardStageProperties
             from length in Gen.Choose(1_000, 150_000)
             select kind switch
             {
-                0 => new[] { new FaultCommand(new SimTime(start), e, FaultKind.MaintenanceOn), new FaultCommand(new SimTime(start + length), e, FaultKind.MaintenanceOff) },
-                1 => [new FaultCommand(new SimTime(start), e, FaultKind.EmergencyStop), new FaultCommand(new SimTime(start + length), e, FaultKind.EmergencyClear)],
-                2 => [new FaultCommand(new SimTime(start), e, FaultKind.Stuck, length)],
-                _ => [new FaultCommand(new SimTime(start), e, FaultKind.Stuck), new FaultCommand(new SimTime(start + length), e, FaultKind.Unstick)],
+                0 => new[] { new FaultCommand(new Instant(start), e, FaultKind.MaintenanceOn), new FaultCommand(new Instant(start + length), e, FaultKind.MaintenanceOff) },
+                1 => [new FaultCommand(new Instant(start), e, FaultKind.EmergencyStop), new FaultCommand(new Instant(start + length), e, FaultKind.EmergencyClear)],
+                2 => [new FaultCommand(new Instant(start), e, FaultKind.Stuck, length)],
+                _ => [new FaultCommand(new Instant(start), e, FaultKind.Stuck), new FaultCommand(new Instant(start + length), e, FaultKind.Unstick)],
             }, n)
         select episodes.SelectMany(x => x).OrderBy(f => f.At).ToArray();
 
@@ -77,7 +77,7 @@ public class HardStageProperties
         from faults in FaultsGen(elevators)
         from dispatch in Gen.Elements("nearest", "cost")
         select new Case(
-            new Scenario("hard-prop", 1, floors, ElevatorTiming.Default, SimTime.FromSeconds(200_000), specs, null,
+            new Scenario("hard-prop", 1, floors, ElevatorTiming.Default, Instant.FromSeconds(200_000), specs, null,
                 elevators, capacity, threshold, dispatch, null, new MessageLatency(snapshotMs, 0), faults)
             {
                 Fleet = fleet,

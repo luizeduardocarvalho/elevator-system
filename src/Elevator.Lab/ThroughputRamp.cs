@@ -41,7 +41,7 @@ public static class ThroughputRamp
         return steps;
     }
 
-    public static async Task<RampStep> RunStep(Scenario scenario, SimTime seedAt, double rate, RampOptions options)
+    public static async Task<RampStep> RunStep(Scenario scenario, Instant seedAt, double rate, RampOptions options)
     {
         var handover = PeakMoment.HandOverAt(scenario, seedAt);
         var counters = new ProposalCounter();

@@ -8,8 +8,8 @@ public static class ReportBuilder
     public static RunReport Build(IEnumerable<DomainEvent> events)
     {
         var list = events as IReadOnlyList<DomainEvent> ?? events.ToList();
-        var started = list.OfType<SimulationStarted>().FirstOrDefault();
-        var ended = list.OfType<SimulationEnded>().LastOrDefault();
+        var started = list.OfType<RunStarted>().FirstOrDefault();
+        var ended = list.OfType<RunEnded>().LastOrDefault();
         var records = PassengerLifecycle.Analyze(list);
         var delivered = records.Where(r => r.Delivered && r.BoardedAt is not null).ToList();
         var passengers = started?.Passengers ?? records.Count;

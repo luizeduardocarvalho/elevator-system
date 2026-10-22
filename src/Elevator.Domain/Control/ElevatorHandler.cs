@@ -33,15 +33,15 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
 {
     private readonly ElevatorHandlerOptions _options = options ?? ElevatorHandlerOptions.Default;
     private long _publishedVersion = -1;
-    private SimTime? _unstickAt;
+    private Instant? _unstickAt;
 
     public Elevator Elevator { get; } = elevator;
 
     public Address Address => Address.Elevator(Elevator.Id);
 
-    public SimTime? NextWakeUp => _unstickAt is { } at && (Elevator.NextDeadline is not { } d || at < d) ? at : Elevator.NextDeadline;
+    public Instant? NextWakeUp => _unstickAt is { } at && (Elevator.NextDeadline is not { } d || at < d) ? at : Elevator.NextDeadline;
 
-    public void Handle(Message message, SimTime now, Outbox outbox)
+    public void Handle(Message message, Instant now, Outbox outbox)
     {
         if (_unstickAt is { } unstickAt && unstickAt <= now)
         {
@@ -87,7 +87,7 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
         outbox.Send(Address.Dispatcher, new SnapshotPublished(Elevator.Snapshot()), _options.SnapshotDelayMs);
     }
 
-    private void ApplyCommand(FaultCommand command, SimTime now, Outbox outbox)
+    private void ApplyCommand(FaultCommand command, Instant now, Outbox outbox)
     {
         var applied = command.Kind switch
         {
@@ -105,7 +105,7 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
         Flush(outbox);
     }
 
-    private bool Stick(FaultCommand command, SimTime now)
+    private bool Stick(FaultCommand command, Instant now)
     {
         Elevator.Stick();
         _unstickAt = command.DurationMs is { } ms ? now.AddMs(ms) : null;
@@ -118,7 +118,7 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
         return Elevator.Unstick();
     }
 
-    private void OnAssign(Assign assign, SimTime now, Outbox outbox)
+    private void OnAssign(Assign assign, Instant now, Outbox outbox)
     {
         var request = assign.Request;
         var reason = RejectionReason(assign, now);
@@ -135,7 +135,7 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
         outbox.Send(Address.Dispatcher, new AssignmentAcceptedMsg(request.Id, Elevator.Id, Elevator.Version));
     }
 
-    private AssignmentReason? RejectionReason(Assign assign, SimTime now)
+    private AssignmentReason? RejectionReason(Assign assign, Instant now)
     {
         switch (Elevator.Mode)
         {
@@ -155,7 +155,7 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
         return eta is { } mine && mine.Ms - estimate.Ms > _options.StalenessToleranceMs ? AssignmentReason.Stale : null;
     }
 
-    private void Release(int requestId, AssignmentReason reason, SimTime now, Outbox outbox)
+    private void Release(int requestId, AssignmentReason reason, Instant now, Outbox outbox)
     {
         outbox.Emit(new AssignmentReleased(now, requestId, Elevator.Id, reason));
         SendRelease(requestId, reason, outbox);

@@ -32,7 +32,7 @@ internal sealed class Harness
 
     public void At(long ms)
     {
-        Elevator.Tick(new SimTime(ms));
+        Elevator.Tick(new Instant(ms));
         Events.AddRange(Elevator.DrainEvents());
     }
 

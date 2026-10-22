@@ -19,7 +19,7 @@ public class CapacityScenarioTests
         Assert.Equal(27.0, p3.WaitS!.Value, 6);
     }
 
-    private static Scenario Three() => new("capacity", 1, 10, ElevatorTiming.Default, SimTime.FromSeconds(600),
-        [new PassengerSpec(SimTime.Zero, 1, 5), new PassengerSpec(SimTime.Zero, 1, 5), new PassengerSpec(SimTime.Zero, 1, 5)],
+    private static Scenario Three() => new("capacity", 1, 10, ElevatorTiming.Default, Instant.FromSeconds(600),
+        [new PassengerSpec(Instant.Zero, 1, 5), new PassengerSpec(Instant.Zero, 1, 5), new PassengerSpec(Instant.Zero, 1, 5)],
         null, Elevators: 1, Capacity: 2, BypassThreshold: 1.0, Dispatch: "nearest");
 }

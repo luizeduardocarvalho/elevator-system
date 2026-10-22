@@ -8,7 +8,7 @@ namespace Elevator.Tui.Tests;
 
 public class BuildingStateTests
 {
-    private static SimTime S(double seconds) => SimTime.FromSeconds(seconds);
+    private static Instant S(double seconds) => Instant.FromSeconds(seconds);
 
     private static BuildingState Fold(params DomainEvent[] events)
     {
@@ -17,8 +17,8 @@ public class BuildingStateTests
         return state;
     }
 
-    private static SimulationStarted Started(int elevators = 2, int capacity = 10) =>
-        new(SimTime.Zero, "t", 7, 10, "look", 3, elevators, "cost", capacity);
+    private static RunStarted Started(int elevators = 2, int capacity = 10) =>
+        new(Instant.Zero, "t", 7, 10, "look", 3, elevators, "cost", capacity);
 
     [Fact]
     public void Started_sets_the_building_and_every_elevator_idle_at_the_lobby()
@@ -140,7 +140,7 @@ public class BuildingStateTests
             new AssignmentProposed(S(2), 9, 0, 3.5, null, false),
             new AssignmentProposed(S(3), 10, 1, 1, null, false));
         s.Apply(new UnknownEvent(S(4), "Teleported", []));
-        Assert.Equal(["SimulationStarted", "DispatchEvaluated", "AssignmentProposed", "Teleported"],
+        Assert.Equal(["RunStarted", "DispatchEvaluated", "AssignmentProposed", "Teleported"],
             s.Tail.Select(t => t.Known?.GetType().Name ?? t.Unknown!.Type));
         Assert.Equal(10, ((AssignmentProposed)s.Tail[2].Known!).RequestId);
 

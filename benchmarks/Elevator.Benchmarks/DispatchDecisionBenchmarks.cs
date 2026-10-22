@@ -28,10 +28,10 @@ public class DispatchDecisionBenchmarks
         {
             var elevator = new ElevatorUnit(e, Floors, ElevatorTiming.Default, _look, 1 + e * 5, capacity: 100_000, bypassThreshold: 1.0);
             for (var k = 0; k < Backlog; k++) elevator.AssignPickup(Random(rng, ++id));
-            elevator.Tick(new SimTime(3_000));
+            elevator.Tick(new Instant(3_000));
             snapshots.Add(elevator.Snapshot());
         }
-        _context = new DispatchContext(Random(rng, ++id), snapshots, new SimTime(3_000), ElevatorTiming.Default);
+        _context = new DispatchContext(Random(rng, ++id), snapshots, new Instant(3_000), ElevatorTiming.Default);
     }
 
     private static Request Random(Random rng, int id)
@@ -39,7 +39,7 @@ public class DispatchDecisionBenchmarks
         var from = rng.Next(1, Floors + 1);
         int to;
         do to = rng.Next(1, Floors + 1); while (to == from);
-        return Request.Create(from, to, SimTime.Zero, Floors, id: id).Value!;
+        return Request.Create(from, to, Instant.Zero, Floors, id: id).Value!;
     }
 
     [Benchmark(Baseline = true)]

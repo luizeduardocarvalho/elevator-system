@@ -17,7 +17,7 @@ public interface ISession
 
     BuildingState State { get; }
 
-    SimTime Now { get; }
+    Instant Now { get; }
 
     /// <summary>Nothing more will happen (the run finished, or the log is exhausted).</summary>
     bool AtEnd { get; }
@@ -29,7 +29,7 @@ public interface ISession
     void Step();
 
     /// <summary>Jumps to <paramref name="target"/>: forward by running ahead, backward by rebuilding from the start.</summary>
-    void SeekTo(SimTime target);
+    void SeekTo(Instant target);
 
     /// <summary>m / e / s on elevator <paramref name="elevator"/>; returns the status-bar message.</summary>
     string Command(TuiKey key, int elevator);

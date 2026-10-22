@@ -22,9 +22,9 @@ public sealed record ElevatorSnapshot(
     IReadOnlyList<Request> Riders,
     int Capacity,
     double BypassThreshold,
-    SimTime At,
-    SimTime? PhaseEndsAt,
-    SimTime ClosingStartedAt,
+    Instant At,
+    Instant? PhaseEndsAt,
+    Instant ClosingStartedAt,
     long Version)
 {
     private DestinationTotals? _riderTotals;
@@ -70,5 +70,5 @@ public sealed record ElevatorSnapshot(
 
     public static ElevatorSnapshot ForPolicy(int floor, ElevatorState state, Direction? committed, IReadOnlyList<int> carCalls,
         IReadOnlyList<HallCall> hallCalls, int floors, int elevatorId = 0) =>
-        new(elevatorId, floor, state, committed, carCalls, hallCalls, floors, [], int.MaxValue, 1.0, SimTime.Zero, null, SimTime.Zero, 0);
+        new(elevatorId, floor, state, committed, carCalls, hallCalls, floors, [], int.MaxValue, 1.0, Instant.Zero, null, Instant.Zero, 0);
 }

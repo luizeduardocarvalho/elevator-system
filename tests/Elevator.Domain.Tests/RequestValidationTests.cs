@@ -10,18 +10,18 @@ public class RequestValidationTests
     [InlineData(5, 0)]
     [InlineData(5, 11)]
     public void Request_rejects_floors_out_of_range(int pickup, int destination) =>
-        Assert.Contains("outside 1..10", Request.Create(pickup, destination, SimTime.Zero, 10).Error);
+        Assert.Contains("outside 1..10", Request.Create(pickup, destination, Instant.Zero, 10).Error);
 
     [Fact]
     public void Request_rejects_same_pickup_and_destination() =>
-        Assert.False(Request.Create(4, 4, SimTime.Zero, 10).IsSuccess);
+        Assert.False(Request.Create(4, 4, Instant.Zero, 10).IsSuccess);
 
     [Fact]
     public void Request_derives_direction_and_rejects_inconsistent_declared_direction()
     {
-        Assert.Equal(Direction.Down, Request.Create(7, 2, SimTime.Zero, 10).Value!.Direction);
-        Assert.True(Request.Create(2, 7, SimTime.Zero, 10, Direction.Up).IsSuccess);
-        Assert.Contains("inconsistent", Request.Create(2, 7, SimTime.Zero, 10, Direction.Down).Error);
+        Assert.Equal(Direction.Down, Request.Create(7, 2, Instant.Zero, 10).Value!.Direction);
+        Assert.True(Request.Create(2, 7, Instant.Zero, 10, Direction.Up).IsSuccess);
+        Assert.Contains("inconsistent", Request.Create(2, 7, Instant.Zero, 10, Direction.Down).Error);
     }
 
     [Theory]

@@ -25,8 +25,8 @@ public static class EventLine
 
         (string Kind, string Text, Tone Tone)? line = e switch
         {
-            SimulationStarted s => ("SIM", $"'{s.Scenario}' seed {s.Seed}: {s.Floors} floors, {s.Elevators} elevators, {s.Passengers} passengers", Tone.Accent),
-            SimulationEnded s => ("SIM", $"ended: {s.Delivered} delivered, {s.Unserved} unserved", Tone.Accent),
+            RunStarted s => ("SIM", $"'{s.Scenario}' seed {s.Seed}: {s.Floors} floors, {s.Elevators} elevators, {s.Passengers} passengers", Tone.Accent),
+            RunEnded s => ("SIM", $"ended: {s.Delivered} delivered, {s.Unserved} unserved", Tone.Accent),
             PassengerArrived p => ("ARRIVE", $"P{p.PassengerId} {p.From}→{p.To}", Tone.Normal),
             PassengerBoarded p => ("BOARD", $"P{p.PassengerId} into E{p.ElevatorId} @{p.Floor}", Tone.Good),
             PassengerAlighted p => ("ALIGHT", $"P{p.PassengerId} out of E{p.ElevatorId} @{p.Floor}", Tone.Good),

@@ -5,7 +5,7 @@ namespace Elevator.Policy.Tests;
 
 public class DispatchTests
 {
-    private static Request Req(int from, int to, int id = 1) => Request.Create(from, to, SimTime.Zero, 20, id: id).Value!;
+    private static Request Req(int from, int to, int id = 1) => Request.Create(from, to, Instant.Zero, 20, id: id).Value!;
 
     private static ElevatorSnapshot Car(int id, int floor, Direction? dir = null, int[]? carCalls = null, ElevatorState state = ElevatorState.Idle, int load = 0) =>
         ElevatorSnapshot.ForPolicy(floor, state, dir, carCalls ?? [], [], 20, id) with
@@ -16,7 +16,7 @@ public class DispatchTests
         };
 
     private static DispatchContext Ctx(Request r, params ElevatorSnapshot[] cars) =>
-        new(r, cars, SimTime.Zero, ElevatorTiming.Default);
+        new(r, cars, Instant.Zero, ElevatorTiming.Default);
 
     [Fact]
     public void Nearest_idle_elevator_wins() =>

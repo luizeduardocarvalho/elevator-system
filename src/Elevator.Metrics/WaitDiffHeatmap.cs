@@ -49,8 +49,8 @@ public sealed class WaitDiffHeatmap : IHeatGrid
     public static WaitDiffHeatmap FromEvents(IEnumerable<DomainEvent> a, IEnumerable<DomainEvent> b, double binS, HeatStat stat = HeatStat.Avg, double? spanS = null)
     {
         var listA = a as IReadOnlyList<DomainEvent> ?? a.ToList();
-        var floors = listA.OfType<SimulationStarted>().FirstOrDefault()?.Floors
-                     ?? throw new ArgumentException("log A has no SimulationStarted event", nameof(a));
+        var floors = listA.OfType<RunStarted>().FirstOrDefault()?.Floors
+                     ?? throw new ArgumentException("log A has no RunStarted event", nameof(a));
         return Build(PassengerLifecycle.Analyze(listA), PassengerLifecycle.Analyze(b), floors, binS, stat, spanS);
     }
 

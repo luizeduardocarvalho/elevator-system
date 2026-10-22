@@ -4,7 +4,7 @@ using System.Globalization;
 namespace Elevator.Metrics;
 
 /// <summary>
-/// Real elapsed time (wall clock), e.g. assignment latency. Deliberately a different type from SimTime so the two
+/// Real elapsed time (wall clock), e.g. assignment latency. Deliberately a different type from Instant so the two
 /// kinds of time can never be mixed (ADR-008).
 /// </summary>
 public readonly record struct WallDuration(long StopwatchTicks) : IComparable<WallDuration>

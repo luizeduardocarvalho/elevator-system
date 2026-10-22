@@ -125,7 +125,7 @@ public static class PerfRunner
             heap, 100 * (last - first) / first, Summarize(latencies));
     }
 
-    private static Request RandomRequest(Random rng, int id, int floors, SimTime now)
+    private static Request RandomRequest(Random rng, int id, int floors, Instant now)
     {
         var from = rng.Next(1, floors + 1);
         int to;

@@ -109,15 +109,15 @@ public sealed class TuiLoop(ISession session, Pacer pacer, IFrameClock clock, IK
                     break;
                 case TuiKey.SeekBack: Seek(session.Now.AddMs(-60_000)); break;
                 case TuiKey.SeekForward: Seek(session.Now.AddMs(60_000)); break;
-                case TuiKey.Restart: Seek(Domain.SimTime.Zero); break;
+                case TuiKey.Restart: Seek(Domain.Instant.Zero); break;
             }
         }
         return true;
     }
 
-    private void Seek(Domain.SimTime target)
+    private void Seek(Domain.Instant target)
     {
-        session.SeekTo(target.Ms < 0 ? Domain.SimTime.Zero : target);
+        session.SeekTo(target.Ms < 0 ? Domain.Instant.Zero : target);
         _meter.Reset();
         _message = $"seek → {ViewModel.Clock(session.Now)}";
     }

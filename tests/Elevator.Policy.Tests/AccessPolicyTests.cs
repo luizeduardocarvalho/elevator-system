@@ -28,7 +28,7 @@ public class AccessPolicyTests
     ];
 
     private static Request R(int from, int to, int load = 1, bool vip = false, int level = 0) =>
-        Request.Create(from, to, SimTime.Zero, Floors, id: 1, load: load).Value! with { Vip = vip, AccessLevel = level };
+        Request.Create(from, to, Instant.Zero, Floors, id: 1, load: load).Value! with { Vip = vip, AccessLevel = level };
 
     public static readonly TheoryData<string, Request, int, string?> Table = new()
     {

@@ -15,7 +15,7 @@ public sealed record Scenario(
     int Seed,
     int Floors,
     ElevatorTiming Timing,
-    SimTime MaxSimTime,
+    Instant MaxSimTime,
     IReadOnlyList<PassengerSpec> Passengers,
     PoissonTraffic? Traffic,
     int Elevators = 1,
@@ -52,7 +52,7 @@ public sealed record Scenario(
 }
 
 /// <summary>An explicitly scripted passenger: arrives at <paramref name="At"/> on <paramref name="From"/>, wants <paramref name="To"/>.</summary>
-public sealed record PassengerSpec(SimTime At, int From, int To)
+public sealed record PassengerSpec(Instant At, int From, int To)
 {
     /// <summary>VIP passenger (priority, may use VIP-dedicated elevators; ADR-012).</summary>
     public bool Vip { get; init; }
@@ -64,7 +64,7 @@ public sealed record PassengerSpec(SimTime At, int From, int To)
     public int Load { get; init; } = 1;
 }
 
-public sealed record Passenger(int Id, SimTime ArrivesAt, int From, int To)
+public sealed record Passenger(int Id, Instant ArrivesAt, int From, int To)
 {
     public Direction Direction => Directions.Between(From, To)!.Value;
 

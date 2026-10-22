@@ -25,7 +25,7 @@ internal sealed class Actor(IHandler handler, ElevatorSystem system, ChannelRead
     private async Task Loop(CancellationToken ct)
     {
         var outbox = new Outbox();
-        var last = SimTime.Zero;
+        var last = Instant.Zero;
         while (!ct.IsCancellationRequested)
         {
             Message? message = null;

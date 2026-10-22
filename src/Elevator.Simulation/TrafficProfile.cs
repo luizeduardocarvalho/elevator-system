@@ -65,7 +65,7 @@ public sealed record TrafficProfile(IReadOnlyList<RatePoint> Rate, TrafficMix Mi
             if (rng.NextDouble() * lambdaMax >= RatePerSecondAt(t)) continue;
 
             var (from, to) = Trip(MixAt(t), floors, rng);
-            yield return new PassengerSpec(SimTime.FromSeconds(t), from, to);
+            yield return new PassengerSpec(Instant.FromSeconds(t), from, to);
         }
     }
 

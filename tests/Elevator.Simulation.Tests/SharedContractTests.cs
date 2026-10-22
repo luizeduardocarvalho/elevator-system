@@ -14,7 +14,7 @@ public class SharedContractTests
     [Fact]
     public void New_events_round_trip_through_the_jsonl_log()
     {
-        var t = new SimTime(4_200);
+        var t = new Instant(4_200);
         DomainEvent[] events =
         [
             new MaintenanceRequested(t, 1), new MaintenanceEntered(t, 1, 3), new MaintenanceExited(t, 1),
@@ -52,8 +52,8 @@ public class SharedContractTests
               - { atS: 420, elevator: 1, kind: emergency-stop }
             """).Scenario!;
         Assert.Equal(
-            [new FaultCommand(new SimTime(300_000), 2, FaultKind.MaintenanceOn), new FaultCommand(new SimTime(420_000), 1, FaultKind.EmergencyStop),
-             new FaultCommand(new SimTime(800_000), 3, FaultKind.Stuck, 120_000)],
+            [new FaultCommand(new Instant(300_000), 2, FaultKind.MaintenanceOn), new FaultCommand(new Instant(420_000), 1, FaultKind.EmergencyStop),
+             new FaultCommand(new Instant(800_000), 3, FaultKind.Stuck, 120_000)],
             s.FaultSchedule);
     }
 
@@ -73,7 +73,7 @@ public class SharedContractTests
         var reference = Repo.ToJsonl(SimEngine.Run(scenario));
         var engine = SimEngine.Create(scenario);
         Assert.True(engine.FaultInjector.IsNoOp);
-        engine.AdvanceTo(new SimTime(300_000));
+        engine.AdvanceTo(new Instant(300_000));
         engine.FaultInjector.EmergencyStop(1, engine.Now);
         engine.FaultInjector.Stick(2, engine.Now, 60_000);
         while (!engine.Finished) engine.AdvanceTo(engine.Now.AddMs(100));
@@ -97,13 +97,13 @@ public class SharedContractTests
         string RunWithPost()
         {
             var engine = SimEngine.Create(Repo.Load("v1-basic.yaml"));
-            engine.AdvanceTo(new SimTime(5_000));
+            engine.AdvanceTo(new Instant(5_000));
             var late = Request.Create(2, 6, engine.Now, 10, id: 99).Value!;
             engine.Post(Address.Passengers, new PassengerArrives(late));
             engine.AdvanceTo(engine.Now);
             var arrived = Assert.IsType<PassengerArrived>(engine.Log.Last(e => e is PassengerArrived));
             Assert.Equal((99, 5_000L), (arrived.PassengerId, arrived.At.Ms));
-            while (!engine.Finished && engine.Now < new SimTime(300_000)) engine.AdvanceTo(engine.Now.AddMs(1_000));
+            while (!engine.Finished && engine.Now < new Instant(300_000)) engine.AdvanceTo(engine.Now.AddMs(1_000));
             return Repo.ToJsonl(engine.Finish());
         }
         Assert.Equal(RunWithPost(), RunWithPost());
@@ -138,7 +138,7 @@ public class SharedContractTests
     public void Waiting_counts_are_exposed_per_floor_and_direction()
     {
         var engine = SimEngine.Create(Repo.Load("v1-basic.yaml"));
-        engine.AdvanceTo(new SimTime(2_500));
+        engine.AdvanceTo(new Instant(2_500));
         Assert.Equal(new Dictionary<(int, Direction), int> { [(5, Direction.Up)] = 1, [(3, Direction.Down)] = 1, [(7, Direction.Up)] = 1 },
             engine.Waiting);
     }
@@ -146,7 +146,7 @@ public class SharedContractTests
     [Fact]
     public void Passenger_attributes_round_trip_and_are_absent_when_unset()
     {
-        var t = new SimTime(1_000);
+        var t = new Instant(1_000);
         DomainEvent[] events =
         [
             new PassengerArrived(t, 1, 1, 9, Load: 4, Vip: true, AccessLevel: 2),
@@ -169,8 +169,8 @@ public class SharedContractTests
         FleetEntry[] fleet = [new(0, "local", 10, 0.8, 0b1111_1110), new(1, "express", 12, 0.8, 0b1000_0010), new(2, "freight", 30, 1.0, 0b1111_1110)];
         DomainEvent[] events =
         [
-            new SimulationStarted(SimTime.Zero, "typed", 1, 7, "look", 10, 3, "cost", 10, 0.8, "next-trip", fleet),
-            new SimulationStarted(SimTime.Zero, "plain", 1, 10, "look", 10, 4, "cost", 10, 0.8),
+            new RunStarted(Instant.Zero, "typed", 1, 7, "look", 10, 3, "cost", 10, 0.8, "next-trip", fleet),
+            new RunStarted(Instant.Zero, "plain", 1, 10, "look", 10, 4, "cost", 10, 0.8),
         ];
         using var writer = new StringWriter();
         JsonlEventLog.Write(writer, events);
@@ -185,7 +185,7 @@ public class SharedContractTests
         const string started = """{"seq":0,"type":"SimulationStarted","t":0,"scenario":"lunch","seed":1,"floors":20,"scheduling":"look","passengers":264,"elevators":4,"dispatch":"cost","capacity":10,"bypassThreshold":0.8,"capacityMode":"next-trip"}""";
         const string arrived = """{"seq":1,"type":"PassengerArrived","t":1430,"passengerId":1,"from":16,"to":1}""";
 
-        var s = Assert.IsType<SimulationStarted>(JsonlEventLog.Deserialize(started));
+        var s = Assert.IsType<RunStarted>(JsonlEventLog.Deserialize(started));
         var a = Assert.IsType<PassengerArrived>(JsonlEventLog.Deserialize(arrived));
         Assert.Null(s.Fleet);
         Assert.Equal((null, null, null, 1, false), (a.Load, a.Vip, a.AccessLevel, a.LoadUnits, a.IsVip));

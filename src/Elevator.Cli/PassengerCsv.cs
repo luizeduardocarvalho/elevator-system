@@ -27,7 +27,7 @@ internal static class PassengerCsv
 
     private static string I(int v) => v.ToString(CultureInfo.InvariantCulture);
 
-    private static string T(SimTime? t) => t is { } x ? x.Seconds.ToString("0.000", CultureInfo.InvariantCulture) : "";
+    private static string T(Instant? t) => t is { } x ? x.Seconds.ToString("0.000", CultureInfo.InvariantCulture) : "";
 
     private static string D(double? v) => v is { } x ? x.ToString("0.000", CultureInfo.InvariantCulture) : "";
 }

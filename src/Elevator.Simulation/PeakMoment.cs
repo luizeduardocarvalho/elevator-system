@@ -6,7 +6,7 @@ namespace Elevator.Simulation;
 /// <summary>The busiest moment of a run and what the elevators held then.</summary>
 /// <param name="Outstanding">Riders plus accepted pickups, summed over the elevators.</param>
 /// <param name="PerElevator">(riders, accepted pickups) of each elevator, by id.</param>
-public sealed record Peak(SimTime At, int Outstanding, IReadOnlyList<(int Riders, int Pickups)> PerElevator);
+public sealed record Peak(Instant At, int Outstanding, IReadOnlyList<(int Riders, int Pickups)> PerElevator);
 
 /// <summary>
 /// Finds the moment of a scenario with the most outstanding work, to seed the steady-state throughput ramp (ADR-015):
@@ -19,7 +19,7 @@ public static class PeakMoment
     public static Peak Find(Scenario scenario, Strategy? strategy = null, long stepMs = 1_000)
     {
         var engine = SimEngine.Create(scenario, strategy);
-        var best = new Peak(SimTime.Zero, -1, []);
+        var best = new Peak(Instant.Zero, -1, []);
         while (!engine.Finished)
         {
             engine.AdvanceTo(engine.Now.AddMs(stepMs));
@@ -31,7 +31,7 @@ public static class PeakMoment
     }
 
     /// <summary>A fresh engine run to <paramref name="at"/> and handed over (each ramp step starts from its own copy).</summary>
-    public static Handover HandOverAt(Scenario scenario, SimTime at, Strategy? strategy = null)
+    public static Handover HandOverAt(Scenario scenario, Instant at, Strategy? strategy = null)
     {
         var engine = SimEngine.Create(scenario, strategy);
         engine.AdvanceTo(at);

@@ -65,7 +65,7 @@ public static class ViewModel
         info.Message);
 
     /// <summary>Sim time as h:mm:ss.f.</summary>
-    public static string Clock(SimTime t)
+    public static string Clock(Instant t)
     {
         var ms = t.Ms;
         return string.Create(Inv, $"{ms / 3_600_000}:{ms / 60_000 % 60:00}:{ms / 1000 % 60:00}.{ms / 100 % 10}");

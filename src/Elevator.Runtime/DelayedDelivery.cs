@@ -13,7 +13,7 @@ internal sealed class DelayedDelivery(RealClock clock, Func<Envelope, Cancellati
 
     public void Schedule(Envelope envelope) => ScheduleAt(clock.Now.AddMs(envelope.DelayMs), envelope);
 
-    public void ScheduleAt(SimTime due, Envelope envelope) =>
+    public void ScheduleAt(Instant due, Envelope envelope) =>
         _incoming.Writer.TryWrite((due.Ms, Interlocked.Increment(ref _seq), envelope with { DelayMs = 0 }));
 
     public Task Run(CancellationToken ct) => Task.Run(() => Loop(ct), CancellationToken.None);
@@ -33,7 +33,7 @@ internal sealed class DelayedDelivery(RealClock clock, Func<Envelope, Cancellati
             }
 
             using var wait = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            if (queue.Count > 0) wait.CancelAfter(clock.WallUntil(new SimTime(key.DueMs)));
+            if (queue.Count > 0) wait.CancelAfter(clock.WallUntil(new Instant(key.DueMs)));
             try
             {
                 await _incoming.Reader.WaitToReadAsync(wait.Token).ConfigureAwait(false);

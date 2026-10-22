@@ -8,7 +8,7 @@ namespace Elevator.Domain;
 /// <param name="Timestamp">t_call: when the passenger first pressed. Kept across re-registrations (left behind, released).</param>
 /// <param name="Id">Unique per passenger; submissions are idempotent by id.</param>
 /// <param name="Load">Load units (a person is 1), so freight can be modelled later.</param>
-public sealed record Request(int PickupFloor, int DestinationFloor, Direction Direction, SimTime Timestamp, int Id = 0, int Load = 1)
+public sealed record Request(int PickupFloor, int DestinationFloor, Direction Direction, Instant Timestamp, int Id = 0, int Load = 1)
 {
     /// <summary>VIP passenger: allowed on VIP-dedicated elevators (ADR-012); with VIP priority, not charged in the cost function for the delay it adds to others (ADR-015).</summary>
     public bool Vip { get; init; }
@@ -17,7 +17,7 @@ public sealed record Request(int PickupFloor, int DestinationFloor, Direction Di
     public int AccessLevel { get; init; }
 
     /// <param name="declared">Direction the caller claims (e.g. from an input file); must match pickup→destination.</param>
-    public static Result<Request> Create(int pickup, int destination, SimTime timestamp, int floors, Direction? declared = null, int id = 0, int load = 1)
+    public static Result<Request> Create(int pickup, int destination, Instant timestamp, int floors, Direction? declared = null, int id = 0, int load = 1)
     {
         var request = new Request(pickup, destination, declared ?? Directions.Between(pickup, destination) ?? Direction.Up, timestamp, id, load);
         return request.Check(floors) is { } error ? Result<Request>.Fail(error) : Result<Request>.Ok(request);

@@ -30,9 +30,9 @@ internal sealed class FaultScheduler : IHandler
 
     Address IHandler.Address => Address;
 
-    public SimTime? NextWakeUp => null;
+    public Instant? NextWakeUp => null;
 
-    public void Handle(Message message, SimTime now, Outbox outbox)
+    public void Handle(Message message, Instant now, Outbox outbox)
     {
         if (message is ScheduleFault { Command: var c })
             outbox.Send(Domain.Control.Address.Elevator(c.ElevatorId), new ApplyFault(c), Math.Max(0, c.At.Ms - now.Ms));

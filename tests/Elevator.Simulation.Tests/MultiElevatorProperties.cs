@@ -25,7 +25,7 @@ public class MultiElevatorProperties
         from specs in Gen.ArrayOf(PassengerGen(floors), count)
         from dispatch in Gen.Elements(Dispatches)
         select new Case(
-            new Scenario("prop", 1, floors, ElevatorTiming.Default, SimTime.FromSeconds(200_000), specs, null,
+            new Scenario("prop", 1, floors, ElevatorTiming.Default, Instant.FromSeconds(200_000), specs, null,
                 elevators, capacity, threshold, dispatch, null, new MessageLatency(snapshotMs, dispatchMs)),
             new Strategy(dispatch));
 
@@ -33,7 +33,7 @@ public class MultiElevatorProperties
         from at in Gen.Choose(0, 240_000)
         from from_ in Gen.Choose(1, floors)
         from offset in Gen.Choose(1, floors - 1)
-        select new PassengerSpec(new SimTime(at), from_, (from_ - 1 + offset) % floors + 1);
+        select new PassengerSpec(new Instant(at), from_, (from_ - 1 + offset) % floors + 1);
 
     [Property(MaxTest = 120)]
     public Property System_invariants_hold() => Prop.ForAll(CaseGen().ToArbitrary(), c =>
@@ -47,7 +47,7 @@ public class MultiElevatorProperties
 
         var owner = new Dictionary<int, int>();
         var load = new Dictionary<int, int>();
-        var waitingSince = new Dictionary<int, SimTime>();
+        var waitingSince = new Dictionary<int, Instant>();
         var boardedAt = result.Events.OfType<PassengerBoarded>().Select(b => (b.PassengerId, b.ElevatorId, b.At)).ToHashSet();
         foreach (var e in result.Events)
         {

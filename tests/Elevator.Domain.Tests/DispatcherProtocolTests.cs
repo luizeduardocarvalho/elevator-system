@@ -13,7 +13,7 @@ public class DispatcherProtocolTests
             c.Candidates.OrderBy(s => s.ElevatorId).Select(s => new DispatchChoice(s.ElevatorId, s.ElevatorId, c.Now.AddMs(1_000))).FirstOrDefault();
     }
 
-    private static Request R(int id) => Request.Create(3, 7, SimTime.Zero, 10, id: id).Value!;
+    private static Request R(int id) => Request.Create(3, 7, Instant.Zero, 10, id: id).Value!;
 
     private static (DispatcherHandler D, Outbox O) Make(int elevators = 2)
     {
@@ -22,7 +22,7 @@ public class DispatcherProtocolTests
         for (var i = 0; i < elevators; i++)
         {
             var snapshot = new Elevator(i, 10, ElevatorTiming.Default, TestPolicies.NearestCarCallThenOldestHallCall).Snapshot();
-            d.Handle(new SnapshotPublished(snapshot), SimTime.Zero, o);
+            d.Handle(new SnapshotPublished(snapshot), Instant.Zero, o);
         }
         o.Clear();
         return (d, o);
@@ -39,14 +39,14 @@ public class DispatcherProtocolTests
     public void Stale_rejections_from_everyone_lead_to_a_forced_assignment()
     {
         var (d, o) = Make();
-        d.Handle(new SubmitRequest(R(1)), SimTime.Zero, o);
+        d.Handle(new SubmitRequest(R(1)), Instant.Zero, o);
         Assert.False(LastAssign(o, out var first).Forced);
         Assert.Equal(0, first);
 
-        d.Handle(new AssignmentRejectedMsg(1, 0, AssignmentReason.Stale), SimTime.Zero, o);
+        d.Handle(new AssignmentRejectedMsg(1, 0, AssignmentReason.Stale), Instant.Zero, o);
         Assert.Equal((1, false), (Elevator(LastAssign(o, out var second), second), LastAssign(o, out _).Forced));
 
-        d.Handle(new AssignmentRejectedMsg(1, 1, AssignmentReason.Stale), SimTime.Zero, o);
+        d.Handle(new AssignmentRejectedMsg(1, 1, AssignmentReason.Stale), Instant.Zero, o);
         var forced = LastAssign(o, out var third);
         Assert.True(forced.Forced);
         Assert.Equal(0, third);
@@ -57,9 +57,9 @@ public class DispatcherProtocolTests
     public void Capacity_rejections_never_force_the_request_waits_instead()
     {
         var (d, o) = Make();
-        d.Handle(new SubmitRequest(R(1)), SimTime.Zero, o);
-        d.Handle(new AssignmentRejectedMsg(1, 0, AssignmentReason.Capacity), SimTime.Zero, o);
-        d.Handle(new AssignmentRejectedMsg(1, 1, AssignmentReason.Stale), SimTime.Zero, o);
+        d.Handle(new SubmitRequest(R(1)), Instant.Zero, o);
+        d.Handle(new AssignmentRejectedMsg(1, 0, AssignmentReason.Capacity), Instant.Zero, o);
+        d.Handle(new AssignmentRejectedMsg(1, 1, AssignmentReason.Stale), Instant.Zero, o);
 
         Assert.DoesNotContain(o.Events, e => e is AssignmentProposed { Forced: true });
         Assert.Single(o.Events.OfType<DispatchDeferred>());
@@ -69,13 +69,13 @@ public class DispatcherProtocolTests
     public void A_new_snapshot_makes_a_rejecting_elevator_eligible_again()
     {
         var (d, o) = Make(elevators: 1);
-        d.Handle(new SubmitRequest(R(1)), SimTime.Zero, o);
-        d.Handle(new AssignmentRejectedMsg(1, 0, AssignmentReason.Capacity), SimTime.Zero, o);
+        d.Handle(new SubmitRequest(R(1)), Instant.Zero, o);
+        d.Handle(new AssignmentRejectedMsg(1, 0, AssignmentReason.Capacity), Instant.Zero, o);
         Assert.Single(o.Events.OfType<DispatchDeferred>());
 
         o.Clear();
         var snapshot = new Elevator(0, 10, ElevatorTiming.Default, TestPolicies.NearestCarCallThenOldestHallCall).Snapshot();
-        d.Handle(new SnapshotPublished(snapshot), new SimTime(5_000), o);
+        d.Handle(new SnapshotPublished(snapshot), new Instant(5_000), o);
         Assert.Single(o.Messages, m => m.Message is Assign);
     }
 
@@ -83,8 +83,8 @@ public class DispatcherProtocolTests
     public void Submissions_are_idempotent_while_in_flight()
     {
         var (d, o) = Make();
-        d.Handle(new SubmitRequest(R(1)), SimTime.Zero, o);
-        d.Handle(new SubmitRequest(R(1)), SimTime.Zero, o);
+        d.Handle(new SubmitRequest(R(1)), Instant.Zero, o);
+        d.Handle(new SubmitRequest(R(1)), Instant.Zero, o);
 
         Assert.Single(o.Events.OfType<RequestSubmitted>());
         Assert.Single(o.Events.OfType<DuplicateSubmission>());
@@ -95,12 +95,12 @@ public class DispatcherProtocolTests
     public void Acceptance_is_acknowledged_to_the_client_and_pickup_ends_tracking()
     {
         var (d, o) = Make();
-        d.Handle(new SubmitRequest(R(1)), SimTime.Zero, o);
-        d.Handle(new AssignmentAcceptedMsg(1, 0), SimTime.Zero, o);
+        d.Handle(new SubmitRequest(R(1)), Instant.Zero, o);
+        d.Handle(new AssignmentAcceptedMsg(1, 0), Instant.Zero, o);
         Assert.Contains(o.Messages, m => m is { To.Kind: ActorKind.Client, Message: RequestAssigned { RequestId: 1, ElevatorId: 0 } });
         Assert.Equal(1, d.InFlight);
 
-        d.Handle(new RequestPickedUp(1, 0), SimTime.Zero, o);
+        d.Handle(new RequestPickedUp(1, 0), Instant.Zero, o);
         Assert.Equal(0, d.InFlight);
     }
 
@@ -108,11 +108,11 @@ public class DispatcherProtocolTests
     public void Re_registration_keeps_the_original_request()
     {
         var (d, o) = Make();
-        d.Handle(new SubmitRequest(R(1)), SimTime.Zero, o);
-        d.Handle(new AssignmentAcceptedMsg(1, 0), SimTime.Zero, o);
+        d.Handle(new SubmitRequest(R(1)), Instant.Zero, o);
+        d.Handle(new AssignmentAcceptedMsg(1, 0), Instant.Zero, o);
         o.Clear();
 
-        d.Handle(new ReRegister(1, AssignmentReason.LeftBehind), new SimTime(40_000), o);
+        d.Handle(new ReRegister(1, AssignmentReason.LeftBehind), new Instant(40_000), o);
         var again = LastAssign(o, out _);
         Assert.Equal((1, 0L), (again.Request.Id, again.Request.Timestamp.Ms));
         Assert.Empty(o.Events.OfType<RequestSubmitted>());
@@ -137,12 +137,12 @@ public class OverloadModeTests
             new DispatcherOptions(OverloadThreshold: 2), overloadFallback: new Fixed("fallback", 1));
         var o = new Outbox();
         foreach (var i in new[] { 0, 1 })
-            d.Handle(new SnapshotPublished(new Elevator(i, 10, ElevatorTiming.Default, TestPolicies.NearestCarCallThenOldestHallCall).Snapshot()), SimTime.Zero, o);
+            d.Handle(new SnapshotPublished(new Elevator(i, 10, ElevatorTiming.Default, TestPolicies.NearestCarCallThenOldestHallCall).Snapshot()), Instant.Zero, o);
 
         int AssignedTo(int id)
         {
             o.Clear();
-            d.Handle(new SubmitRequest(Request.Create(3, 7, SimTime.Zero, 10, id: id).Value!), SimTime.Zero, o);
+            d.Handle(new SubmitRequest(Request.Create(3, 7, Instant.Zero, 10, id: id).Value!), Instant.Zero, o);
             return o.Messages.Single(m => m.Message is Assign).To.Index;
         }
 
@@ -150,7 +150,7 @@ public class OverloadModeTests
         Assert.Equal(1, AssignedTo(3));
         Assert.Contains(o.Events, e => e is OverloadModeChanged { Active: true, InFlight: 3 });
 
-        foreach (var id in new[] { 1, 2, 3 }) d.Handle(new RequestPickedUp(id, 0), SimTime.Zero, o);
+        foreach (var id in new[] { 1, 2, 3 }) d.Handle(new RequestPickedUp(id, 0), Instant.Zero, o);
         Assert.Equal(0, AssignedTo(4));
         Assert.Contains(o.Events, e => e is OverloadModeChanged { Active: false });
     }

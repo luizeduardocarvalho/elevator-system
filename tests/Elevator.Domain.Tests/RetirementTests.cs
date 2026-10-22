@@ -18,23 +18,23 @@ public class RetirementTests
             c.Candidates.Select(s => new DispatchChoice(s.ElevatorId, 0, c.Now)).FirstOrDefault();
     }
 
-    private static Request R(int id, int from = 3, int to = 7) => Request.Create(from, to, SimTime.Zero, 10, id: id).Value!;
+    private static Request R(int id, int from = 3, int to = 7) => Request.Create(from, to, Instant.Zero, 10, id: id).Value!;
 
     private static ElevatorHandler Elevator0() => new(new Elevator(0, 10, ElevatorTiming.Default, TestPolicies.NearestCarCallThenOldestHallCall));
 
-    private static void Accept(ElevatorHandler h, Request r, Outbox o) => h.Handle(new Assign(r, null, Forced: false), SimTime.Zero, o);
+    private static void Accept(ElevatorHandler h, Request r, Outbox o) => h.Handle(new Assign(r, null, Forced: false), Instant.Zero, o);
 
     [Fact]
     public void Retiring_an_accepted_pickup_drops_it_without_releasing_it_and_publishes_a_snapshot()
     {
         var h = Elevator0();
         var o = new Outbox();
-        h.Handle(new Start(), SimTime.Zero, o);
+        h.Handle(new Start(), Instant.Zero, o);
         Accept(h, R(1), o);
         Assert.Contains(h.Elevator.Snapshot().HallCalls, c => c.Requests.Any(r => r.Id == 1));
         o.Clear();
 
-        h.Handle(new PassengerRetired(1, 0), SimTime.Zero, o);
+        h.Handle(new PassengerRetired(1, 0), Instant.Zero, o);
 
         Assert.DoesNotContain(h.Elevator.Snapshot().HallCalls, c => c.Requests.Any(r => r.Id == 1));
         Assert.Contains(o.Messages, m => m.Message is SnapshotPublished);
@@ -48,10 +48,10 @@ public class RetirementTests
         var withRequest = Elevator0();
         var without = Elevator0();
         var o = new Outbox();
-        foreach (var h in new[] { withRequest, without }) { h.Handle(new Start(), SimTime.Zero, o); Accept(h, R(1, 2, 9), o); }
+        foreach (var h in new[] { withRequest, without }) { h.Handle(new Start(), Instant.Zero, o); Accept(h, R(1, 2, 9), o); }
 
         Accept(withRequest, R(2), o);
-        withRequest.Handle(new PassengerRetired(2, 0), SimTime.Zero, o);
+        withRequest.Handle(new PassengerRetired(2, 0), Instant.Zero, o);
 
         var (a, b) = (withRequest.Elevator.Snapshot(), without.Elevator.Snapshot());
         Assert.Equal(b.HallCalls.SelectMany(c => c.Requests), a.HallCalls.SelectMany(c => c.Requests));
@@ -63,11 +63,11 @@ public class RetirementTests
     {
         var h = Elevator0();
         var o = new Outbox();
-        h.Handle(new Start(), SimTime.Zero, o);
+        h.Handle(new Start(), Instant.Zero, o);
         var version = h.Elevator.Version;
         o.Clear();
 
-        h.Handle(new PassengerRetired(42, 0), SimTime.Zero, o);
+        h.Handle(new PassengerRetired(42, 0), Instant.Zero, o);
 
         Assert.Equal(version, h.Elevator.Version);
         Assert.DoesNotContain(o.Messages, m => m.Message is SnapshotPublished);
@@ -78,12 +78,12 @@ public class RetirementTests
     {
         var p = new PassengersHandler(10);
         var o = new Outbox();
-        p.Handle(new PassengerArrives(R(1)), SimTime.Zero, o);
-        p.Handle(new AssignmentAcceptedMsg(1, 0), SimTime.Zero, o);
+        p.Handle(new PassengerArrives(R(1)), Instant.Zero, o);
+        p.Handle(new AssignmentAcceptedMsg(1, 0), Instant.Zero, o);
         Assert.Equal(1, p.WaitingCounts[(3, Direction.Up)]);
         o.Clear();
 
-        p.Handle(new PassengerRetired(1, 0), SimTime.Zero, o);
+        p.Handle(new PassengerRetired(1, 0), Instant.Zero, o);
 
         Assert.Empty(p.WaitingCounts);
         Assert.True(p.Empty);
@@ -98,12 +98,12 @@ public class RetirementTests
     {
         var p = new PassengersHandler(10);
         var o = new Outbox();
-        p.Handle(new PassengerArrives(R(1)), SimTime.Zero, o);
-        p.Handle(new AssignmentAcceptedMsg(1, 0), SimTime.Zero, o);
-        p.Handle(new ElevatorNotice(new HallCallAnswered(SimTime.Zero, 0, 3, Direction.Up)), SimTime.Zero, o);
+        p.Handle(new PassengerArrives(R(1)), Instant.Zero, o);
+        p.Handle(new AssignmentAcceptedMsg(1, 0), Instant.Zero, o);
+        p.Handle(new ElevatorNotice(new HallCallAnswered(Instant.Zero, 0, 3, Direction.Up)), Instant.Zero, o);
         o.Clear();
 
-        p.Handle(new PassengerRetired(1, 0), SimTime.Zero, o);
+        p.Handle(new PassengerRetired(1, 0), Instant.Zero, o);
 
         Assert.Equal(0, p.Retired);
         Assert.Empty(o.Messages);
@@ -114,12 +114,12 @@ public class RetirementTests
     {
         var d = new DispatcherHandler(new First(), 1, ElevatorTiming.Default);
         var o = new Outbox();
-        d.Handle(new SnapshotPublished(new Elevator(0, 10, ElevatorTiming.Default, TestPolicies.NearestCarCallThenOldestHallCall).Snapshot()), SimTime.Zero, o);
-        d.Handle(new SubmitRequest(R(1)), SimTime.Zero, o);
-        d.Handle(new AssignmentAcceptedMsg(1, 0, 1), SimTime.Zero, o);
+        d.Handle(new SnapshotPublished(new Elevator(0, 10, ElevatorTiming.Default, TestPolicies.NearestCarCallThenOldestHallCall).Snapshot()), Instant.Zero, o);
+        d.Handle(new SubmitRequest(R(1)), Instant.Zero, o);
+        d.Handle(new AssignmentAcceptedMsg(1, 0, 1), Instant.Zero, o);
         Assert.Equal(1, d.InFlight);
 
-        d.Handle(new RequestPickedUp(1, 0), SimTime.Zero, o);
+        d.Handle(new RequestPickedUp(1, 0), Instant.Zero, o);
 
         Assert.Equal(0, d.InFlight);
     }

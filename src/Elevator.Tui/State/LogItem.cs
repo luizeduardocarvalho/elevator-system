@@ -11,12 +11,12 @@ namespace Elevator.Tui.State;
 /// and flat <c>key=value</c> fields so the event tail can still show it. Not a <see cref="DomainEvent"/>: the TUI
 /// adds no event types (shared v3 contract).
 /// </summary>
-public sealed record UnknownEvent(SimTime At, string Type, IReadOnlyList<KeyValuePair<string, string>> Fields);
+public sealed record UnknownEvent(Instant At, string Type, IReadOnlyList<KeyValuePair<string, string>> Fields);
 
 /// <summary>One line of the log as the TUI folds it: a known event or an unknown one (exactly one is set).</summary>
 public readonly record struct LogItem(DomainEvent? Known, UnknownEvent? Unknown)
 {
-    public SimTime At => Known?.At ?? Unknown!.At;
+    public Instant At => Known?.At ?? Unknown!.At;
 
     public static implicit operator LogItem(DomainEvent e) => new(e, null);
 
@@ -39,7 +39,7 @@ public static class LogReader
     public static IReadOnlyList<LogItem> Read(TextReader reader)
     {
         var items = new List<LogItem>();
-        var last = SimTime.Zero;
+        var last = Instant.Zero;
         var lineNo = 0;
         while (reader.ReadLine() is { } line)
         {
@@ -52,7 +52,7 @@ public static class LogReader
         return items;
     }
 
-    public static LogItem Parse(string line, SimTime previous, int lineNo = 0)
+    public static LogItem Parse(string line, Instant previous, int lineNo = 0)
     {
         try
         {
@@ -64,14 +64,14 @@ public static class LogReader
         }
     }
 
-    private static UnknownEvent ParseUnknown(string line, SimTime previous, int lineNo)
+    private static UnknownEvent ParseUnknown(string line, Instant previous, int lineNo)
     {
         try
         {
             using var doc = JsonDocument.Parse(line);
             if (doc.RootElement.ValueKind != JsonValueKind.Object) return Unreadable(previous, lineNo);
             var root = doc.RootElement;
-            var at = root.TryGetProperty("t", out var t) && t.TryGetInt64(out var ms) ? new SimTime(ms) : previous;
+            var at = root.TryGetProperty("t", out var t) && t.TryGetInt64(out var ms) ? new Instant(ms) : previous;
             var type = root.TryGetProperty("type", out var ty) && ty.ValueKind == JsonValueKind.String ? ty.GetString()! : "UNKNOWN";
             return new UnknownEvent(at, type, Flatten(root));
         }
@@ -81,7 +81,7 @@ public static class LogReader
         }
     }
 
-    private static UnknownEvent Unreadable(SimTime at, int lineNo) =>
+    private static UnknownEvent Unreadable(Instant at, int lineNo) =>
         new(at, "UNREADABLE", [new("line", lineNo.ToString(CultureInfo.InvariantCulture))]);
 
     /// <summary>

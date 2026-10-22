@@ -11,7 +11,7 @@ public class ContractV31Tests
     {
         var log = SimEngine.Run(Repo.Load("fleet.yaml")).Events;
 
-        var started = Assert.IsType<SimulationStarted>(log[0]);
+        var started = Assert.IsType<RunStarted>(log[0]);
         Assert.Equal(["local", "local", "express", "freight"], started.Fleet!.Select(f => f.Type));
         Assert.Equal([10, 10, 10, 20], started.Fleet!.Select(f => f.Capacity));
 
@@ -37,13 +37,13 @@ public class ContractV31Tests
     {
         static IReadOnlyList<PassengerRecord> Analyze(IReadOnlyList<FleetEntry>? fleet) => PassengerLifecycle.Analyze(
         [
-            new SimulationStarted(SimTime.Zero, "unit", 1, 10, "look", 2, 1, "cost", 10, 0.8, "next-trip", fleet),
-            new PassengerArrived(SimTime.Zero, 2, 1, 5, Load: 10),
-            new AssignmentAccepted(SimTime.Zero, 2, 0),
-            new PassengerBoarded(SimTime.Zero, 2, 0, 1),
-            new PassengerArrived(SimTime.Zero, 1, 3, 9),
-            new AssignmentAccepted(SimTime.Zero, 1, 0),
-            new PassengerBoarded(new SimTime(10_000), 1, 0, 3),
+            new RunStarted(Instant.Zero, "unit", 1, 10, "look", 2, 1, "cost", 10, 0.8, "next-trip", fleet),
+            new PassengerArrived(Instant.Zero, 2, 1, 5, Load: 10),
+            new AssignmentAccepted(Instant.Zero, 2, 0),
+            new PassengerBoarded(Instant.Zero, 2, 0, 1),
+            new PassengerArrived(Instant.Zero, 1, 3, 9),
+            new AssignmentAccepted(Instant.Zero, 1, 0),
+            new PassengerBoarded(new Instant(10_000), 1, 0, 3),
         ]);
 
         var building = Analyze(null).Single(r => r.Id == 1);

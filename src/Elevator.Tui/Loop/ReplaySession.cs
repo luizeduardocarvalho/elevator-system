@@ -16,41 +16,41 @@ public sealed class ReplaySession : ISession
     public ReplaySession(IReadOnlyList<LogItem> items)
     {
         _items = items;
-        End = items.Count == 0 ? SimTime.Zero : items.Max(i => i.At);
+        End = items.Count == 0 ? Instant.Zero : items.Max(i => i.At);
         State = new BuildingState();
-        FoldTo(SimTime.Zero);
+        FoldTo(Instant.Zero);
     }
 
     public string Source => "REPLAY";
 
     public BuildingState State { get; private set; }
 
-    public SimTime Now { get; private set; }
+    public Instant Now { get; private set; }
 
     /// <summary>The last event's time: the cursor stops there.</summary>
-    public SimTime End { get; }
+    public Instant End { get; }
 
     public bool AtEnd => _next >= _items.Count && Now >= End;
 
     public bool ReadOnly => true;
 
-    public void Step() => FoldTo(SimTime.Min(Now.AddMs(Pacer.TickMs), End));
+    public void Step() => FoldTo(Instant.Min(Now.AddMs(Pacer.TickMs), End));
 
-    public void SeekTo(SimTime target)
+    public void SeekTo(Instant target)
     {
-        target = SimTime.Min(target < SimTime.Zero ? SimTime.Zero : target, End);
+        target = Instant.Min(target < Instant.Zero ? Instant.Zero : target, End);
         if (target < Now)
         {
             State = new BuildingState();
             _next = 0;
-            Now = SimTime.Zero;
+            Now = Instant.Zero;
         }
         FoldTo(target);
     }
 
     public string Command(TuiKey key, int elevator) => "replay is read-only: commands are already in the log";
 
-    private void FoldTo(SimTime target)
+    private void FoldTo(Instant target)
     {
         while (_next < _items.Count && _items[_next].At <= target) State.Apply(_items[_next++]);
         Now = target;

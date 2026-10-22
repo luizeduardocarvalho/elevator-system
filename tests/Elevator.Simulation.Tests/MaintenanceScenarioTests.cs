@@ -41,7 +41,7 @@ public class MaintenanceScenarioTests
         Assert.DoesNotContain(events, ev => ev is AssignmentAccepted { ElevatorId: E } a && a.At >= requested.At && a.At < exited.At);
         Assert.DoesNotContain(events, ev => ev is PassengerBoarded { ElevatorId: E } b && b.At > requested.At && b.At < exited.At);
         Assert.Contains(events, ev => ev is AssignmentAccepted { ElevatorId: E } a && a.At >= exited.At);
-        Assert.Equal(new SimTime(at.Ms + 600_000), exited.At);
+        Assert.Equal(new Instant(at.Ms + 600_000), exited.At);
         Assert.Equal([FaultKind.MaintenanceOn, FaultKind.MaintenanceOff], events.OfType<FaultCommandApplied>().Select(f => f.Kind));
     }
 
@@ -50,7 +50,7 @@ public class MaintenanceScenarioTests
     {
         var scenario = Repo.Load("v1-basic.yaml") with
         {
-            Faults = [new FaultCommand(new SimTime(1_000), 0, FaultKind.MaintenanceOn), new FaultCommand(new SimTime(200_000), 0, FaultKind.MaintenanceOff)],
+            Faults = [new FaultCommand(new Instant(1_000), 0, FaultKind.MaintenanceOn), new FaultCommand(new Instant(200_000), 0, FaultKind.MaintenanceOff)],
         };
         var result = SimEngine.Run(scenario);
         Assert.Equal(0, result.Unserved);

@@ -4,7 +4,7 @@ namespace Elevator.Domain.Tests;
 
 public class ElevatorTypeTests
 {
-    private static Request R(int id, int from, int to) => Request.Create(from, to, SimTime.Zero, Harness.Floors, id: id).Value!;
+    private static Request R(int id, int from, int to) => Request.Create(from, to, Instant.Zero, Harness.Floors, id: id).Value!;
 
     private static readonly ElevatorTiming Fast = new(FloorTravelMs: 1_000, DoorOpeningMs: 500, DoorDwellMs: 2_000, DoorClosingMs: 500);
 
@@ -46,7 +46,7 @@ public class ElevatorTypeTests
     {
         var e = Make(timing: Fast);
         e.Board(R(1, 1, 4));
-        e.Tick(new SimTime(3_000));
+        e.Tick(new Instant(3_000));
         Assert.Contains(e.DrainEvents(), ev => ev is StateChanged { Trigger: Trigger.ArriveAndOpen, Floor: 4, At.Ms: 3_000 });
     }
 
@@ -55,7 +55,7 @@ public class ElevatorTypeTests
     {
         var e = Make(Express);
         e.Board(R(1, 1, 9));
-        e.Tick(new SimTime(60_000));
+        e.Tick(new Instant(60_000));
         var events = e.DrainEvents();
         Assert.Equal([2, 3, 4, 5, 6, 7, 8, 9], events.OfType<FloorReached>().Select(f => f.Floor));
         Assert.Equal([9], events.OfType<DoorsOpened>().Select(d => d.Floor));
@@ -66,9 +66,9 @@ public class ElevatorTypeTests
     {
         var e = Make(Express);
         e.AssignPickup(R(1, 8, 10));
-        e.Tick(new SimTime(3_000));
+        e.Tick(new Instant(3_000));
         Assert.True(e.Unassign(1));
-        e.Tick(new SimTime(60_000));
+        e.Tick(new Instant(60_000));
         var opened = Assert.Single(e.DrainEvents().OfType<DoorsOpened>());
         Assert.Equal(6, opened.Floor);
     }

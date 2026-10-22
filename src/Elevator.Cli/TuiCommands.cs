@@ -55,7 +55,7 @@ internal class ViewSettings : CommandSettings
             return 2;
         }
         if (Paused) pacer.TogglePause();
-        if (At is { } at) session.SeekTo(SimTime.FromSeconds(at));
+        if (At is { } at) session.SeekTo(Instant.FromSeconds(at));
 
         if (Plain || !TuiHost.IsInteractiveTerminal)
         {

@@ -50,9 +50,9 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
 
         internal int Slot(int source, int dest) => (source + 1) * Width + dest;
 
-        public SimTime Horizon { get; internal set; }
+        public Instant Horizon { get; internal set; }
 
-        public SimTime? PickupAt { get; internal set; }
+        public Instant? PickupAt { get; internal set; }
 
         public int LoadAtPickup { get; internal set; }
 
@@ -65,9 +65,9 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
 
     public const long DefaultHorizonMs = 600_000;
 
-    public SimTime? EstimatePickup(ElevatorSnapshot snapshot, Request request, SimTime now) => Project(snapshot, request, now).PickupAt;
+    public Instant? EstimatePickup(ElevatorSnapshot snapshot, Request request, Instant now) => Project(snapshot, request, now).PickupAt;
 
-    public Outcome Project(ElevatorSnapshot snapshot, Request? extra, SimTime now)
+    public Outcome Project(ElevatorSnapshot snapshot, Request? extra, Instant now)
     {
         var start = snapshot.At > now ? snapshot.At : now;
         var run = new Run(snapshot, scheduling, timing, extra);
@@ -104,7 +104,7 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
         public int Source { get; } = source;
         public int Floor { get; } = call.Floor;
         public Direction Direction { get; } = call.Direction;
-        public SimTime RegisteredAt { get; } = call.RegisteredAt;
+        public Instant RegisteredAt { get; } = call.RegisteredAt;
         public HallCall Call { get; } = call;
         public Request? Extra { get; set; }
         public bool HasRequests => Call.Requests.Count > 0 || Extra is not null;
@@ -378,7 +378,7 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
 
         private void BoardExtra(Request x)
         {
-            Result.PickupAt = new SimTime(_now);
+            Result.PickupAt = new Instant(_now);
             Result.LoadAtPickup = _load;
             AddDropOff(x.DestinationFloor);
             _load += x.Load;
@@ -414,7 +414,7 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
                 return;
             }
 
-            _pickups.Add(new Pickup(_nextSource++, new HallCall(r.PickupFloor, r.Direction, new SimTime(_now))) { Extra = r });
+            _pickups.Add(new Pickup(_nextSource++, new HallCall(r.PickupFloor, r.Direction, new Instant(_now))) { Extra = r });
             if (_state == ElevatorState.Idle)
             {
                 DecideFromIdle();

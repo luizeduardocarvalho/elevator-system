@@ -41,7 +41,7 @@ public class SupervisionTests
     public async Task A_handler_exception_faults_the_system_instead_of_hanging_callers()
     {
         var engine = SimEngine.Create(Scenario());
-        engine.AdvanceTo(new SimTime(10_000));
+        engine.AdvanceTo(new Instant(10_000));
         var handover = engine.HandOver();
         var handlers = handover.Handlers.Select(h => h is PassengersHandler p ? new ThrowsOn(p, requestId: 666) : h).ToList();
 
@@ -64,16 +64,16 @@ public class SupervisionTests
         }
     }
 
-    private static Scenario Scenario() => new("supervision", 1, 10, ElevatorTiming.Default, SimTime.FromSeconds(600),
-        [new PassengerSpec(SimTime.Zero, 1, 5)], null);
+    private static Scenario Scenario() => new("supervision", 1, 10, ElevatorTiming.Default, Instant.FromSeconds(600),
+        [new PassengerSpec(Instant.Zero, 1, 5)], null);
 
     private sealed class ThrowsOn(IHandler inner, int requestId) : IHandler
     {
         public Address Address => inner.Address;
 
-        public SimTime? NextWakeUp => inner.NextWakeUp;
+        public Instant? NextWakeUp => inner.NextWakeUp;
 
-        public void Handle(Message message, SimTime now, Outbox outbox)
+        public void Handle(Message message, Instant now, Outbox outbox)
         {
             if (message is PassengerArrives { Request.Id: var id } && id == requestId)
                 throw new InvalidOperationException("handler bug");

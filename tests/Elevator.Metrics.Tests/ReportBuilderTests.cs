@@ -5,14 +5,14 @@ namespace Elevator.Metrics.Tests;
 
 public class ReportBuilderTests
 {
-    private static SimTime S(double seconds) => SimTime.FromSeconds(seconds);
+    private static Instant S(double seconds) => Instant.FromSeconds(seconds);
 
     [Fact]
     public void Builds_report_from_events_only()
     {
         DomainEvent[] events =
         [
-            new SimulationStarted(S(0), "synthetic", 9, 10, "look", 3),
+            new RunStarted(S(0), "synthetic", 9, 10, "look", 3),
             new PassengerArrived(S(0), 1, 1, 5),
             new PassengerArrived(S(2), 2, 4, 2),
             new PassengerArrived(S(3), 3, 6, 1),
@@ -24,7 +24,7 @@ public class ReportBuilderTests
             new PassengerBoarded(S(12), 2, 0, 4),
             new DoorsOpened(S(16), 0, 2, null),
             new PassengerAlighted(S(16), 2, 0, 2),
-            new SimulationEnded(S(20), 2, 1),
+            new RunEnded(S(20), 2, 1),
         ];
 
         var report = ReportBuilder.Build(events);

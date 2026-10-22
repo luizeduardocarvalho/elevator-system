@@ -12,8 +12,8 @@ public class EmergencyPreemptionTests
     {
         await using var system = ElevatorSystem.Start(new RuntimeOptions(Floors: 20, Elevators: 2, Speed: 50) { StartPaused = true });
         for (var i = 0; i < 50; i++)
-            system.Post(Address.Elevator(0), new Assign(Request.Create(1 + i % 19, 20, SimTime.Zero, 20, id: 90_000 + i).Value!, null, Forced: true));
-        system.FaultInjector.EmergencyStop(0, SimTime.Zero);
+            system.Post(Address.Elevator(0), new Assign(Request.Create(1 + i % 19, 20, Instant.Zero, 20, id: 90_000 + i).Value!, null, Forced: true));
+        system.FaultInjector.EmergencyStop(0, Instant.Zero);
         system.Resume();
 
         var deadline = DateTime.UtcNow.AddSeconds(10);
@@ -32,8 +32,8 @@ public class EmergencyPreemptionTests
     {
         await using var system = ElevatorSystem.Start(new RuntimeOptions(Floors: 20, Elevators: 1, Speed: 50) { StartPaused = true });
         for (var i = 0; i < 5; i++)
-            system.Post(Address.Elevator(0), new Assign(Request.Create(2, 9, SimTime.Zero, 20, id: 90_000 + i).Value!, null, Forced: true));
-        system.FaultInjector.RequestMaintenance(0, SimTime.Zero);
+            system.Post(Address.Elevator(0), new Assign(Request.Create(2, 9, Instant.Zero, 20, id: 90_000 + i).Value!, null, Forced: true));
+        system.FaultInjector.RequestMaintenance(0, Instant.Zero);
         system.Resume();
 
         var deadline = DateTime.UtcNow.AddSeconds(10);
@@ -46,8 +46,8 @@ public class EmergencyPreemptionTests
     public async Task A_clear_posted_before_a_stop_does_not_overtake_or_get_overtaken()
     {
         await using var system = ElevatorSystem.Start(new RuntimeOptions(Floors: 20, Elevators: 1, Speed: 50) { StartPaused = true });
-        system.FaultInjector.ClearEmergency(0, SimTime.Zero);
-        system.FaultInjector.EmergencyStop(0, SimTime.Zero);
+        system.FaultInjector.ClearEmergency(0, Instant.Zero);
+        system.FaultInjector.EmergencyStop(0, Instant.Zero);
         system.Resume();
 
         var deadline = DateTime.UtcNow.AddSeconds(10);
@@ -64,9 +64,9 @@ public class EmergencyPreemptionTests
 
         public Address Address => Address.Dispatcher;
 
-        public SimTime? NextWakeUp => null;
+        public Instant? NextWakeUp => null;
 
-        public void Handle(Message message, SimTime now, Outbox outbox) => Seen.Add(message switch
+        public void Handle(Message message, Instant now, Outbox outbox) => Seen.Add(message switch
         {
             ApplyFault f => $"control:{f.Command.Kind}",
             SubmitRequest r => $"request:{r.Request.Id}",
@@ -82,10 +82,10 @@ public class EmergencyPreemptionTests
         var requests = System.Threading.Channels.Channel.CreateUnbounded<SubmitRequest>();
         var probe = new Probe();
         var actor = new Actor(probe, system, requests.Reader);
-        for (var i = 1; i <= 3; i++) requests.Writer.TryWrite(new SubmitRequest(Request.Create(2, 9, SimTime.Zero, 20, id: i).Value!));
+        for (var i = 1; i <= 3; i++) requests.Writer.TryWrite(new SubmitRequest(Request.Create(2, 9, Instant.Zero, 20, id: i).Value!));
         for (var i = 1; i <= 3; i++) actor.Mailbox.Writer.TryWrite(new RequestPickedUp(i, 0));
-        actor.Control.Writer.TryWrite(new ApplyFault(new FaultCommand(SimTime.Zero, 0, FaultKind.EmergencyStop, null)));
-        actor.Control.Writer.TryWrite(new ApplyFault(new FaultCommand(SimTime.Zero, 0, FaultKind.EmergencyClear, null)));
+        actor.Control.Writer.TryWrite(new ApplyFault(new FaultCommand(Instant.Zero, 0, FaultKind.EmergencyStop, null)));
+        actor.Control.Writer.TryWrite(new ApplyFault(new FaultCommand(Instant.Zero, 0, FaultKind.EmergencyClear, null)));
         _ = actor.Start(system.Stopping);
 
         var deadline = DateTime.UtcNow.AddSeconds(10);

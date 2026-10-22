@@ -25,7 +25,7 @@ public class FastDecideEquivalenceTests
         var carCalls = st.CarCalls.Distinct().Order().ToArray();
         var pickups = st.Pickups.DistinctBy(p => (p.Floor, p.Dir)).OrderBy(p => p.At).ToArray();
         var snapshot = ElevatorSnapshot.ForPolicy(st.Floor, ElevatorState.Idle, st.Dir, carCalls,
-            pickups.Select(p => new HallCall(p.Floor, p.Dir, new SimTime(p.At))).ToArray(), st.Floors);
+            pickups.Select(p => new HallCall(p.Floor, p.Dir, new Instant(p.At))).ToArray(), st.Floors);
 
         ulong cars = 0, up = 0, down = 0;
         foreach (var c in carCalls) cars |= StopSet.Bit(c);

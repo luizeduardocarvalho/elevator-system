@@ -41,7 +41,7 @@ public class LoopTests
         Assert.Equal(Hash(headless), Hash(half.Log));
         Assert.Equal(Hash(headless), Hash(ten.Log));
         Assert.Equal(Hash(SimEngine.Run(scenario).Events), Hash(ten.Log.Where(e => e is not DispatchEvaluated)));
-        Assert.IsType<SimulationEnded>(ten.Log[^1]);
+        Assert.IsType<RunEnded>(ten.Log[^1]);
     }
 
     [Fact]
@@ -62,7 +62,7 @@ public class LoopTests
         var loop = new TuiLoop(session, new Pacer(10), new FakeClock(), new ScriptedKeys((0, TuiKey.Pause), (5, TuiKey.Step)), new CapturingPresenter(),
             new LoopOptions(MaxFrames: 10));
         await loop.RunAsync();
-        Assert.Equal((1L, new SimTime(Pacer.TickMs)), (loop.Ticks, session.Now));
+        Assert.Equal((1L, new Instant(Pacer.TickMs)), (loop.Ticks, session.Now));
     }
 
     [Fact]
@@ -71,7 +71,7 @@ public class LoopTests
         var session = new LiveSession(Repo.Load("lunch.yaml"));
         var loop = new TuiLoop(session, new Pacer(10), new FakeClock(), new ScriptedKeys(), new CapturingPresenter(), new LoopOptions(MaxFrames: 21));
         await loop.RunAsync();
-        Assert.Equal(new SimTime(10_000), session.Now);
+        Assert.Equal(new Instant(10_000), session.Now);
         Assert.Equal("10.0×", loop.BuildScreen().Status.AchievedSpeed);
     }
 
@@ -79,7 +79,7 @@ public class LoopTests
     {
         public string Source => "LIVE";
         public BuildingState State { get; } = new();
-        public SimTime Now { get; private set; }
+        public Instant Now { get; private set; }
         public bool AtEnd => false;
         public bool ReadOnly => false;
         public bool InjectorNoOp => true;
@@ -88,7 +88,7 @@ public class LoopTests
             clock.Now += TimeSpan.FromMilliseconds(5);
             Now = Now.AddMs(Pacer.TickMs);
         }
-        public void SeekTo(SimTime target) => Now = target;
+        public void SeekTo(Instant target) => Now = target;
         public string Command(TuiKey key, int elevator) => "";
     }
 

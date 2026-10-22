@@ -6,11 +6,11 @@ namespace Elevator.Metrics.Tests;
 
 public class OpsMetricsTests
 {
-    private static SimTime S(double seconds) => SimTime.FromSeconds(seconds);
+    private static Instant S(double seconds) => Instant.FromSeconds(seconds);
 
     private static readonly DomainEvent[] Ops =
     [
-        new SimulationStarted(S(0), "ops", 1, 10, "look", 0, Elevators: 3),
+        new RunStarted(S(0), "ops", 1, 10, "look", 0, Elevators: 3),
         new FaultCommandApplied(S(10), 0, FaultKind.MaintenanceOn, null),
         new MaintenanceRequested(S(10), 0),
         new AssignmentReleased(S(10), 7, 0, AssignmentReason.Maintenance),
@@ -32,7 +32,7 @@ public class OpsMetricsTests
         new AccessDenied(S(6), 12, 1, "floor-restriction", "no"),
         new AccessDenied(S(6), 12, 2, "floor-restriction", "no"),
         new AccessDenied(S(6), 12, null, "floor-restriction", "no"),
-        new SimulationEnded(S(200), 0, 0),
+        new RunEnded(S(200), 0, 0),
     ];
 
     [Fact]
@@ -66,14 +66,14 @@ public class OpsMetricsTests
 
     [Fact]
     public void A_quiet_run_has_no_ops_activity() =>
-        Assert.False(OpsMetrics.Build([new SimulationStarted(S(0), "q", 1, 10, "look", 0), new SimulationEnded(S(9), 0, 0)]).Any);
+        Assert.False(OpsMetrics.Build([new RunStarted(S(0), "q", 1, 10, "look", 0), new RunEnded(S(9), 0, 0)]).Any);
 
     [Fact]
     public void Time_assigned_to_a_stuck_elevator_is_blocked_and_out_of_service_rejections_are_blocked()
     {
         DomainEvent[] events =
         [
-            new SimulationStarted(S(0), "stuck", 1, 10, "look", 2, Elevators: 2),
+            new RunStarted(S(0), "stuck", 1, 10, "look", 2, Elevators: 2),
             new PassengerArrived(S(0), 1, 5, 9),
             new AssignmentAccepted(S(0), 1, 0),
             new StateChanged(S(0), 0, ElevatorState.Idle, ElevatorState.MovingUp, Trigger.StartMoveUp, 1),
@@ -85,7 +85,7 @@ public class OpsMetricsTests
             new PassengerBoarded(S(25), 2, 0, 3),
             new PassengerAlighted(S(30), 1, 0, 9),
             new PassengerAlighted(S(35), 2, 0, 1),
-            new SimulationEnded(S(35), 2, 0),
+            new RunEnded(S(35), 2, 0),
         ];
         var records = PassengerLifecycle.Analyze(events);
         Assert.Equal(10.0, records[0].WaitBuckets[WaitBucket.Blocked]);

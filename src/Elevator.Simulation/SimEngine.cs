@@ -8,7 +8,7 @@ using Elevator.Runtime;
 
 namespace Elevator.Simulation;
 
-public sealed record SimulationResult(IReadOnlyList<DomainEvent> Events, int Delivered, int Unserved, SimTime EndedAt);
+public sealed record SimulationResult(IReadOnlyList<DomainEvent> Events, int Delivered, int Unserved, Instant EndedAt);
 
 /// <param name="EmitDispatchEvaluations">Log every candidate's cost per dispatch decision (DispatchEvaluated). Off by
 /// default.</param>
@@ -29,7 +29,7 @@ public sealed class SimEngine
 {
     private readonly PriorityQueue<Envelope, (long TimeMs, int Priority, long Seq)> _queue = new();
     private readonly Dictionary<Address, IHandler> _handlers = [];
-    private readonly Dictionary<Address, SimTime> _scheduledWakeUps = [];
+    private readonly Dictionary<Address, Instant> _scheduledWakeUps = [];
     private readonly List<ElevatorHandler> _elevators = [];
     private readonly PassengersHandler _passengers;
     private readonly Outbox _outbox = new();
@@ -89,20 +89,20 @@ public sealed class SimEngine
 
         var passengers = ScenarioRunner.BuildPassengers(scenario);
         _expectedPassengers = passengers.Count;
-        Log.Add(new SimulationStarted(SimTime.Zero, scenario.Name, scenario.Seed, scenario.Floors, scheduling.Name, passengers.Count,
+        Log.Add(new RunStarted(Instant.Zero, scenario.Name, scenario.Seed, scenario.Floors, scheduling.Name, passengers.Count,
             scenario.Elevators, dispatch.Name, scenario.Capacity,
             scenario.BypassThreshold, "next-trip",
             scenario.Fleet is null ? null : [.. fleet.Select((t, i) => new FleetEntry(i, t.Name, t.Capacity, scenario.BypassThreshold, t.ServedFloors))]));
 
         Register(new FaultScheduler());
 
-        foreach (var e in _elevators) Enqueue(SimTime.Zero, new Envelope(e.Address, new Start()));
-        foreach (var p in passengers) Enqueue(SimTime.Zero, new Envelope(Address.Passengers, new PassengerArrives(p.ToRequest()), p.ArrivesAt.Ms));
+        foreach (var e in _elevators) Enqueue(Instant.Zero, new Envelope(e.Address, new Start()));
+        foreach (var p in passengers) Enqueue(Instant.Zero, new Envelope(Address.Passengers, new PassengerArrives(p.ToRequest()), p.ArrivesAt.Ms));
         foreach (var f in scenario.FaultSchedule)
         {
             if (f.ElevatorId < 0 || f.ElevatorId >= scenario.Elevators)
                 throw new ArgumentException($"fault schedule: elevator {f.ElevatorId} does not exist (0..{scenario.Elevators - 1})", nameof(scenario));
-            Enqueue(SimTime.Zero, new Envelope(Address.Elevator(f.ElevatorId), new ApplyFault(f), f.At.Ms));
+            Enqueue(Instant.Zero, new Envelope(Address.Elevator(f.ElevatorId), new ApplyFault(f), f.At.Ms));
         }
 
         FaultInjector = options.FaultInjector?.Invoke(this) ?? NoOpFaultInjector.Instance;
@@ -117,13 +117,13 @@ public sealed class SimEngine
     public List<DomainEvent> Log { get; } = [];
 
     /// <summary>Sim time reached so far (the target of the last <see cref="AdvanceTo"/>, or the finish time).</summary>
-    public SimTime Now { get; private set; } = SimTime.Zero;
+    public Instant Now { get; private set; } = Instant.Zero;
 
     /// <summary>Everyone delivered (or refused by access policy) and every elevator idle or parked, or the scenario's max sim time reached.</summary>
     public bool Finished { get; private set; }
 
     /// <summary>When the run finished (the last event's time, or the max sim time).</summary>
-    public SimTime? FinishedAt { get; private set; }
+    public Instant? FinishedAt { get; private set; }
 
     /// <summary>The injector for this engine (NoOpFaultInjector unless the options supply one).</summary>
     public IFaultInjector FaultInjector { get; }
@@ -142,12 +142,12 @@ public sealed class SimEngine
     /// Delivers every message due up to <paramref name="target"/> (capped at the scenario's max sim time). The tick
     /// size never changes the log: messages are handled in (time, sequence) order whatever the steps.
     /// </summary>
-    public void AdvanceTo(SimTime target)
+    public void AdvanceTo(Instant target)
     {
         if (_handedOver) throw new InvalidOperationException("this engine handed its handlers over (HandOver) and can no longer run");
         if (Finished) return;
         if (target < Now) throw new ArgumentOutOfRangeException(nameof(target), $"time went backwards: {target} < {Now}");
-        target = SimTime.Min(target, Scenario.MaxSimTime);
+        target = Instant.Min(target, Scenario.MaxSimTime);
         if (DrainUntil(target) is { } finishedAt)
         {
             Finished = true;
@@ -187,7 +187,7 @@ public sealed class SimEngine
         return new Handover([.. _handlers.Values.Where(h => h.Address.Kind != ActorKind.FaultScheduler)], Now, inFlight);
     }
 
-    /// <summary>Ends the run: logs SimulationEnded and returns the result. Idempotent.</summary>
+    /// <summary>Ends the run: logs RunEnded and returns the result. Idempotent.</summary>
     public SimulationResult Finish()
     {
         var endedAt = FinishedAt ?? Now;
@@ -195,14 +195,14 @@ public sealed class SimEngine
         if (!_ended)
         {
             _ended = true;
-            Log.Add(new SimulationEnded(endedAt, _passengers.Delivered, unserved));
+            Log.Add(new RunEnded(endedAt, _passengers.Delivered, unserved));
         }
         return new SimulationResult(Log, _passengers.Delivered, unserved, endedAt);
     }
 
     private void Register(IHandler handler) => _handlers.Add(handler.Address, handler);
 
-    private void Enqueue(SimTime now, Envelope envelope)
+    private void Enqueue(Instant now, Envelope envelope)
     {
         if (envelope.To.Kind == ActorKind.Client) return;
         _queue.Enqueue(envelope, (now.Ms + envelope.DelayMs, PriorityOf(envelope.Message), _seq++));
@@ -216,14 +216,14 @@ public sealed class SimEngine
         _passengers.Arrived == _expectedPassengers && _passengers.Delivered + _passengers.Refused == _expectedPassengers
         && _elevators.All(e => e.Elevator.State is ElevatorState.Idle or ElevatorState.Maintenance && e.Elevator.NextDeadline is null);
 
-    private SimTime? DrainUntil(SimTime target)
+    private Instant? DrainUntil(Instant target)
     {
-        if (_expectedPassengers == 0) return SimTime.Zero;
+        if (_expectedPassengers == 0) return Instant.Zero;
 
         while (_queue.TryPeek(out var envelope, out var key) && key.TimeMs <= target.Ms)
         {
             _queue.Dequeue();
-            var now = new SimTime(key.TimeMs);
+            var now = new Instant(key.TimeMs);
             var handler = _handlers[envelope.To];
 
             _outbox.Clear();

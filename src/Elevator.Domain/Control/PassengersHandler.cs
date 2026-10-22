@@ -39,7 +39,7 @@ public sealed class PassengersHandler : IHandler
 
     public Address Address => Address.Passengers;
 
-    public SimTime? NextWakeUp => null;
+    public Instant? NextWakeUp => null;
 
     public IReadOnlyDictionary<(int Floor, Direction Direction), int> WaitingCounts =>
         _waiting.Where(kv => kv.Value.Count > 0).ToDictionary(kv => kv.Key, kv => kv.Value.Count);
@@ -56,7 +56,7 @@ public sealed class PassengersHandler : IHandler
 
     public bool Empty => _byId.Count == 0;
 
-    public void Handle(Message message, SimTime now, Outbox outbox)
+    public void Handle(Message message, Instant now, Outbox outbox)
     {
         switch (message)
         {
@@ -91,7 +91,7 @@ public sealed class PassengersHandler : IHandler
         }
     }
 
-    private void Arrive(Request request, SimTime now, Outbox outbox)
+    private void Arrive(Request request, Instant now, Outbox outbox)
     {
         var p = new Passenger(request);
         var key = (request.PickupFloor, request.Direction);
@@ -104,7 +104,7 @@ public sealed class PassengersHandler : IHandler
             AccessLevel: request.AccessLevel > 0 ? request.AccessLevel : null));
     }
 
-    private void GetOff(DoorsOpened opened, SimTime now, Outbox outbox)
+    private void GetOff(DoorsOpened opened, Instant now, Outbox outbox)
     {
         if (!_riding.TryGetValue(opened.ElevatorId, out var riders)) return;
         foreach (var p in riders.Where(r => r.Request.DestinationFloor == opened.Floor).ToList())
@@ -117,7 +117,7 @@ public sealed class PassengersHandler : IHandler
         }
     }
 
-    private void GetOn(HallCallAnswered answered, SimTime now, Outbox outbox)
+    private void GetOn(HallCallAnswered answered, Instant now, Outbox outbox)
     {
         if (!_waiting.TryGetValue((answered.Floor, answered.Direction), out var here)) return;
         var candidates = here.Where(p => p.AssignedTo == answered.ElevatorId).ToList();

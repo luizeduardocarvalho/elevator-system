@@ -16,16 +16,16 @@ public sealed class RouteProjection(ISchedulingPolicy scheduling, ElevatorTiming
     /// <param name="LoadAtPickup">Load on board just before the extra request boards (L̂), or the load that made the
     /// elevator hand it back (full-load bypass) when it would not be picked up.</param>
     /// <param name="Completions">Drop-off time of every rider and pending pickup known to the elevator, plus the extra one.</param>
-    public sealed record Result(SimTime? PickupAt, int LoadAtPickup, IReadOnlyDictionary<int, SimTime> Completions, SimTime Horizon);
+    public sealed record Result(Instant? PickupAt, int LoadAtPickup, IReadOnlyDictionary<int, Instant> Completions, Instant Horizon);
 
-    public SimTime? EstimatePickup(ElevatorSnapshot snapshot, Request request, SimTime now) => Project(snapshot, request, now).PickupAt;
+    public Instant? EstimatePickup(ElevatorSnapshot snapshot, Request request, Instant now) => Project(snapshot, request, now).PickupAt;
 
     /// <summary>
     /// Rebuilds the elevator from <paramref name="snapshot"/>, replays it to <paramref name="now"/> (the snapshot may be
     /// older: an idle elevator's snapshot is from when it last changed), inserts <paramref name="extra"/> at
     /// <paramref name="now"/>, and runs until it has nothing left to do or the horizon is reached.
     /// </summary>
-    public Result Project(ElevatorSnapshot snapshot, Request? extra, SimTime now)
+    public Result Project(ElevatorSnapshot snapshot, Request? extra, Instant now)
     {
         var start = snapshot.At > now ? snapshot.At : now;
         var run = new Run(ElevatorUnit.FromSnapshot(snapshot, timing, scheduling), snapshot, extra);
@@ -41,9 +41,9 @@ public sealed class RouteProjection(ISchedulingPolicy scheduling, ElevatorTiming
             snapshot.HallCalls.ToDictionary(c => (c.Floor, c.Direction), c => c.Requests.ToList());
         private readonly List<Request> _riders = [.. snapshot.Riders];
 
-        public Dictionary<int, SimTime> Completions { get; } = [];
+        public Dictionary<int, Instant> Completions { get; } = [];
 
-        public SimTime? PickupAt { get; private set; }
+        public Instant? PickupAt { get; private set; }
 
         public int LoadAtPickup { get; private set; }
 
@@ -56,7 +56,7 @@ public sealed class RouteProjection(ISchedulingPolicy scheduling, ElevatorTiming
             Process();
         }
 
-        public void AdvanceTo(SimTime until)
+        public void AdvanceTo(Instant until)
         {
             e.Resume();
             Process();

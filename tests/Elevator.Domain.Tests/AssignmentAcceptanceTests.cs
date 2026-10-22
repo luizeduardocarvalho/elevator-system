@@ -7,15 +7,15 @@ public class AssignmentAcceptanceTests
 {
     private sealed class FixedEta(long ms) : IEtaEstimator
     {
-        public SimTime? EstimatePickup(ElevatorSnapshot snapshot, Request request, SimTime now) => new SimTime(ms);
+        public Instant? EstimatePickup(ElevatorSnapshot snapshot, Request request, Instant now) => new Instant(ms);
     }
 
-    private static Request R(int id, long calledAtMs = 0) => Request.Create(5, 9, new SimTime(calledAtMs), 10, id: id).Value!;
+    private static Request R(int id, long calledAtMs = 0) => Request.Create(5, 9, new Instant(calledAtMs), 10, id: id).Value!;
 
     private static (ElevatorHandler Handler, Outbox Outbox) Make(long ourEtaMs, int riders = 0)
     {
         var elevator = new Elevator(0, 10, ElevatorTiming.Default, TestPolicies.NearestCarCallThenOldestHallCall, 1, capacity: 5, bypassThreshold: 0.8);
-        for (var i = 0; i < riders; i++) elevator.Board(Request.Create(1, 2, SimTime.Zero, 10, id: 100 + i).Value!);
+        for (var i = 0; i < riders; i++) elevator.Board(Request.Create(1, 2, Instant.Zero, 10, id: 100 + i).Value!);
         return (new ElevatorHandler(elevator, new ElevatorHandlerOptions(StalenessToleranceMs: 10_000, AgingMs: 60_000), new FixedEta(ourEtaMs)), new Outbox());
     }
 
@@ -26,7 +26,7 @@ public class AssignmentAcceptanceTests
     public void Accepts_when_our_eta_is_within_tolerance()
     {
         var (h, o) = Make(ourEtaMs: 25_000);
-        h.Handle(new Assign(R(1), new SimTime(16_000), Forced: false), SimTime.Zero, o);
+        h.Handle(new Assign(R(1), new Instant(16_000), Forced: false), Instant.Zero, o);
         Assert.Null(Outcome(o));
         Assert.Contains(o.Events, e => e is AssignmentAccepted);
         Assert.Contains(o.Messages, m => m is { To.Kind: ActorKind.Passengers, Message: AssignmentAcceptedMsg });
@@ -36,7 +36,7 @@ public class AssignmentAcceptanceTests
     public void Rejects_as_stale_when_our_eta_is_much_worse()
     {
         var (h, o) = Make(ourEtaMs: 26_001);
-        h.Handle(new Assign(R(1), new SimTime(16_000), Forced: false), SimTime.Zero, o);
+        h.Handle(new Assign(R(1), new Instant(16_000), Forced: false), Instant.Zero, o);
         Assert.Equal(AssignmentReason.Stale, Outcome(o));
     }
 
@@ -44,11 +44,11 @@ public class AssignmentAcceptanceTests
     public void Aged_or_forced_requests_cannot_be_rejected_as_stale()
     {
         var (h, o) = Make(ourEtaMs: 500_000);
-        h.Handle(new Assign(R(1, calledAtMs: 0), new SimTime(70_000), Forced: false), new SimTime(60_000), o);
+        h.Handle(new Assign(R(1, calledAtMs: 0), new Instant(70_000), Forced: false), new Instant(60_000), o);
         Assert.Null(Outcome(o));
 
         (h, o) = Make(ourEtaMs: 500_000);
-        h.Handle(new Assign(R(2), new SimTime(16_000), Forced: true), SimTime.Zero, o);
+        h.Handle(new Assign(R(2), new Instant(16_000), Forced: true), Instant.Zero, o);
         Assert.Null(Outcome(o));
     }
 
@@ -56,12 +56,12 @@ public class AssignmentAcceptanceTests
     public void Next_trip_mode_a_full_elevator_accepts_for_a_later_trip_but_never_a_request_that_cannot_fit()
     {
         var (h, o) = Make(ourEtaMs: 0, riders: 4);
-        h.Handle(new Assign(R(1), null, Forced: false), SimTime.Zero, o);
+        h.Handle(new Assign(R(1), null, Forced: false), Instant.Zero, o);
         Assert.Null(Outcome(o));
 
         (h, o) = Make(ourEtaMs: 0);
-        var tooBig = Request.Create(5, 9, SimTime.Zero, 10, id: 2, load: 6).Value!;
-        h.Handle(new Assign(tooBig, null, Forced: true), new SimTime(120_000), o);
+        var tooBig = Request.Create(5, 9, Instant.Zero, 10, id: 2, load: 6).Value!;
+        h.Handle(new Assign(tooBig, null, Forced: true), new Instant(120_000), o);
         Assert.Equal(AssignmentReason.Capacity, Outcome(o));
     }
 
@@ -69,13 +69,13 @@ public class AssignmentAcceptanceTests
     public void Capacity_and_maintenance_rejects_always_win()
     {
         var (h, o) = Make(ourEtaMs: 0, riders: 4);
-        var neverFits = Request.Create(5, 9, SimTime.Zero, 10, id: 1, load: 6).Value!;
-        h.Handle(new Assign(neverFits, null, Forced: true), new SimTime(120_000), o);
+        var neverFits = Request.Create(5, 9, Instant.Zero, 10, id: 1, load: 6).Value!;
+        h.Handle(new Assign(neverFits, null, Forced: true), new Instant(120_000), o);
         Assert.Equal(AssignmentReason.Capacity, Outcome(o));
 
         (h, o) = Make(ourEtaMs: 0);
         h.Elevator.EnterMaintenance();
-        h.Handle(new Assign(R(2), null, Forced: true), SimTime.Zero, o);
+        h.Handle(new Assign(R(2), null, Forced: true), Instant.Zero, o);
         Assert.Equal(AssignmentReason.Maintenance, Outcome(o));
     }
 }

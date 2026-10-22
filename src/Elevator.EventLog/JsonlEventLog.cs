@@ -15,7 +15,7 @@ public static class JsonlEventLog
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         AllowOutOfOrderMetadataProperties = true, // "type" follows "seq"
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseUpper), new SimTimeMsConverter() },
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseUpper), new InstantMsConverter() },
     };
 
     public static string Serialize(DomainEvent e, long seq)
@@ -47,10 +47,10 @@ public static class JsonlEventLog
             if (line.Length > 0) yield return Deserialize(line);
     }
 
-    private sealed class SimTimeMsConverter : JsonConverter<SimTime>
+    private sealed class InstantMsConverter : JsonConverter<Instant>
     {
-        public override SimTime Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) => new(reader.GetInt64());
+        public override Instant Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) => new(reader.GetInt64());
 
-        public override void Write(Utf8JsonWriter writer, SimTime value, JsonSerializerOptions options) => writer.WriteNumberValue(value.Ms);
+        public override void Write(Utf8JsonWriter writer, Instant value, JsonSerializerOptions options) => writer.WriteNumberValue(value.Ms);
     }
 }

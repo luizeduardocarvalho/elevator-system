@@ -7,8 +7,8 @@ internal static class EventFormatter
 {
     public static string Format(DomainEvent e) => $"[{e.At.Seconds,8:0.0}s] " + e switch
     {
-        SimulationStarted s => $"simulation '{s.Scenario}' started: {s.Floors} floors, {s.Passengers} passengers, scheduling {s.Scheduling}, seed {s.Seed}",
-        SimulationEnded s => $"simulation ended: {s.Delivered} delivered, {s.Unserved} unserved",
+        RunStarted s => $"simulation '{s.Scenario}' started: {s.Floors} floors, {s.Passengers} passengers, scheduling {s.Scheduling}, seed {s.Seed}",
+        RunEnded s => $"simulation ended: {s.Delivered} delivered, {s.Unserved} unserved",
         PassengerArrived p => $"P{p.PassengerId} arrives at floor {p.From}, wants {p.To}",
         PassengerBoarded p => $"P{p.PassengerId} boards E{p.ElevatorId} at floor {p.Floor}",
         PassengerAlighted p => $"P{p.PassengerId} gets off E{p.ElevatorId} at floor {p.Floor}",

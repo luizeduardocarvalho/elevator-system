@@ -25,7 +25,7 @@ public class ReplayAndSeekTests
 
         public (int Width, int Height) Size => (140, 45);
 
-        public List<(SimTime At, ScreenModel Model)> Samples { get; } = [];
+        public List<(Instant At, ScreenModel Model)> Samples { get; } = [];
 
         public void Present(ScreenModel model)
         {
@@ -33,7 +33,7 @@ public class ReplayAndSeekTests
         }
     }
 
-    private static async Task<(LiveSession Session, List<(SimTime At, ScreenModel Model)> Samples)> RecordLive(string scenario, double speed)
+    private static async Task<(LiveSession Session, List<(Instant At, ScreenModel Model)> Samples)> RecordLive(string scenario, double speed)
     {
         var session = new LiveSession(Repo.Load(scenario));
         var presenter = new SamplingPresenter(() => session, every: 37);
@@ -76,7 +76,7 @@ public class ReplayAndSeekTests
         var scenario = Repo.Load("lunch.yaml");
         var result = SimEngine.Run(scenario);
         var replay = ReplayOf(result.Events);
-        replay.SeekTo(new SimTime(long.MaxValue / 2));
+        replay.SeekTo(new Instant(long.MaxValue / 2));
         Assert.True(replay.AtEnd);
         Assert.Equal((result.Delivered, true), (replay.State.Delivered, replay.State.Ended));
         Assert.Equal($"{result.Delivered} / {result.Delivered}", Screen(replay).Metrics.Served);
@@ -89,7 +89,7 @@ public class ReplayAndSeekTests
         jsonl.Insert(5, """{"seq":99,"type":"ElevatorTeleported","t":3000,"elevatorId":0,"to":7}""");
         jsonl.Insert(9, "}{ not json");
         var replay = new ReplaySession(LogReader.Read(new StringReader(string.Join('\n', jsonl))));
-        replay.SeekTo(new SimTime(100_000));
+        replay.SeekTo(new Instant(100_000));
         var tail = ViewModel.Build(replay.State, new ViewOptions(Height: 400)).Tail;
         Assert.Contains(tail, l => l is { Kind: "ElevatorTeleported", Text: "elevatorId=0 to=7" });
         Assert.Contains(tail, l => l.Kind == "UNREADABLE");
@@ -101,10 +101,10 @@ public class ReplayAndSeekTests
     {
         var log = SimEngine.Run(Repo.Load("lunch.yaml")).Events;
         var seeked = ReplayOf(log);
-        seeked.SeekTo(new SimTime(900_000));
-        seeked.SeekTo(new SimTime(450_000));
+        seeked.SeekTo(new Instant(900_000));
+        seeked.SeekTo(new Instant(450_000));
         var direct = ReplayOf(log);
-        direct.SeekTo(new SimTime(450_000));
+        direct.SeekTo(new Instant(450_000));
         Assert.Equal(Content(Screen(direct)), Content(Screen(seeked)));
     }
 
@@ -119,7 +119,7 @@ public class ReplayAndSeekTests
         var scenario = Repo.Load("lunch.yaml");
         var seeked = new LiveSession(scenario);
         StepTo(seeked, 900_000);
-        seeked.SeekTo(new SimTime(450_000));
+        seeked.SeekTo(new Instant(450_000));
         var fresh = new LiveSession(scenario);
         StepTo(fresh, 450_000);
 
@@ -153,8 +153,8 @@ public class ReplayAndSeekTests
         StepTo(seeked, 900_000);
         Assert.Equal(2, seeked.Log.OfType<PassengerArrived>().Count(p => p.PassengerId >= 10_000));
 
-        seeked.SeekTo(new SimTime(450_000));
-        Assert.Equal([new FaultCommand(new SimTime(300_000), 1, FaultKind.Stuck, 60_000)], seeked.Commands);
+        seeked.SeekTo(new Instant(450_000));
+        Assert.Equal([new FaultCommand(new Instant(300_000), 1, FaultKind.Stuck, 60_000)], seeked.Commands);
 
         var fresh = new LiveSession(scenario, faultInjector: e => new PostingInjector(e));
         StepTo(fresh, 300_000);
@@ -178,7 +178,7 @@ public class ReplayAndSeekTests
             new ScriptedKeys((100, TuiKey.Pause), (101, TuiKey.SeekBack), (102, TuiKey.SeekForward), (103, TuiKey.SeekForward), (104, TuiKey.SeekBack)),
             new CapturingPresenter(), new LoopOptions(MaxFrames: 106));
         await loop.RunAsync();
-        Assert.Equal(new SimTime(247_500), session.Now);
+        Assert.Equal(new Instant(247_500), session.Now);
         var fresh = new LiveSession(Repo.Load("lunch.yaml"));
         StepTo(fresh, 247_500);
         Assert.Equal(Repo.ToJsonl(fresh.Log), Repo.ToJsonl(session.Log));

@@ -24,7 +24,7 @@ public sealed record PoissonTraffic(double RatePerMinute, double DurationS, doub
             var from = rng.Next(Floors.Lowest, floors + 1);
             int to;
             do to = rng.Next(Floors.Lowest, floors + 1); while (to == from);
-            yield return new PassengerSpec(SimTime.FromSeconds(t), from, to);
+            yield return new PassengerSpec(Instant.FromSeconds(t), from, to);
         }
     }
 }

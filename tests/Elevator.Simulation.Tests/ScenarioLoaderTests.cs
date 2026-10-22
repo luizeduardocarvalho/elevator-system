@@ -13,7 +13,7 @@ public class ScenarioLoaderTests
         var s = ScenarioLoader.Load("passengers:\n  - { at: 1.5, from: 1, to: 4 }").Scenario!;
         Assert.Equal((10, "cost", 3_600_000L), (s.Floors, s.Dispatch, s.MaxSimTime.Ms));
         Assert.Equal(ElevatorTiming.Default, s.Timing);
-        Assert.Equal(new PassengerSpec(new SimTime(1_500), 1, 4), Assert.Single(s.Passengers));
+        Assert.Equal(new PassengerSpec(new Instant(1_500), 1, 4), Assert.Single(s.Passengers));
     }
 
     [Theory]

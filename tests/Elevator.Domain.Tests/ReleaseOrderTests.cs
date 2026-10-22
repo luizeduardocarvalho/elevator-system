@@ -5,7 +5,7 @@ namespace Elevator.Domain.Tests;
 
 public class ReleaseOrderTests
 {
-    private static Request R(int id, int from) => Request.Create(from, from + 2, SimTime.Zero, 12, id: id).Value!;
+    private static Request R(int id, int from) => Request.Create(from, from + 2, Instant.Zero, 12, id: id).Value!;
 
     private static ElevatorHandler Make(long latencyMs, int capacity = 10)
     {
@@ -13,9 +13,9 @@ public class ReleaseOrderTests
             capacity: capacity, bypassThreshold: 1.0);
         var h = new ElevatorHandler(elevator, new ElevatorHandlerOptions(SnapshotDelayMs: latencyMs));
         var o = new Outbox();
-        h.Handle(new Start(), SimTime.Zero, o);
-        h.Handle(new Assign(R(1, 5), null, Forced: false), SimTime.Zero, o);
-        h.Handle(new Assign(R(2, 7), null, Forced: false), SimTime.Zero, o);
+        h.Handle(new Start(), Instant.Zero, o);
+        h.Handle(new Assign(R(1, 5), null, Forced: false), Instant.Zero, o);
+        h.Handle(new Assign(R(2, 7), null, Forced: false), Instant.Zero, o);
         return h;
     }
 
@@ -42,7 +42,7 @@ public class ReleaseOrderTests
     {
         var h = Make(latency);
         var o = new Outbox();
-        h.Handle(new ApplyFault(new FaultCommand(SimTime.Zero, 0, kind, null)), SimTime.Zero, o);
+        h.Handle(new ApplyFault(new FaultCommand(Instant.Zero, 0, kind, null)), Instant.Zero, o);
         AssertSnapshotTravelsFirst(o, 2);
     }
 
@@ -53,7 +53,7 @@ public class ReleaseOrderTests
     {
         var h = Make(latency);
         var o = new Outbox();
-        h.Handle(new FaultDeclared(30_000), SimTime.Zero, o);
+        h.Handle(new FaultDeclared(30_000), Instant.Zero, o);
         AssertSnapshotTravelsFirst(o, 2);
     }
 }

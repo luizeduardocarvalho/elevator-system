@@ -10,7 +10,7 @@ public sealed record CostWeights(double Lambda = 0.5, double Mu = 10.0)
 }
 
 /// <summary>Breakdown of one elevator's cost for one request, in seconds.</summary>
-public sealed record CostEvaluation(double Cost, double EtaS, double AddedDelayS, int LoadAtPickup, SimTime? PickupAt)
+public sealed record CostEvaluation(double Cost, double EtaS, double AddedDelayS, int LoadAtPickup, Instant? PickupAt)
 {
     public static CostEvaluation Ineligible(int load = 0) => new(double.PositiveInfinity, double.PositiveInfinity, 0, load, null);
 }
@@ -66,7 +66,7 @@ public sealed class CostBasedDispatch(ISchedulingPolicy scheduling, ElevatorTimi
 
     /// <param name="vipPriority">VIP priority (ADR-015): a VIP request is not charged λ·ΔD, the delay it adds to people
     /// already riding or assigned, so it takes the fastest pickup. ΔD is still computed and reported.</param>
-    public CostEvaluation Evaluate(ElevatorSnapshot s, Request r, SimTime now, bool vipPriority = false)
+    public CostEvaluation Evaluate(ElevatorSnapshot s, Request r, Instant now, bool vipPriority = false)
     {
         if (s.State == ElevatorState.Maintenance) return CostEvaluation.Ineligible(s.Load);
 
@@ -82,7 +82,7 @@ public sealed class CostBasedDispatch(ISchedulingPolicy scheduling, ElevatorTimi
         return new CostEvaluation(cost, etaS, addedDelayS, with.LoadAtPickup, pickupAt);
     }
 
-    private StopProjection.Outcome Baseline(ElevatorSnapshot s, SimTime now)
+    private StopProjection.Outcome Baseline(ElevatorSnapshot s, Instant now)
     {
         if (_baselines.TryGetValue(s.ElevatorId, out var cached) && ReferenceEquals(cached.Snapshot, s)) return cached.Result;
         var result = _projection.Project(s, null, now);

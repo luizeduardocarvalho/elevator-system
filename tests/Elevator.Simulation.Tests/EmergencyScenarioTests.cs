@@ -11,7 +11,7 @@ public class EmergencyScenarioTests
     public void An_emergency_behind_50_queued_commands_takes_effect_first()
     {
         var engine = SimEngine.Create(Repo.Load("lunch.yaml"), options: new SimEngineOptions(FaultInjector: SimFaultInjector.Factory));
-        engine.AdvanceTo(new SimTime(120_000));
+        engine.AdvanceTo(new Instant(120_000));
         for (var i = 0; i < 50; i++)
             engine.Post(Address.Elevator(0), new Assign(Request.Create(1 + i % 19, 20, engine.Now, 20, id: 90_000 + i).Value!, null, Forced: true));
         engine.FaultInjector.EmergencyStop(0, engine.Now);
@@ -54,7 +54,7 @@ public class EmergencyScenarioTests
     public void A_clear_posted_before_a_stop_at_the_same_instant_leaves_the_elevator_stopped()
     {
         var engine = SimEngine.Create(Repo.Load("lunch.yaml"), options: new SimEngineOptions(FaultInjector: SimFaultInjector.Factory));
-        engine.AdvanceTo(new SimTime(120_000));
+        engine.AdvanceTo(new Instant(120_000));
         var from = engine.Log.Count;
         engine.FaultInjector.ClearEmergency(0, engine.Now);
         engine.FaultInjector.EmergencyStop(0, engine.Now);

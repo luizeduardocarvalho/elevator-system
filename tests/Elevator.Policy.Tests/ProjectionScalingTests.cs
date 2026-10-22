@@ -15,12 +15,12 @@ public class ProjectionScalingTests
             var from = rng.Next(1, 21);
             int to;
             do to = rng.Next(1, 21); while (to == from);
-            e.AssignPickup(Request.Create(from, to, SimTime.Zero, 20, id: id).Value!);
+            e.AssignPickup(Request.Create(from, to, Instant.Zero, 20, id: id).Value!);
         }
-        e.Tick(new SimTime(3_000));
+        e.Tick(new Instant(3_000));
         var projection = new StopProjection(look, ElevatorTiming.Default);
-        var extra = Request.Create(7, 15, new SimTime(3_000), 20, id: 1_000_000).Value!;
-        return projection.Project(e.Snapshot(), extra, new SimTime(3_000)).Steps + projection.Project(e.Snapshot(), null, new SimTime(3_000)).Steps;
+        var extra = Request.Create(7, 15, new Instant(3_000), 20, id: 1_000_000).Value!;
+        return projection.Project(e.Snapshot(), extra, new Instant(3_000)).Steps + projection.Project(e.Snapshot(), null, new Instant(3_000)).Steps;
     }
 
     [Fact]

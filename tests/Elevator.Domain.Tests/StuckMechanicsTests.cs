@@ -6,7 +6,7 @@ namespace Elevator.Domain.Tests;
 
 public class StuckMechanicsTests
 {
-    private static Request R(int id, int from, int to) => Request.Create(from, to, SimTime.Zero, Harness.Floors, id: id).Value!;
+    private static Request R(int id, int from, int to) => Request.Create(from, to, Instant.Zero, Harness.Floors, id: id).Value!;
 
     private static Elevator Make() => new(0, Harness.Floors, ElevatorTiming.Default, TestPolicies.NearestCarCallThenOldestHallCall, 1, capacity: 10);
 
@@ -15,19 +15,19 @@ public class StuckMechanicsTests
     {
         var e = Make();
         e.Board(R(1, 1, 3));
-        e.Tick(new SimTime(2_500));
+        e.Tick(new Instant(2_500));
         Assert.True(e.Stick());
         Assert.False(e.Stick());
         Assert.Null(e.NextDeadline);
         Assert.Null(e.Snapshot().PhaseEndsAt);
 
-        e.Tick(new SimTime(60_000));
+        e.Tick(new Instant(60_000));
         Assert.DoesNotContain(e.DrainEvents(), ev => ev is FloorReached { Floor: 3 });
         Assert.Equal((2, ElevatorState.MovingUp), (e.CurrentFloor, e.State));
 
         Assert.True(e.Unstick());
-        Assert.Equal(new SimTime(61_500), e.NextDeadline);
-        e.Tick(new SimTime(61_500));
+        Assert.Equal(new Instant(61_500), e.NextDeadline);
+        e.Tick(new Instant(61_500));
         Assert.Contains(e.DrainEvents(), ev => ev is FloorReached { Floor: 3, At.Ms: 61_500 });
     }
 
@@ -38,10 +38,10 @@ public class StuckMechanicsTests
         Assert.True(e.Stick());
         e.AssignPickup(R(1, 4, 9));
         Assert.Equal(ElevatorState.MovingUp, e.State);
-        e.Tick(new SimTime(30_000));
+        e.Tick(new Instant(30_000));
         Assert.Equal(1, e.CurrentFloor);
         e.Unstick();
-        e.Tick(new SimTime(30_000 + 2_000));
+        e.Tick(new Instant(30_000 + 2_000));
         Assert.Equal(2, e.CurrentFloor);
     }
 
@@ -50,14 +50,14 @@ public class StuckMechanicsTests
     {
         var e = Make();
         e.AssignPickup(R(1, 1, 5));
-        e.Tick(new SimTime(4_400));
+        e.Tick(new Instant(4_400));
         e.Stick();
-        e.Tick(new SimTime(20_000));
+        e.Tick(new Instant(20_000));
         e.Unstick();
-        e.Tick(new SimTime(20_200));
+        e.Tick(new Instant(20_200));
         e.AssignPickup(R(2, 1, 6));
         Assert.Equal(ElevatorState.DoorOpening, e.State);
-        Assert.Equal(new SimTime(20_800), e.NextDeadline);
+        Assert.Equal(new Instant(20_800), e.NextDeadline);
     }
 
     [Fact]
@@ -66,16 +66,16 @@ public class StuckMechanicsTests
         var e = Make();
         var h = new ElevatorHandler(e);
         var o = new Outbox();
-        h.Handle(new Boarded(R(1, 1, 3)), SimTime.Zero, o);
+        h.Handle(new Boarded(R(1, 1, 3)), Instant.Zero, o);
         o.Clear();
-        h.Handle(new ApplyFault(new FaultCommand(new SimTime(1_000), 0, FaultKind.Stuck, 10_000)), new SimTime(1_000), o);
-        Assert.Equal(new FaultCommandApplied(new SimTime(1_000), 0, FaultKind.Stuck, 10_000), o.Events.OfType<FaultCommandApplied>().Single());
-        Assert.Equal(new SimTime(11_000), h.NextWakeUp);
+        h.Handle(new ApplyFault(new FaultCommand(new Instant(1_000), 0, FaultKind.Stuck, 10_000)), new Instant(1_000), o);
+        Assert.Equal(new FaultCommandApplied(new Instant(1_000), 0, FaultKind.Stuck, 10_000), o.Events.OfType<FaultCommandApplied>().Single());
+        Assert.Equal(new Instant(11_000), h.NextWakeUp);
 
         o.Clear();
-        h.Handle(new WakeUp(), new SimTime(11_000), o);
-        Assert.Equal(new SimTime(12_000), h.NextWakeUp);
-        h.Handle(new WakeUp(), new SimTime(12_000), o);
+        h.Handle(new WakeUp(), new Instant(11_000), o);
+        Assert.Equal(new Instant(12_000), h.NextWakeUp);
+        h.Handle(new WakeUp(), new Instant(12_000), o);
         Assert.Contains(o.Events, ev => ev is FloorReached { Floor: 2, At.Ms: 12_000 });
     }
 
@@ -84,7 +84,7 @@ public class StuckMechanicsTests
     {
         var h = new ElevatorHandler(Make());
         var o = new Outbox();
-        h.Handle(new ApplyFault(new FaultCommand(SimTime.Zero, 0, FaultKind.Unstick)), SimTime.Zero, o);
+        h.Handle(new ApplyFault(new FaultCommand(Instant.Zero, 0, FaultKind.Unstick)), Instant.Zero, o);
         Assert.Empty(o.Events.OfType<FaultCommandApplied>());
     }
 }

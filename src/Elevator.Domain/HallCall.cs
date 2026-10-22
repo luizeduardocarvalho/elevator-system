@@ -5,12 +5,12 @@ namespace Elevator.Domain;
 /// <see cref="Requests"/> is empty. In destination-dispatch mode it groups the requests assigned to this elevator at
 /// that floor and direction, in arrival order: several requests share one stop (hall-call dedup).
 /// </summary>
-public sealed record HallCall(int Floor, Direction Direction, SimTime RegisteredAt, IReadOnlyList<Request> Requests)
+public sealed record HallCall(int Floor, Direction Direction, Instant RegisteredAt, IReadOnlyList<Request> Requests)
 {
     private DestinationTotals? _totals;
     private int? _maxLoad;
 
-    public HallCall(int floor, Direction direction, SimTime registeredAt) : this(floor, direction, registeredAt, []) { }
+    public HallCall(int floor, Direction direction, Instant registeredAt) : this(floor, direction, registeredAt, []) { }
 
     public IReadOnlyList<Request> Requests
     {

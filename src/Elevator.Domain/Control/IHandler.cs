@@ -27,8 +27,8 @@ public interface IHandler
 {
     Address Address { get; }
 
-    void Handle(Message message, SimTime now, Outbox outbox);
+    void Handle(Message message, Instant now, Outbox outbox);
 
     /// <summary>When this handler next needs a <see cref="WakeUp"/> even if no message arrives.</summary>
-    SimTime? NextWakeUp { get; }
+    Instant? NextWakeUp { get; }
 }

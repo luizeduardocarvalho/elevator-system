@@ -11,7 +11,7 @@ public class RendererTests
     private static BuildingState MidLunch()
     {
         var engine = SimEngine.Create(Repo.Load("lunch.yaml"), options: new SimEngineOptions(EmitDispatchEvaluations: true));
-        engine.AdvanceTo(new SimTime(600_000));
+        engine.AdvanceTo(new Instant(600_000));
         var state = new BuildingState();
         foreach (var e in engine.Log) state.Apply(e);
         state.AdvanceTo(engine.Now);

@@ -8,8 +8,9 @@ namespace Elevator.Domain.Events;
 /// writing them anywhere is the shell's job. Metrics, replay and the TUI consume them.
 /// </summary>
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
-[JsonDerivedType(typeof(SimulationStarted), nameof(SimulationStarted))]
-[JsonDerivedType(typeof(SimulationEnded), nameof(SimulationEnded))]
+// RunStarted and RunEnded keep their pre-rename wire names, so every existing log still replays (ADR-019).
+[JsonDerivedType(typeof(RunStarted), "SimulationStarted")]
+[JsonDerivedType(typeof(RunEnded), "SimulationEnded")]
 [JsonDerivedType(typeof(PassengerArrived), nameof(PassengerArrived))]
 [JsonDerivedType(typeof(PassengerBoarded), nameof(PassengerBoarded))]
 [JsonDerivedType(typeof(PassengerAlighted), nameof(PassengerAlighted))]
@@ -39,18 +40,18 @@ namespace Elevator.Domain.Events;
 [JsonDerivedType(typeof(AccessDenied), nameof(AccessDenied))]
 [JsonDerivedType(typeof(FaultCommandApplied), nameof(FaultCommandApplied))]
 [JsonDerivedType(typeof(DispatchEvaluated), nameof(DispatchEvaluated))]
-public abstract record DomainEvent([property: JsonPropertyName("t"), JsonPropertyOrder(-1)] SimTime At);
+public abstract record DomainEvent([property: JsonPropertyName("t"), JsonPropertyOrder(-1)] Instant At);
 
 /// <param name="Fleet">v3.1 contract: per-elevator type, capacity, bypass threshold and served floors. Written only for
 /// a configured (typed) fleet; null for the default building, whose values are the building-wide ones above.</param>
-public sealed record SimulationStarted(
-    SimTime At, string Scenario, int Seed, int Floors, string Scheduling, int Passengers,
+public sealed record RunStarted(
+    Instant At, string Scenario, int Seed, int Floors, string Scheduling, int Passengers,
     int Elevators = 1, string Dispatch = "none", int Capacity = int.MaxValue, double BypassThreshold = 1.0,
     string CapacityMode = "next-trip",
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<FleetEntry>? Fleet = null)
     : DomainEvent(At)
 {
-    public bool Equals(SimulationStarted? other) =>
+    public bool Equals(RunStarted? other) =>
         other is not null && At == other.At && Scenario == other.Scenario && Seed == other.Seed && Floors == other.Floors
         && Scheduling == other.Scheduling && Passengers == other.Passengers && Elevators == other.Elevators
         && Dispatch == other.Dispatch && Capacity == other.Capacity && BypassThreshold.Equals(other.BypassThreshold)
@@ -60,17 +61,17 @@ public sealed record SimulationStarted(
     public override int GetHashCode() => HashCode.Combine(At, Scenario, Seed, Floors, Passengers, Elevators, Fleet?.Count);
 }
 
-/// <summary>One elevator of a configured fleet (v3.1 contract), as logged in <see cref="SimulationStarted.Fleet"/>.</summary>
+/// <summary>One elevator of a configured fleet (v3.1 contract), as logged in <see cref="RunStarted.Fleet"/>.</summary>
 /// <param name="ServedFloors">Bit f = floor f, as in ElevatorSnapshot.ServedFloors.</param>
 public sealed record FleetEntry(int ElevatorId, string Type, int Capacity, double BypassThreshold, ulong ServedFloors);
 
-public sealed record SimulationEnded(SimTime At, int Delivered, int Unserved) : DomainEvent(At);
+public sealed record RunEnded(Instant At, int Delivered, int Unserved) : DomainEvent(At);
 
 /// <param name="Load">v3.1 contract: load units when not 1 (null = a person, 1 unit). Written only when set.</param>
 /// <param name="Vip">v3.1 contract: true for a VIP passenger; null otherwise. Written only when set.</param>
 /// <param name="AccessLevel">v3.1 contract: access level when above 0 (restricted floors); null = 0. Written only when set.</param>
 public sealed record PassengerArrived(
-    SimTime At, int PassengerId, int From, int To,
+    Instant At, int PassengerId, int From, int To,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Load = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? Vip = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? AccessLevel = null)
@@ -83,81 +84,81 @@ public sealed record PassengerArrived(
     public bool IsVip => Vip == true;
 }
 
-public sealed record PassengerBoarded(SimTime At, int PassengerId, int ElevatorId, int Floor) : DomainEvent(At);
+public sealed record PassengerBoarded(Instant At, int PassengerId, int ElevatorId, int Floor) : DomainEvent(At);
 
-public sealed record PassengerAlighted(SimTime At, int PassengerId, int ElevatorId, int Floor) : DomainEvent(At);
+public sealed record PassengerAlighted(Instant At, int PassengerId, int ElevatorId, int Floor) : DomainEvent(At);
 
 /// <summary>A new hall call was lit. Pressing an already-lit button produces no event.</summary>
-public sealed record HallCallRegistered(SimTime At, int Floor, Direction Direction, int ElevatorId = 0) : DomainEvent(At);
+public sealed record HallCallRegistered(Instant At, int Floor, Direction Direction, int ElevatorId = 0) : DomainEvent(At);
 
 /// <summary>The elevator has its doors open at <paramref name="Floor"/> with the lantern showing <paramref name="Direction"/>: waiting riders for that direction may board.</summary>
-public sealed record HallCallAnswered(SimTime At, int ElevatorId, int Floor, Direction Direction) : DomainEvent(At);
+public sealed record HallCallAnswered(Instant At, int ElevatorId, int Floor, Direction Direction) : DomainEvent(At);
 
-public sealed record CarCallRegistered(SimTime At, int ElevatorId, int Floor) : DomainEvent(At);
+public sealed record CarCallRegistered(Instant At, int ElevatorId, int Floor) : DomainEvent(At);
 
 /// <param name="Kind">"HallCall" or "CarCall".</param>
-public sealed record RequestRejected(SimTime At, string Kind, int Floor, Direction? Direction, string Reason) : DomainEvent(At);
+public sealed record RequestRejected(Instant At, string Kind, int Floor, Direction? Direction, string Reason) : DomainEvent(At);
 
-public sealed record StateChanged(SimTime At, int ElevatorId, ElevatorState From, ElevatorState To, Trigger Trigger, int Floor)
+public sealed record StateChanged(Instant At, int ElevatorId, ElevatorState From, ElevatorState To, Trigger Trigger, int Floor)
     : DomainEvent(At);
 
 /// <summary>The elevator has arrived level with <paramref name="Floor"/> (it may or may not stop there).</summary>
-public sealed record FloorReached(SimTime At, int ElevatorId, int Floor) : DomainEvent(At);
+public sealed record FloorReached(Instant At, int ElevatorId, int Floor) : DomainEvent(At);
 
 /// <summary>Doors are fully open at <paramref name="Floor"/>. Riders for this floor get off.</summary>
-public sealed record DoorsOpened(SimTime At, int ElevatorId, int Floor, Direction? Lantern) : DomainEvent(At);
+public sealed record DoorsOpened(Instant At, int ElevatorId, int Floor, Direction? Lantern) : DomainEvent(At);
 
 /// <summary>The dispatcher accepted a new request (first submission of this id).</summary>
-public sealed record RequestSubmitted(SimTime At, int RequestId, int From, int To) : DomainEvent(At);
+public sealed record RequestSubmitted(Instant At, int RequestId, int From, int To) : DomainEvent(At);
 
 /// <param name="Cost">Dispatch score of the chosen elevator (lower is better; meaning depends on the policy).</param>
 /// <param name="EtaMs">Estimated sim time of the pickup, if the policy computes one.</param>
-public sealed record AssignmentProposed(SimTime At, int RequestId, int ElevatorId, double Cost, long? EtaMs, bool Forced) : DomainEvent(At);
+public sealed record AssignmentProposed(Instant At, int RequestId, int ElevatorId, double Cost, long? EtaMs, bool Forced) : DomainEvent(At);
 
-public sealed record AssignmentAccepted(SimTime At, int RequestId, int ElevatorId) : DomainEvent(At);
+public sealed record AssignmentAccepted(Instant At, int RequestId, int ElevatorId) : DomainEvent(At);
 
-public sealed record AssignmentRejected(SimTime At, int RequestId, int ElevatorId, AssignmentReason Reason) : DomainEvent(At);
+public sealed record AssignmentRejected(Instant At, int RequestId, int ElevatorId, AssignmentReason Reason) : DomainEvent(At);
 
 /// <summary>An elevator handed back an accepted assignment (full-load bypass, rebalancing).</summary>
-public sealed record AssignmentReleased(SimTime At, int RequestId, int ElevatorId, AssignmentReason Reason) : DomainEvent(At);
+public sealed record AssignmentReleased(Instant At, int RequestId, int ElevatorId, AssignmentReason Reason) : DomainEvent(At);
 
 /// <summary>No elevator is eligible right now; the request waits for the next snapshot change.</summary>
-public sealed record DispatchDeferred(SimTime At, int RequestId) : DomainEvent(At);
+public sealed record DispatchDeferred(Instant At, int RequestId) : DomainEvent(At);
 
 /// <summary>A submission with an id that is already in flight; ignored (idempotency).</summary>
-public sealed record DuplicateSubmission(SimTime At, int RequestId) : DomainEvent(At);
+public sealed record DuplicateSubmission(Instant At, int RequestId) : DomainEvent(At);
 
 /// <summary>The assigned elevator opened for this passenger but was too full to take them; they press again.</summary>
-public sealed record PassengerLeftBehind(SimTime At, int PassengerId, int ElevatorId, int Floor) : DomainEvent(At);
+public sealed record PassengerLeftBehind(Instant At, int PassengerId, int ElevatorId, int Floor) : DomainEvent(At);
 
 /// <summary>The dispatcher entered (or left) overload mode: too many requests in flight, so it uses its cheap fallback policy.</summary>
-public sealed record OverloadModeChanged(SimTime At, bool Active, int InFlight) : DomainEvent(At);
+public sealed record OverloadModeChanged(Instant At, bool Active, int InFlight) : DomainEvent(At);
 
 /// <summary>Maintenance requested: the elevator stops taking assignments and drains (delivers its riders).</summary>
-public sealed record MaintenanceRequested(SimTime At, int ElevatorId) : DomainEvent(At);
+public sealed record MaintenanceRequested(Instant At, int ElevatorId) : DomainEvent(At);
 
 /// <summary>Riders delivered, parked out of service at <paramref name="Floor"/>.</summary>
-public sealed record MaintenanceEntered(SimTime At, int ElevatorId, int Floor) : DomainEvent(At);
+public sealed record MaintenanceEntered(Instant At, int ElevatorId, int Floor) : DomainEvent(At);
 
-public sealed record MaintenanceExited(SimTime At, int ElevatorId) : DomainEvent(At);
+public sealed record MaintenanceExited(Instant At, int ElevatorId) : DomainEvent(At);
 
-public sealed record EmergencyStopped(SimTime At, int ElevatorId, int Floor) : DomainEvent(At);
+public sealed record EmergencyStopped(Instant At, int ElevatorId, int Floor) : DomainEvent(At);
 
-public sealed record EmergencyCleared(SimTime At, int ElevatorId) : DomainEvent(At);
+public sealed record EmergencyCleared(Instant At, int ElevatorId) : DomainEvent(At);
 
 /// <summary>The watchdog saw no progress for <paramref name="SilentForMs"/>; the elevator's calls are reassigned.</summary>
-public sealed record FaultDetected(SimTime At, int ElevatorId, int Floor, long SilentForMs) : DomainEvent(At);
+public sealed record FaultDetected(Instant At, int ElevatorId, int Floor, long SilentForMs) : DomainEvent(At);
 
 /// <summary>The elevator moved again after a fault.</summary>
-public sealed record FaultRecovered(SimTime At, int ElevatorId) : DomainEvent(At);
+public sealed record FaultRecovered(Instant At, int ElevatorId) : DomainEvent(At);
 
 /// <summary>
 /// An access policy refused a request: for one elevator (<paramref name="ElevatorId"/>), or for all of them (null).
 /// </summary>
-public sealed record AccessDenied(SimTime At, int RequestId, int? ElevatorId, string Policy, string Reason) : DomainEvent(At);
+public sealed record AccessDenied(Instant At, int RequestId, int? ElevatorId, string Policy, string Reason) : DomainEvent(At);
 
 /// <summary>A fault or operator command took effect (injected live or from a scenario's fault schedule).</summary>
-public sealed record FaultCommandApplied(SimTime At, int ElevatorId, FaultKind Kind, long? DurationMs) : DomainEvent(At);
+public sealed record FaultCommandApplied(Instant At, int ElevatorId, FaultKind Kind, long? DurationMs) : DomainEvent(At);
 
 /// <summary>One elevator's score in a dispatch decision; <paramref name="Cost"/> null = ineligible (∞).</summary>
 public sealed record CandidateCost(int ElevatorId, double? Cost, string? Note = null);
@@ -166,7 +167,7 @@ public sealed record CandidateCost(int ElevatorId, double? Cost, string? Note = 
 /// Every candidate's cost for one dispatch decision and the winner (null = none eligible). Emitted just before
 /// <see cref="AssignmentProposed"/>, only when explanations are enabled (SimEngineOptions.EmitDispatchEvaluations).
 /// </summary>
-public sealed record DispatchEvaluated(SimTime At, int RequestId, IReadOnlyList<CandidateCost> Candidates, int? WinnerId) : DomainEvent(At)
+public sealed record DispatchEvaluated(Instant At, int RequestId, IReadOnlyList<CandidateCost> Candidates, int? WinnerId) : DomainEvent(At)
 {
     public bool Equals(DispatchEvaluated? other) =>
         other is not null && At == other.At && RequestId == other.RequestId && WinnerId == other.WinnerId

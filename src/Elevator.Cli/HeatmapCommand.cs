@@ -71,8 +71,8 @@ internal sealed class HeatmapCommand : Command<HeatmapCommand.Settings>
             if (!File.Exists(settings.Source)) return Fail($"no such log: {settings.Source}");
             using var reader = new StreamReader(settings.Source);
             events = JsonlEventLog.Read(reader).ToList();
-            var started = events.OfType<SimulationStarted>().FirstOrDefault();
-            if (started is null) return Fail($"{settings.Source} has no SimulationStarted event");
+            var started = events.OfType<RunStarted>().FirstOrDefault();
+            if (started is null) return Fail($"{settings.Source} has no RunStarted event");
             nameA = started.Dispatch ?? "none";
             title = $"{started.Scenario} · {nameA} · seed {started.Seed} · {settings.Source}";
             if (settings.Vs is { } vsLog)
@@ -80,8 +80,8 @@ internal sealed class HeatmapCommand : Command<HeatmapCommand.Settings>
                 if (!vsLog.EndsWith(".jsonl", StringComparison.OrdinalIgnoreCase) || !File.Exists(vsLog)) return Fail($"--vs must be another event log when the source is a log (no such log: {vsLog})");
                 using var readerB = new StreamReader(vsLog);
                 eventsB = JsonlEventLog.Read(readerB).ToList();
-                var startedB = eventsB.OfType<SimulationStarted>().FirstOrDefault();
-                if (startedB is null) return Fail($"{vsLog} has no SimulationStarted event");
+                var startedB = eventsB.OfType<RunStarted>().FirstOrDefault();
+                if (startedB is null) return Fail($"{vsLog} has no RunStarted event");
                 nameB = startedB.Dispatch ?? "none";
                 title = $"{started.Scenario} · seed {started.Seed} · {settings.Source} vs {vsLog}";
             }

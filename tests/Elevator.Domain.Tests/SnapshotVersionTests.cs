@@ -27,11 +27,11 @@ public class SnapshotVersionTests
     {
         var d = new DispatcherHandler(new Nearest(), 2, ElevatorTiming.Default);
         var o = new Outbox();
-        d.Handle(new SnapshotPublished(At(0, 1, 1)), SimTime.Zero, o);
-        d.Handle(new SnapshotPublished(At(1, 9, 5)), SimTime.Zero, o);
-        d.Handle(new SnapshotPublished(At(1, 1, 3)), SimTime.Zero, o);
+        d.Handle(new SnapshotPublished(At(0, 1, 1)), Instant.Zero, o);
+        d.Handle(new SnapshotPublished(At(1, 9, 5)), Instant.Zero, o);
+        d.Handle(new SnapshotPublished(At(1, 1, 3)), Instant.Zero, o);
 
-        d.Handle(new SubmitRequest(Request.Create(9, 2, SimTime.Zero, 12, id: 1).Value!), SimTime.Zero, o);
+        d.Handle(new SubmitRequest(Request.Create(9, 2, Instant.Zero, 12, id: 1).Value!), Instant.Zero, o);
 
         Assert.Equal(1, ProposedTo(o));
     }
@@ -41,11 +41,11 @@ public class SnapshotVersionTests
     {
         var d = new DispatcherHandler(new Nearest(), 2, ElevatorTiming.Default);
         var o = new Outbox();
-        d.Handle(new SnapshotPublished(At(0, 1, 1)), SimTime.Zero, o);
-        d.Handle(new SnapshotPublished(At(1, 1, 3)), SimTime.Zero, o);
-        d.Handle(new SnapshotPublished(At(1, 9, 5)), SimTime.Zero, o);
+        d.Handle(new SnapshotPublished(At(0, 1, 1)), Instant.Zero, o);
+        d.Handle(new SnapshotPublished(At(1, 1, 3)), Instant.Zero, o);
+        d.Handle(new SnapshotPublished(At(1, 9, 5)), Instant.Zero, o);
 
-        d.Handle(new SubmitRequest(Request.Create(9, 2, SimTime.Zero, 12, id: 1).Value!), SimTime.Zero, o);
+        d.Handle(new SubmitRequest(Request.Create(9, 2, Instant.Zero, 12, id: 1).Value!), Instant.Zero, o);
 
         Assert.Equal(1, ProposedTo(o));
     }

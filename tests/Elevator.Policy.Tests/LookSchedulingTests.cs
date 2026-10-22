@@ -8,7 +8,7 @@ public class LookSchedulingTests
 
     private static ElevatorSnapshot At(int floor, Direction? committed, int[] carCalls, params (int Floor, Direction Direction)[] pickups) =>
         ElevatorSnapshot.ForPolicy(floor, ElevatorState.Idle, committed, carCalls,
-            pickups.Select((c, i) => new HallCall(c.Floor, c.Direction, new SimTime(i * 1000))).ToArray(), 20);
+            pickups.Select((c, i) => new HallCall(c.Floor, c.Direction, new Instant(i * 1000))).ToArray(), 20);
 
     private static void Expect(ElevatorSnapshot s, int? target, Direction? serve = null)
     {

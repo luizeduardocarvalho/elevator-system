@@ -30,11 +30,11 @@ public class SteadyStateTests
     [Fact]
     public void A_frozen_clock_stands_still_and_nothing_comes_due()
     {
-        var clock = new RealClock(speed: 0, start: new SimTime(1_500_000));
+        var clock = new RealClock(speed: 0, start: new Instant(1_500_000));
         Thread.SpinWait(100_000);
-        Assert.Equal(new SimTime(1_500_000), clock.Now);
-        Assert.Equal(Timeout.InfiniteTimeSpan, clock.WallUntil(new SimTime(1_500_001)));
-        Assert.Equal(TimeSpan.Zero, clock.WallUntil(new SimTime(1_500_000)));
+        Assert.Equal(new Instant(1_500_000), clock.Now);
+        Assert.Equal(Timeout.InfiniteTimeSpan, clock.WallUntil(new Instant(1_500_001)));
+        Assert.Equal(TimeSpan.Zero, clock.WallUntil(new Instant(1_500_000)));
         Assert.Throws<ArgumentOutOfRangeException>(() => new RealClock(speed: -1));
     }
 
@@ -69,9 +69,9 @@ public class SteadyStateTests
     public void A_handed_over_engine_refuses_to_run()
     {
         var engine = SimEngine.Create(Lunch());
-        engine.AdvanceTo(new SimTime(60_000));
+        engine.AdvanceTo(new Instant(60_000));
         engine.HandOver();
-        Assert.Throws<InvalidOperationException>(() => engine.AdvanceTo(new SimTime(61_000)));
+        Assert.Throws<InvalidOperationException>(() => engine.AdvanceTo(new Instant(61_000)));
         Assert.Throws<InvalidOperationException>(() => engine.HandOver());
     }
 

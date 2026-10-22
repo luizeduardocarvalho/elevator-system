@@ -88,7 +88,7 @@ public static class ScenarioLoader
         if (dto.Watchdog?.TimeoutS is { } timeoutS)
         {
             if (timeoutS <= 0) errors.Add($"watchdog.timeoutS must be > 0 (got {timeoutS})");
-            else watchdogMs = SimTime.FromSeconds(timeoutS).Ms;
+            else watchdogMs = Instant.FromSeconds(timeoutS).Ms;
         }
 
         var passengers = new List<PassengerSpec>();
@@ -110,9 +110,9 @@ public static class ScenarioLoader
             }
 
             if (p.AccessLevel is < 0) errors.Add($"{where}: 'accessLevel' must be >= 0");
-            var request = Request.Create(from, to, SimTime.FromSeconds(at), floors, declared, load: p.Load ?? 1);
+            var request = Request.Create(from, to, Instant.FromSeconds(at), floors, declared, load: p.Load ?? 1);
             if (!request.IsSuccess) errors.Add($"{where}: {request.Error}");
-            else passengers.Add(new PassengerSpec(SimTime.FromSeconds(at), from, to) { Vip = p.Vip ?? false, AccessLevel = p.AccessLevel ?? 0, Load = p.Load ?? 1 });
+            else passengers.Add(new PassengerSpec(Instant.FromSeconds(at), from, to) { Vip = p.Vip ?? false, AccessLevel = p.AccessLevel ?? 0, Load = p.Load ?? 1 });
         }
 
         PoissonTraffic? traffic = null;
@@ -153,7 +153,7 @@ public static class ScenarioLoader
             }
             if (f.DurationS is { } d && (kind != FaultKind.Stuck || d <= 0))
                 errors.Add(kind != FaultKind.Stuck ? $"{where}: 'durationS' only applies to kind stuck" : $"{where}: 'durationS' must be > 0");
-            faults.Add(new FaultCommand(SimTime.FromSeconds(atS), elevator, kind, f.DurationS is { } ds ? SimTime.FromSeconds(ds).Ms : null));
+            faults.Add(new FaultCommand(Instant.FromSeconds(atS), elevator, kind, f.DurationS is { } ds ? Instant.FromSeconds(ds).Ms : null));
         }
 
         if (errors.Count > 0) return new(null, errors);
@@ -163,7 +163,7 @@ public static class ScenarioLoader
             dto.Seed ?? 1,
             floors,
             timing,
-            SimTime.FromSeconds(maxSimTimeS),
+            Instant.FromSeconds(maxSimTimeS),
             passengers,
             traffic,
             elevators,

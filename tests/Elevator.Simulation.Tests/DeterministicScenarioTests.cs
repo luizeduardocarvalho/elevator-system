@@ -70,7 +70,7 @@ public class DeterministicScenarioTests
     [Fact]
     public void Run_stops_at_max_sim_time_and_reports_unserved()
     {
-        var scenario = Repo.Load("v1-basic.yaml") with { MaxSimTime = new Domain.SimTime(20_000) };
+        var scenario = Repo.Load("v1-basic.yaml") with { MaxSimTime = new Domain.Instant(20_000) };
         var result = ScenarioRunner.Run(scenario);
 
         Assert.Equal(20_000, result.EndedAt.Ms);

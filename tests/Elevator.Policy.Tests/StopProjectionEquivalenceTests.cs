@@ -100,7 +100,7 @@ public class StopProjectionEquivalenceTests
         {
             if (at > e.Now.Ms) Advance(e, at, c.Boarded, ref boardedSoFar);
             if (e.State == ElevatorState.Maintenance) continue;
-            e.AssignPickup(Request.Create(from, to, new SimTime(at), Floors, id: ++id, load: load).Value!);
+            e.AssignPickup(Request.Create(from, to, new Instant(at), Floors, id: ++id, load: load).Value!);
             e.DrainEvents();
         }
         Advance(e, Math.Max(e.Now.Ms, c.SnapshotAtMs), c.Boarded, ref boardedSoFar);
@@ -129,7 +129,7 @@ public class StopProjectionEquivalenceTests
             e.DrainEvents();
             waiting = e.HallCalls.ToDictionary(h => (h.Floor, h.Direction), h => h.Requests.ToList());
         }
-        e.Tick(new SimTime(Math.Max(until, e.Now.Ms)));
+        e.Tick(new Instant(Math.Max(until, e.Now.Ms)));
         e.DrainEvents();
     }
 }

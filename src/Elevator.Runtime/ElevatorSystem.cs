@@ -58,7 +58,7 @@ public sealed class ElevatorSystem : IAsyncDisposable
     {
         _options = options;
         _sink = sink;
-        Clock = new RealClock(options.Speed, handover?.At ?? SimTime.Zero);
+        Clock = new RealClock(options.Speed, handover?.At ?? Instant.Zero);
         _delayed = new DelayedDelivery(Clock, Deliver);
         _requests = Channel.CreateBounded<SubmitRequest>(new BoundedChannelOptions(options.RequestQueueCapacity)
         {
@@ -295,7 +295,7 @@ public sealed class ElevatorSystem : IAsyncDisposable
     /// Delivers <paramref name="message"/> to <paramref name="to"/> at sim time <paramref name="at"/> on this system's
     /// clock, in order of (at, call order) with everything else scheduled (ADR-015). The fault injector uses it.
     /// </summary>
-    internal void PostAt(SimTime at, Address to, Message message) => _delayed.ScheduleAt(at, new Envelope(to, message));
+    internal void PostAt(Instant at, Address to, Message message) => _delayed.ScheduleAt(at, new Envelope(to, message));
 
     /// <summary>
     /// The lane a message takes into an actor. Emergency commands preempt: the priority control channel is read before

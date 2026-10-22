@@ -5,7 +5,7 @@ namespace Elevator.Domain.Tests;
 public class DestinationDispatchMechanicsTests
 {
     private static Request R(int id, int from, int to, long calledAtMs = 0) =>
-        Request.Create(from, to, new SimTime(calledAtMs), Harness.Floors, id: id).Value!;
+        Request.Create(from, to, new Instant(calledAtMs), Harness.Floors, id: id).Value!;
 
     private static Elevator Make(int capacity = 10, double threshold = 0.8, int startFloor = 1) =>
         new(0, Harness.Floors, ElevatorTiming.Default, TestPolicies.NearestCarCallThenOldestHallCall, startFloor, capacity, threshold);
@@ -45,14 +45,14 @@ public class DestinationDispatchMechanicsTests
         Assert.True(e.IsFull);
         Assert.Single(e.HallCalls);
 
-        e.Tick(new SimTime(7_000));
+        e.Tick(new Instant(7_000));
         var events = e.DrainEvents();
         Assert.DoesNotContain(events, ev => ev is AssignmentReleased);
         Assert.DoesNotContain(events, ev => ev is HallCallAnswered);
         var openAt4 = events.OfType<DoorsOpened>().Single(d => d.Floor == 4);
 
         foreach (var i in Enumerable.Range(1, 4)) e.Alight(i);
-        e.Tick(new SimTime(200_000));
+        e.Tick(new Instant(200_000));
         var answered = Assert.Single(e.DrainEvents().OfType<HallCallAnswered>());
         Assert.Equal(3, answered.Floor);
         Assert.True(answered.At > openAt4.At);
@@ -85,7 +85,7 @@ public class DestinationDispatchMechanicsTests
         var original = Make();
         original.AssignPickup(R(1, 5, 9));
         original.AssignPickup(R(2, 2, 1));
-        original.Tick(new SimTime(snapshotAtMs));
+        original.Tick(new Instant(snapshotAtMs));
         original.DrainEvents();
 
         var copy = Elevator.FromSnapshot(original.Snapshot(), ElevatorTiming.Default, TestPolicies.NearestCarCallThenOldestHallCall);
@@ -93,7 +93,7 @@ public class DestinationDispatchMechanicsTests
         foreach (var e in new[] { original, copy })
         {
             e.Board(R(3, e.CurrentFloor == 10 ? 9 : e.CurrentFloor, 10));
-            e.Tick(new SimTime(200_000));
+            e.Tick(new Instant(200_000));
         }
 
         Assert.Equal(original.DrainEvents(), copy.DrainEvents());

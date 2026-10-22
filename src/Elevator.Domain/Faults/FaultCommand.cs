@@ -16,7 +16,7 @@ public enum FaultKind
 /// (sim time), or at the current sim time if that is later, so runs with injected commands stay deterministic.
 /// </summary>
 /// <param name="DurationMs">Only for <see cref="FaultKind.Stuck"/>: how long it stays stuck; null = until Unstick.</param>
-public sealed record FaultCommand(SimTime At, int ElevatorId, FaultKind Kind, long? DurationMs = null);
+public sealed record FaultCommand(Instant At, int ElevatorId, FaultKind Kind, long? DurationMs = null);
 
 public interface IFaultInjector
 {
@@ -38,21 +38,21 @@ public sealed class NoOpFaultInjector : IFaultInjector
 
 public static class FaultInjectorExtensions
 {
-    public static void RequestMaintenance(this IFaultInjector injector, int elevatorId, SimTime at) =>
+    public static void RequestMaintenance(this IFaultInjector injector, int elevatorId, Instant at) =>
         injector.Inject(new FaultCommand(at, elevatorId, FaultKind.MaintenanceOn));
 
-    public static void EndMaintenance(this IFaultInjector injector, int elevatorId, SimTime at) =>
+    public static void EndMaintenance(this IFaultInjector injector, int elevatorId, Instant at) =>
         injector.Inject(new FaultCommand(at, elevatorId, FaultKind.MaintenanceOff));
 
-    public static void EmergencyStop(this IFaultInjector injector, int elevatorId, SimTime at) =>
+    public static void EmergencyStop(this IFaultInjector injector, int elevatorId, Instant at) =>
         injector.Inject(new FaultCommand(at, elevatorId, FaultKind.EmergencyStop));
 
-    public static void ClearEmergency(this IFaultInjector injector, int elevatorId, SimTime at) =>
+    public static void ClearEmergency(this IFaultInjector injector, int elevatorId, Instant at) =>
         injector.Inject(new FaultCommand(at, elevatorId, FaultKind.EmergencyClear));
 
-    public static void Stick(this IFaultInjector injector, int elevatorId, SimTime at, long? durationMs = null) =>
+    public static void Stick(this IFaultInjector injector, int elevatorId, Instant at, long? durationMs = null) =>
         injector.Inject(new FaultCommand(at, elevatorId, FaultKind.Stuck, durationMs));
 
-    public static void Unstick(this IFaultInjector injector, int elevatorId, SimTime at) =>
+    public static void Unstick(this IFaultInjector injector, int elevatorId, Instant at) =>
         injector.Inject(new FaultCommand(at, elevatorId, FaultKind.Unstick));
 }

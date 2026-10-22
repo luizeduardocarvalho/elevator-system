@@ -18,15 +18,15 @@ public sealed class BuildingState
     /// <summary>A wait above this is "long" in the metrics panel (sim seconds).</summary>
     public const double LongWaitS = 60;
 
-    private sealed class PassengerView(int from, Direction direction, SimTime calledAt, int load = 1)
+    private sealed class PassengerView(int from, Direction direction, Instant calledAt, int load = 1)
     {
         public readonly int Load = load;
         public readonly int From = from;
         public readonly Direction Direction = direction;
-        public readonly SimTime CalledAt = calledAt;
+        public readonly Instant CalledAt = calledAt;
         public bool Boarded;
         public int Assignments;
-        public SimTime? OpsReleasedAt;
+        public Instant? OpsReleasedAt;
     }
 
     private readonly List<ElevatorView> _elevators = [];
@@ -46,7 +46,7 @@ public sealed class BuildingState
     public bool Ended { get; private set; }
 
     /// <summary>Sim time shown: the latest event's, or later when the clock moved without events (<see cref="AdvanceTo"/>).</summary>
-    public SimTime Now { get; private set; }
+    public Instant Now { get; private set; }
 
     public IReadOnlyList<ElevatorView> Elevators => _elevators;
 
@@ -75,7 +75,7 @@ public sealed class BuildingState
     public IReadOnlyList<LogItem> Tail => [.. _tail];
 
     /// <summary>Moves the clock without events (live: the engine's time; replay: the cursor). Never backwards.</summary>
-    public void AdvanceTo(SimTime now)
+    public void AdvanceTo(Instant now)
     {
         if (now > Now) Now = now;
     }
@@ -98,7 +98,7 @@ public sealed class BuildingState
 
         switch (e)
         {
-            case SimulationStarted s:
+            case RunStarted s:
                 Scenario = s.Scenario;
                 Seed = s.Seed;
                 Floors = s.Floors;
@@ -114,7 +114,7 @@ public sealed class BuildingState
                         typed.Capacity = f.Capacity;
                     }
                 break;
-            case SimulationEnded:
+            case RunEnded:
                 Ended = true;
                 break;
 
@@ -230,11 +230,11 @@ public sealed class BuildingState
 }
 
 /// <summary>One elevator as folded from the log. Times are sim time.</summary>
-public sealed class ElevatorView(int id, SimTime createdAt)
+public sealed class ElevatorView(int id, Instant createdAt)
 {
     private long _busyMs;
-    private SimTime _stateSince = createdAt;
-    private SimTime _modeSince = createdAt;
+    private Instant _stateSince = createdAt;
+    private Instant _modeSince = createdAt;
     private ElevatorMode _modeBefore = ElevatorMode.Normal;
     private readonly long[] _modeMs = new long[Enum.GetValues<ElevatorMode>().Length];
 
@@ -266,7 +266,7 @@ public sealed class ElevatorView(int id, SimTime createdAt)
     private static bool IsBusy(ElevatorState s) => s is not (ElevatorState.Idle or ElevatorState.Maintenance);
 
     /// <summary>Share of [0, now] spent doing something (moving or in a door cycle): not idle, not parked.</summary>
-    public double Utilization(SimTime now)
+    public double Utilization(Instant now)
     {
         if (now.Ms <= 0) return 0;
         var busy = _busyMs + (IsBusy(State) ? Math.Max(0, now.Ms - _stateSince.Ms) : 0);
@@ -274,30 +274,30 @@ public sealed class ElevatorView(int id, SimTime createdAt)
     }
 
     /// <summary>Total sim ms spent in <paramref name="mode"/>, including the current stretch up to <paramref name="now"/>.</summary>
-    public long ModeMs(ElevatorMode mode, SimTime now) =>
+    public long ModeMs(ElevatorMode mode, Instant now) =>
         _modeMs[(int)mode] + (Mode == mode ? Math.Max(0, now.Ms - _modeSince.Ms) : 0);
 
-    internal void SetState(ElevatorState next, SimTime at)
+    internal void SetState(ElevatorState next, Instant at)
     {
         if (IsBusy(State)) _busyMs += Math.Max(0, at.Ms - _stateSince.Ms);
         State = next;
         _stateSince = at;
     }
 
-    internal void SetMode(ElevatorMode next, SimTime at)
+    internal void SetMode(ElevatorMode next, Instant at)
     {
         _modeMs[(int)Mode] += Math.Max(0, at.Ms - _modeSince.Ms);
         Mode = next;
         _modeSince = at;
     }
 
-    internal void Interrupt(ElevatorMode mode, SimTime at)
+    internal void Interrupt(ElevatorMode mode, Instant at)
     {
         if (Mode is not (ElevatorMode.Emergency or ElevatorMode.Fault)) _modeBefore = Mode;
         SetMode(mode, at);
     }
 
-    internal void Resume(ElevatorMode from, SimTime at)
+    internal void Resume(ElevatorMode from, Instant at)
     {
         if (Mode == from) SetMode(_modeBefore, at);
     }

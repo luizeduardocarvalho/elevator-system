@@ -15,9 +15,9 @@ public class MessageOrderTests
 
         public Address Address => Address.Elevator(99);
 
-        public SimTime? NextWakeUp => null;
+        public Instant? NextWakeUp => null;
 
-        public void Handle(Message message, SimTime now, Outbox outbox)
+        public void Handle(Message message, Instant now, Outbox outbox)
         {
             if (message is Numbered n) Seen.Enqueue(n);
         }

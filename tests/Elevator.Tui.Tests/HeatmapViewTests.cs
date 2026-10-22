@@ -8,16 +8,16 @@ namespace Elevator.Tui.Tests;
 
 public class HeatmapViewTests
 {
-    private static SimTime S(double seconds) => SimTime.FromSeconds(seconds);
+    private static Instant S(double seconds) => Instant.FromSeconds(seconds);
 
     private static WaitHeatmap Small() => WaitHeatmap.FromEvents(
     [
-        new SimulationStarted(S(0), "small", 1, 3, "look", 2),
+        new RunStarted(S(0), "small", 1, 3, "look", 2),
         new PassengerArrived(S(0), 1, 3, 1),
         new PassengerArrived(S(3600), 2, 1, 2),
         new PassengerBoarded(S(70), 1, 0, 3),
         new PassengerBoarded(S(3620), 2, 0, 1),
-        new SimulationEnded(S(7200), 2, 0),
+        new RunEnded(S(7200), 2, 0),
     ], binS: 600, spanS: 7200);
 
     [Theory]
@@ -116,7 +116,7 @@ public class HeatmapViewTests
     {
         DomainEvent[] arrivals =
         [
-            new SimulationStarted(S(0), "small", 1, 3, "look", 2),
+            new RunStarted(S(0), "small", 1, 3, "look", 2),
             new PassengerArrived(S(0), 1, 3, 1),
             new PassengerArrived(S(3600), 2, 1, 2),
         ];

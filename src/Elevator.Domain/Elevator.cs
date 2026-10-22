@@ -33,13 +33,13 @@ public sealed class Elevator
     private DestinationTotals _riderTotals = DestinationTotals.Empty;
     private readonly List<DomainEvent> _outbox = [];
 
-    private SimTime? _deadline;
+    private Instant? _deadline;
     private bool _maintenanceRequested;
     private bool _emergency;
     private bool _faulted;
     private bool _stuck;
     private long? _frozenMs;
-    private SimTime _closingStartedAt;
+    private Instant _closingStartedAt;
     private bool _levelWithFloor;
 
     /// <param name="servedFloors">Floors this elevator serves (its type, ADR-012): it never stops at any other.</param>
@@ -130,13 +130,13 @@ public sealed class Elevator
     /// <summary>Direction of travel while moving; the lit lantern while stopped; null when there is no work.</summary>
     public Direction? CommittedDirection { get; private set; }
 
-    public SimTime Now { get; private set; } = SimTime.Zero;
+    public Instant Now { get; private set; } = Instant.Zero;
 
     /// <summary>Increments on every observable change.</summary>
     public long Version { get; private set; }
 
     /// <summary>When the next timed phase ends, if any. Lets a discrete-event runner jump straight to it.</summary>
-    public SimTime? NextDeadline => _deadline;
+    public Instant? NextDeadline => _deadline;
 
     public IReadOnlyCollection<int> CarCalls => _carCalls;
 
@@ -179,7 +179,7 @@ public sealed class Elevator
     }
 
     /// <summary>Advances sim time to <paramref name="now"/>, running every phase that ends on or before it.</summary>
-    public void Tick(SimTime now)
+    public void Tick(Instant now)
     {
         if (now < Now) throw new ArgumentOutOfRangeException(nameof(now), $"time went backwards: {now} < {Now}");
 

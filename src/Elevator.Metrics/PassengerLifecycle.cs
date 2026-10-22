@@ -37,15 +37,15 @@ public sealed record PassengerRecord(
     int Id,
     int From,
     int To,
-    SimTime CalledAt,
-    SimTime? FirstAssignedAt,
+    Instant CalledAt,
+    Instant? FirstAssignedAt,
     int? Elevator,
     int Assignments,
     int Rejections,
     int LeftBehind,
-    SimTime? ElevatorArrivedAt,
-    SimTime? BoardedAt,
-    SimTime? AlightedAt,
+    Instant? ElevatorArrivedAt,
+    Instant? BoardedAt,
+    Instant? AlightedAt,
     IReadOnlyDictionary<WaitBucket, double> WaitBuckets)
 {
     public double? WaitS => BoardedAt is { } b ? (b.Ms - CalledAt.Ms) / 1000.0 : null;
@@ -78,14 +78,14 @@ public static class PassengerLifecycle
         public long StuckUntilMs = -1;
     }
 
-    private sealed class Tracker(int id, int from, int to, SimTime calledAt)
+    private sealed class Tracker(int id, int from, int to, Instant calledAt)
     {
         public readonly int Id = id, From = from, To = to;
-        public readonly SimTime CalledAt = calledAt;
+        public readonly Instant CalledAt = calledAt;
         public Status Status = Status.Dispatch;
         public int? Elevator;
         public long AssignedAtMs;
-        public SimTime? FirstAssignedAt, ElevatorArrivedAt, BoardedAt, AlightedAt;
+        public Instant? FirstAssignedAt, ElevatorArrivedAt, BoardedAt, AlightedAt;
         public int Assignments, Rejections, LeftBehind;
         public readonly double[] Buckets = new double[Enum.GetValues<WaitBucket>().Length];
 
@@ -120,7 +120,7 @@ public static class PassengerLifecycle
 
             switch (e)
             {
-                case SimulationStarted started:
+                case RunStarted started:
                     fullAt = started.Capacity == int.MaxValue ? double.PositiveInfinity : started.BypassThreshold * started.Capacity;
                     foreach (var f in started.Fleet ?? []) fleetFullAt[f.ElevatorId] = f.Capacity * f.BypassThreshold;
                     break;
@@ -161,7 +161,7 @@ public static class PassengerLifecycle
                     p.BoardedAt = b.At;
                     p.Elevator = b.ElevatorId;
                     var arrival = View(b.ElevatorId).LastArrival;
-                    p.ElevatorArrivedAt = arrival.Floor == b.Floor && arrival.Ms >= 0 ? new SimTime(arrival.Ms) : b.At;
+                    p.ElevatorArrivedAt = arrival.Floor == b.Floor && arrival.Ms >= 0 ? new Instant(arrival.Ms) : b.At;
                     waiting.Remove(p);
                     break;
                 case PassengerAlighted al when passengers.GetValueOrDefault(al.PassengerId) is { } p:

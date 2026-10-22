@@ -13,7 +13,7 @@ public class LogCausalityTests
     {
         const int threads = 16, each = 50;
         await using var system = ElevatorSystem.Start(new RuntimeOptions(Speed: 50, Dispatch: "nearest"));
-        var noOp = new ElevatorNotice(new DoorsOpened(SimTime.Zero, 0, 20, null));
+        var noOp = new ElevatorNotice(new DoorsOpened(Instant.Zero, 0, 20, null));
         for (var i = 0; i < busyPassengers; i++) system.Post(Address.Passengers, noOp);
         var rng = new Random(5);
         var requests = Enumerable.Range(0, threads * each).Select(i =>
@@ -21,7 +21,7 @@ public class LogCausalityTests
             var from = rng.Next(1, 21);
             int to;
             do to = rng.Next(1, 21); while (to == from);
-            return Request.Create(from, to, SimTime.Zero, 20, id: i + 1).Value!;
+            return Request.Create(from, to, Instant.Zero, 20, id: i + 1).Value!;
         }).ToList();
 
         using var gate = new ManualResetEventSlim();

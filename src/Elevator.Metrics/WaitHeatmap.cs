@@ -84,8 +84,8 @@ public sealed class WaitHeatmap : IHeatGrid
     public static WaitHeatmap FromEvents(IEnumerable<DomainEvent> events, double binS, HeatStat stat = HeatStat.Avg, double? spanS = null)
     {
         var list = events as IReadOnlyList<DomainEvent> ?? events.ToList();
-        var floors = list.OfType<SimulationStarted>().FirstOrDefault()?.Floors
-                     ?? throw new ArgumentException("the log has no SimulationStarted event", nameof(events));
+        var floors = list.OfType<RunStarted>().FirstOrDefault()?.Floors
+                     ?? throw new ArgumentException("the log has no RunStarted event", nameof(events));
         return Build(PassengerLifecycle.Analyze(list), floors, binS, stat, spanS);
     }
 
