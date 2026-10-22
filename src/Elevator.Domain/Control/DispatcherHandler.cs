@@ -121,6 +121,11 @@ public sealed class DispatcherHandler(
             case SubmitRequest submit:
                 OnSubmit(submit.Request, now, outbox);
                 break;
+            // Newest view wins (ADR-015): in the actor runtime two delayed snapshots of one elevator can arrive out of
+            // order, and an older one must not replace a newer one. (The simulator delivers them in order anyway.)
+            case SnapshotPublished published when _snapshots.TryGetValue(published.Snapshot.ElevatorId, out var current)
+                                                  && published.Snapshot.Version < current.Version:
+                break;
             case SnapshotPublished published:
                 _snapshots[published.Snapshot.ElevatorId] = published.Snapshot;
                 if (_overlay.TryGetValue(published.Snapshot.ElevatorId, out var shown))
