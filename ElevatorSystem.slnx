@@ -6,6 +6,7 @@
     <Project Path="src/Elevator.Cli/Elevator.Cli.csproj" />
     <Project Path="src/Elevator.Domain/Elevator.Domain.csproj" />
     <Project Path="src/Elevator.EventLog/Elevator.EventLog.csproj" />
+    <Project Path="src/Elevator.Lab/Elevator.Lab.csproj" />
     <Project Path="src/Elevator.Metrics/Elevator.Metrics.csproj" />
     <Project Path="src/Elevator.Policy/Elevator.Policy.csproj" />
     <Project Path="src/Elevator.Runtime/Elevator.Runtime.csproj" />
@@ -14,6 +15,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Elevator.Domain.Tests/Elevator.Domain.Tests.csproj" />
+    <Project Path="tests/Elevator.Lab.Tests/Elevator.Lab.Tests.csproj" />
     <Project Path="tests/Elevator.Metrics.Tests/Elevator.Metrics.Tests.csproj" />
     <Project Path="tests/Elevator.Policy.Tests/Elevator.Policy.Tests.csproj" />
     <Project Path="tests/Elevator.Runtime.Tests/Elevator.Runtime.Tests.csproj" />

@@ -1,4 +1,4 @@
-namespace Elevator.Runtime;
+namespace Elevator.Lab;
 
 /// <summary>
 /// Raw timestamps of one ramp step (Stopwatch ticks), as the open-loop generator recorded them (ADR-016).

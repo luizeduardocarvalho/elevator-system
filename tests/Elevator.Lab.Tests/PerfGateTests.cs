@@ -1,4 +1,6 @@
-namespace Elevator.Runtime.Tests;
+using Elevator.Runtime;
+
+namespace Elevator.Lab.Tests;
 
 [Trait("Category", "Perf")]
 [Collection(nameof(PerfCollection))]

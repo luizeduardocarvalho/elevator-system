@@ -1,9 +1,10 @@
 using System.Diagnostics;
 using Elevator.Domain;
 using Elevator.Domain.Events;
+using Elevator.Runtime;
 using Elevator.Simulation;
 
-namespace Elevator.Runtime;
+namespace Elevator.Lab;
 
 /// <param name="Rates">Offered rates (requests per wall second), in order; the ramp stops after the first saturated step.</param>
 /// <param name="BuildingSpeed">0 = the building frozen at the seeded moment (steady state); 1 = real time.</param>

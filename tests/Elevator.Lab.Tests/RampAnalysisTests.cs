@@ -1,4 +1,4 @@
-namespace Elevator.Runtime.Tests;
+namespace Elevator.Lab.Tests;
 
 /// <summary>
 /// The ramp's step analysis (ADR-016), on synthetic timestamps. Frequency 1,000,000 ticks/s, so 1 tick = 1 µs.

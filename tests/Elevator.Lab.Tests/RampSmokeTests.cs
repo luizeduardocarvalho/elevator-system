@@ -1,6 +1,6 @@
 using Elevator.Simulation;
 
-namespace Elevator.Runtime.Tests;
+namespace Elevator.Lab.Tests;
 
 /// <summary>
 /// A short real ramp (ADR-016): two 2-second steps from the lunch peak, frozen building, retire on accept. Nothing is

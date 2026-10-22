@@ -3,9 +3,10 @@ using Elevator.Domain;
 using Elevator.Domain.Events;
 using Elevator.EventLog;
 using Elevator.Metrics;
+using Elevator.Runtime;
 using HdrHistogram;
 
-namespace Elevator.Runtime;
+namespace Elevator.Lab;
 
 /// <summary>Wall-clock latency percentiles of one load level (never sim time, ADR-008).</summary>
 public sealed record LatencySummary(double P50Ms, double P95Ms, double P99Ms, double MaxMs);
