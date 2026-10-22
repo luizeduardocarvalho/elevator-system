@@ -62,10 +62,6 @@ public sealed record PassengerRecord(
 
 /// <summary>
 /// Rebuilds every passenger's lifecycle and wait attribution from the event log alone.
-///
-/// Attribution is exact: between two consecutive event times nothing changes, so the whole interval goes to the
-/// bucket given by the state at its start (the same as summing infinitely small ticks). The state is the
-/// passenger's assignment status plus, when assigned, the assigned elevator's state relative to the passenger.
 /// By construction the buckets of a passenger sum exactly to their wait.
 /// </summary>
 public static class PassengerLifecycle
@@ -74,13 +70,11 @@ public static class PassengerLifecycle
 
     private sealed class ElevatorView
     {
-        /// <summary>Load units on board (persons count 1; v3.1 PassengerArrived.Load otherwise).</summary>
         public int Riders;
         public ElevatorState State = ElevatorState.Idle;
         public int Floor = Floors.Lowest;
         public long DoorCycleStartedMs = -1;
         public (long Ms, int Floor) LastArrival = (-1, 0);
-        /// <summary>Its drive is stuck until this time (injected Stuck, ADR-013); -1 when not stuck.</summary>
         public long StuckUntilMs = -1;
     }
 
@@ -106,9 +100,9 @@ public static class PassengerLifecycle
         var passengers = new Dictionary<int, Tracker>();
         var waiting = new List<Tracker>();
         long lastMs = 0;
-        var fullAt = double.PositiveInfinity; // load at which an elevator bypasses pickups (building-wide)
-        var fleetFullAt = new Dictionary<int, double>(); // per elevator, when the log describes a typed fleet (v3.1)
-        var loads = new Dictionary<int, int>();         // passenger → load units (v3.1)
+        var fullAt = double.PositiveInfinity;
+        var fleetFullAt = new Dictionary<int, double>();
+        var loads = new Dictionary<int, int>();
 
         ElevatorView View(int id) => elevators.TryGetValue(id, out var v) ? v : elevators[id] = new ElevatorView();
 
@@ -116,7 +110,6 @@ public static class PassengerLifecycle
         {
             while (e.At.Ms > lastMs)
             {
-                // A timed Stuck ends without an event of its own: split the interval there, so attribution stays exact.
                 var until = e.At.Ms;
                 foreach (var v in elevators.Values)
                     if (v.StuckUntilMs > lastMs && v.StuckUntilMs < until) until = v.StuckUntilMs;
@@ -146,8 +139,6 @@ public static class PassengerLifecycle
                     break;
                 case AssignmentRejected rej when passengers.GetValueOrDefault(rej.RequestId) is { BoardedAt: null } p:
                     p.Rejections++;
-                    // The reason decides where the time goes: a stale view is a dispatch problem; a full or
-                    // out-of-service elevator is a capacity/availability problem.
                     p.Status = rej.Reason switch
                     {
                         AssignmentReason.Maintenance or AssignmentReason.Emergency or AssignmentReason.Fault => Status.Blocked,
@@ -212,9 +203,9 @@ public static class PassengerLifecycle
             case Status.Blocked: return WaitBucket.Blocked;
         }
 
-        if (e!.StuckUntilMs > nowMs) return WaitBucket.Blocked; // assigned to a stuck elevator (until the watchdog reassigns)
+        if (e!.StuckUntilMs > nowMs) return WaitBucket.Blocked;
 
-        if (e.Riders >= fullAt) return WaitBucket.BypassedFull; // the assigned elevator is full: next trip (ADR-010)
+        if (e.Riders >= fullAt) return WaitBucket.BypassedFull;
 
         switch (e.State)
         {
@@ -226,7 +217,7 @@ public static class PassengerLifecycle
                 return p.From > e.Floor ? WaitBucket.TravelToward : WaitBucket.TravelAway;
             case ElevatorState.MovingDown:
                 return p.From < e.Floor ? WaitBucket.TravelToward : WaitBucket.TravelAway;
-            default: // door cycle
+            default:
                 if (e.DoorCycleStartedMs < p.AssignedAtMs) return WaitBucket.FinishingDoorCycle;
                 if (e.State == ElevatorState.DoorOpening && e.Floor == p.From) return WaitBucket.TravelToward;
                 return WaitBucket.ServingOthers;

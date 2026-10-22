@@ -14,7 +14,6 @@ public class LoopTests
     private static string Hash(IEnumerable<DomainEvent> events) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Repo.ToJsonl(events))));
 
-    /// <summary>Drives a live session with the real loop and a fake clock until the run finishes.</summary>
     private static async Task<LiveSession> RunLive(Scenario scenario, double? speed, params (int, TuiKey)[] keys)
     {
         var session = new LiveSession(scenario);
@@ -24,17 +23,11 @@ public class LoopTests
         return session;
     }
 
-    /// <summary>
-    /// The TUI's speed can never change the result: the same seed driven by the loop at 0.5× and 10× (fake frame
-    /// clock, 20 fps) and headless gives the same event-log hash. The TUI turns on DispatchEvaluated explanations,
-    /// so it is compared (a) in full against a headless run with explanations on, and (b) without them against
-    /// plain <see cref="SimEngine.Run"/>, byte for byte.
-    /// </summary>
     [Theory]
     [InlineData("lunch.yaml")]
     [InlineData("demo.yaml")]
-    [InlineData("chaos.yaml")] // scheduled faults, maintenance and emergency stops (ADR-013)
-    [InlineData("fleet.yaml")] // typed elevators and access policies (ADR-012)
+    [InlineData("chaos.yaml")]
+    [InlineData("fleet.yaml")]
     public async Task Same_seed_gives_the_same_event_log_hash_at_half_speed_ten_times_and_headless(string name)
     {
         var scenario = Repo.Load(name);
@@ -78,12 +71,10 @@ public class LoopTests
         var session = new LiveSession(Repo.Load("lunch.yaml"));
         var loop = new TuiLoop(session, new Pacer(10), new FakeClock(), new ScriptedKeys(), new CapturingPresenter(), new LoopOptions(MaxFrames: 21));
         await loop.RunAsync();
-        // Frame 0 has no elapsed time; frames 1..20 each owe 50 ms × 10 = 500 sim ms.
         Assert.Equal(new SimTime(10_000), session.Now);
         Assert.Equal("10.0×", loop.BuildScreen().Status.AchievedSpeed);
     }
 
-    /// <summary>A session whose every tick costs 5 ms of (fake) real time, to exercise the frame work budget.</summary>
     private sealed class SlowSession(FakeClock clock) : ISession
     {
         public string Source => "LIVE";
@@ -107,19 +98,19 @@ public class LoopTests
         var clock = new FakeClock();
         var loop = new TuiLoop(new SlowSession(clock), new Pacer(null), clock, new ScriptedKeys(), new CapturingPresenter(), new LoopOptions(MaxFrames: 3));
         await loop.RunAsync();
-        Assert.Equal(3 * 7, loop.Ticks); // 7 × 5 ms > 30 ms budget
+        Assert.Equal(3 * 7, loop.Ticks);
     }
 
     [Fact]
     public async Task A_slow_frame_drops_its_excess_and_the_achieved_speed_shows_it()
     {
         var clock = new FakeClock();
-        var pacer = new Pacer(50); // 25 ticks owed per 50 ms frame, but only 7 fit in the budget
+        var pacer = new Pacer(50);
         var loop = new TuiLoop(new SlowSession(clock), pacer, clock, new ScriptedKeys(), new CapturingPresenter(), new LoopOptions(MaxFrames: 40));
         await loop.RunAsync();
         Assert.Equal(0, pacer.AccumulatorMs);
         var achieved = double.Parse(loop.BuildScreen().Status.AchievedSpeed.TrimEnd('×'), System.Globalization.CultureInfo.InvariantCulture);
-        Assert.InRange(achieved, 5, 20); // well below the 50× target, and stable (no growing catch-up)
+        Assert.InRange(achieved, 5, 20);
     }
 
     [Fact]
@@ -134,7 +125,6 @@ public class LoopTests
     [Fact]
     public async Task Fault_keys_reach_the_real_injector_and_take_effect_in_the_simulation()
     {
-        // m on E1, e on E2, s on E3 (one elevator each: a parked elevator ignores an emergency stop, by design).
         var session = new LiveSession(Repo.Load("lunch.yaml"));
         var presenter = new CapturingPresenter();
         var loop = new TuiLoop(session, new Pacer(10), new FakeClock(),
@@ -148,7 +138,6 @@ public class LoopTests
         Assert.Equal("faults", status.Injector);
         Assert.DoesNotContain("no-op", status.Message, StringComparison.Ordinal);
 
-        // The real SimFaultInjector applied all three: the log shows each command and its effect.
         Assert.Equal([(1, Domain.Faults.FaultKind.MaintenanceOn), (2, Domain.Faults.FaultKind.EmergencyStop), (3, Domain.Faults.FaultKind.Stuck)],
             session.Log.OfType<Domain.Events.FaultCommandApplied>().Select(f => (f.ElevatorId, f.Kind)));
         Assert.Contains(session.Log, e => e is Domain.Events.MaintenanceRequested { ElevatorId: 1 });

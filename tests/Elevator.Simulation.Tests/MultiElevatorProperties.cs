@@ -7,10 +7,6 @@ using FsCheck.Xunit;
 
 namespace Elevator.Simulation.Tests;
 
-/// <summary>
-/// Random buildings, traffic, capacities, latencies and strategies through the full pipeline, checking the
-/// system-level invariants from the event log.
-/// </summary>
 public class MultiElevatorProperties
 {
     public sealed record Case(Scenario Scenario, Strategy Strategy);
@@ -42,8 +38,6 @@ public class MultiElevatorProperties
         from offset in Gen.Choose(1, floors - 1)
         select new PassengerSpec(new SimTime(at), from_, (from_ - 1 + offset) % floors + 1);
 
-    /// <summary>Regression: a rebalance hands passenger 4 to E1 as its doors open at floor 2, so 4 boards right after
-    /// the later caller 8 in the same batch (look+roundrobin+rebalance, 3 elevators, 17 floors).</summary>
     [Property(Replay = "12939244975951197390,4127911998706265127,76", MaxTest = 1)]
     public Property Same_batch_boarding_after_a_rebalance_is_not_a_skip() => System_invariants_hold();
 
@@ -53,13 +47,12 @@ public class MultiElevatorProperties
         var result = SimEngine.Run(c.Scenario, c.Strategy);
         var passengers = ScenarioRunner.BuildPassengers(c.Scenario).ToDictionary(p => p.Id);
 
-        // Everyone is served exactly once, at the right floors, including anyone left behind or bypassed.
         Assert.Equal((passengers.Count, 0), (result.Delivered, result.Unserved));
         Assert.Equal(passengers.Keys.Order(), result.Events.OfType<PassengerBoarded>().Select(b => b.PassengerId).Order());
         Assert.Equal(passengers.Keys.Order(), result.Events.OfType<PassengerAlighted>().Select(b => b.PassengerId).Order());
 
-        var owner = new Dictionary<int, int>();        // request → elevator holding an accepted assignment
-        var load = new Dictionary<int, int>();         // elevator → riders
+        var owner = new Dictionary<int, int>();
+        var load = new Dictionary<int, int>();
         var waitingSince = new Dictionary<int, SimTime>();
         var boardedAt = result.Events.OfType<PassengerBoarded>().Select(b => (b.PassengerId, b.ElevatorId, b.At)).ToHashSet();
         foreach (var e in result.Events)
@@ -83,11 +76,8 @@ public class MultiElevatorProperties
                     break;
                 case PassengerBoarded b:
                     var p = passengers[b.PassengerId];
-                    Assert.Equal(b.ElevatorId, owner[b.PassengerId]); // only the assigned elevator
+                    Assert.Equal(b.ElevatorId, owner[b.PassengerId]);
                     Assert.Equal(p.From, b.Floor);
-                    // Arrival order per floor: nobody who called earlier, for the same floor, direction and elevator, is
-                    // left waiting. One door opening is one batch: an earlier caller boarding at the same instant is not
-                    // skipped (a rebalance can hand them over as the doors open, so they board second in the batch).
                     Assert.DoesNotContain(waitingSince.Keys, id => id != p.Id
                         && passengers[id].From == p.From && passengers[id].Direction == p.Direction
                         && owner.GetValueOrDefault(id, -1) == b.ElevatorId && waitingSince[id] < waitingSince[p.Id]
@@ -104,10 +94,8 @@ public class MultiElevatorProperties
             }
         }
 
-        // No fault was injected, so the watchdog (on by default, T = 30 s) never fires (ADR-013).
         Assert.DoesNotContain(result.Events, e => e is FaultDetected);
 
-        // Wait attribution: every passenger's buckets sum exactly to their wait.
         foreach (var r in PassengerLifecycle.Analyze(result.Events))
             Assert.Equal(r.WaitS!.Value, r.WaitBuckets.Values.Sum(), 6);
     });

@@ -35,7 +35,6 @@ public abstract record Message;
 /// <summary>A message to deliver to <paramref name="To"/>, <paramref name="DelayMs"/> sim milliseconds from now.</summary>
 public sealed record Envelope(Address To, Message Message, long DelayMs = 0);
 
-// ---- To elevators ----------------------------------------------------------------------------------------
 public sealed record Start : Message;
 
 /// <summary>A timed phase may have ended; the handler ticks the elevator to "now".</summary>
@@ -57,7 +56,6 @@ public sealed record ApplyFault(Faults.FaultCommand Command) : Message;
 /// <summary>The dispatcher's watchdog saw no progress for <paramref name="SilentForMs"/> while this elevator had work (ADR-013).</summary>
 public sealed record FaultDeclared(long SilentForMs) : Message;
 
-// ---- To the dispatcher -----------------------------------------------------------------------------------
 public sealed record SubmitRequest(Request Request) : Message;
 
 public sealed record SnapshotPublished(ElevatorSnapshot Snapshot) : Message;
@@ -98,18 +96,15 @@ public sealed record RebalanceNow : Message;
 /// </summary>
 public sealed record RequestRefused(int RequestId, string Policy, string Reason) : Message;
 
-// ---- To passengers ---------------------------------------------------------------------------------------
 /// <summary>A passenger arrives and enters their destination; the passengers handler submits the request.</summary>
 public sealed record PassengerArrives(Request Request) : Message;
 
 /// <summary>Something passengers can see: doors opening (to get off) or a lantern answering their call (to get on).</summary>
 public sealed record ElevatorNotice(DomainEvent Event) : Message;
 
-// ---- To the simulator's fault scheduler -------------------------------------------------------------------
 /// <summary>Deliver <paramref name="Command"/> to its elevator at max(Command.At, now), as <see cref="ApplyFault"/>.</summary>
 public sealed record ScheduleFault(Faults.FaultCommand Command) : Message;
 
-// ---- To clients ------------------------------------------------------------------------------------------
 public sealed record RequestAssigned(int RequestId, int ElevatorId) : Message;
 
 public sealed record BestElevatorAnswer(int QueryId, int? ElevatorId, double Cost) : Message;

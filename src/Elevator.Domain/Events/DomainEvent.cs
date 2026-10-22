@@ -107,12 +107,9 @@ public sealed record FloorReached(SimTime At, int ElevatorId, int Floor) : Domai
 /// <summary>Doors are fully open at <paramref name="Floor"/>. Riders for this floor get off.</summary>
 public sealed record DoorsOpened(SimTime At, int ElevatorId, int Floor, Direction? Lantern) : DomainEvent(At);
 
-// ---- Destination dispatch (multi-elevator) ---------------------------------------------------------------
-
 /// <summary>The dispatcher accepted a new request (first submission of this id).</summary>
 public sealed record RequestSubmitted(SimTime At, int RequestId, int From, int To) : DomainEvent(At);
 
-/// <summary>The dispatcher picked <paramref name="ElevatorId"/> and sent it the assignment.</summary>
 /// <param name="Cost">Dispatch score of the chosen elevator (lower is better; meaning depends on the policy).</param>
 /// <param name="EtaMs">Estimated sim time of the pickup, if the policy computes one.</param>
 public sealed record AssignmentProposed(SimTime At, int RequestId, int ElevatorId, double Cost, long? EtaMs, bool Forced) : DomainEvent(At);
@@ -135,8 +132,6 @@ public sealed record PassengerLeftBehind(SimTime At, int PassengerId, int Elevat
 
 /// <summary>The dispatcher entered (or left) overload mode: too many requests in flight, so it uses its cheap fallback policy.</summary>
 public sealed record OverloadModeChanged(SimTime At, bool Active, int InFlight) : DomainEvent(At);
-
-// ---- Shared v3 contract (docs/contract-v3.md): emitted by the Hard stage; DispatchEvaluated on request -------
 
 /// <summary>Maintenance requested: the elevator stops taking assignments and drains (delivers its riders).</summary>
 public sealed record MaintenanceRequested(SimTime At, int ElevatorId) : DomainEvent(At);

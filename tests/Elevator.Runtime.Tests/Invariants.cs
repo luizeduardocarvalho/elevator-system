@@ -3,12 +3,10 @@ using Elevator.Domain.Events;
 
 namespace Elevator.Runtime.Tests;
 
-/// <summary>System invariants checked on an actor-runtime event log (events may interleave across actors).</summary>
 internal static class Invariants
 {
     public static void Check(IReadOnlyList<DomainEvent> events, int capacity)
     {
-        // No request is ever owned by two elevators.
         var owner = new Dictionary<int, int>();
         foreach (var e in events)
         {
@@ -25,13 +23,12 @@ internal static class Invariants
                     owner.Remove(l.PassengerId);
                     break;
                 case PassengerBoarded b:
-                    Assert.Equal(owner[b.PassengerId], b.ElevatorId); // only the assigned elevator is boarded
+                    Assert.Equal(owner[b.PassengerId], b.ElevatorId);
                     owner.Remove(b.PassengerId);
                     break;
             }
         }
 
-        // Each elevator is a single writer: its own state changes form one unbroken chain of table transitions.
         foreach (var chain in events.OfType<StateChanged>().GroupBy(s => s.ElevatorId))
         {
             var state = ElevatorState.Idle;
@@ -43,7 +40,6 @@ internal static class Invariants
             }
         }
 
-        // Load never exceeds capacity (one-unit loads here).
         var load = new Dictionary<int, int>();
         foreach (var e in events)
         {
@@ -52,10 +48,6 @@ internal static class Invariants
         }
     }
 
-    /// <summary>
-    /// No elevator accepts an assignment while draining, parked, in an emergency or faulty (ADR-013). Each elevator's own
-    /// events come from its single writer, in order, so its mode can be followed from them.
-    /// </summary>
     public static void CheckModes(IReadOnlyList<DomainEvent> events)
     {
         var mode = new Dictionary<int, (bool Requested, bool Parked, bool Emergency, bool Faulty)>();

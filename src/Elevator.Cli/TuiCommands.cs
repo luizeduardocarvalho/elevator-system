@@ -11,7 +11,6 @@ using Spectre.Console.Cli;
 
 namespace Elevator.Cli;
 
-/// <summary>Options shared by <c>tui</c> and <c>replay</c> (ADR-011).</summary>
 internal class ViewSettings : CommandSettings
 {
     [CommandOption("--speed <SPEED>")]
@@ -116,8 +115,6 @@ internal sealed class TuiCommand : AsyncCommand<TuiCommand.Settings>
             scenario = scenario with { Dispatch = dispatch.ToLowerInvariant() };
         }
 
-        // Keys m / e / s inject maintenance, emergency stops and stuck faults through the real SimFaultInjector
-        // (LiveSession's default), in sim time, so a live run stays deterministic and can be replayed.
         var session = new LiveSession(scenario, faultInjector: SimFaultInjector.Factory);
         var code = await settings.RunAsync(session, cancellationToken).ConfigureAwait(false);
         if (code == 0 && settings.Log is { } logPath)

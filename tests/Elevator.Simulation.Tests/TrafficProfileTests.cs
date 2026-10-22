@@ -10,7 +10,6 @@ public class TrafficProfileTests
     [Fact]
     public void Constant_rate_gives_the_expected_number_of_arrivals()
     {
-        // 30/min for 600 s → 300 expected; with 300 seeds the standard error of the mean is √300/√300 = 1.
         var profile = new TrafficProfile([new RatePoint(0, 30), new RatePoint(600, 30)], AllInterfloor);
         Assert.InRange(MeanCount(profile, _ => true), 296, 304);
     }
@@ -18,8 +17,6 @@ public class TrafficProfileTests
     [Fact]
     public void Thinning_follows_a_ramp()
     {
-        // λ(t) rises linearly from 0 to 60/min (1/s) over 600 s: ∫₀³⁰⁰ t/600 dt = 75 in the first half,
-        // ∫₃₀₀⁶⁰⁰ t/600 dt = 225 in the second.
         var profile = new TrafficProfile([new RatePoint(0, 0), new RatePoint(600, 60)], AllInterfloor);
         Assert.InRange(MeanCount(profile, p => p.At.Seconds < 300), 73, 77);
         Assert.InRange(MeanCount(profile, p => p.At.Seconds >= 300), 221, 229);
@@ -56,7 +53,7 @@ public class TrafficProfileTests
             AllInterfloor, Lobby: 1);
 
         Assert.Equal(morning, profile.MixAt(0));
-        Assert.Equal(morning, profile.MixAt(1199.9)); // the point at 600 s has no mix: the morning mix carries on
+        Assert.Equal(morning, profile.MixAt(1199.9));
         Assert.Equal(evening, profile.MixAt(1200));
         Assert.Equal(evening, profile.MixAt(5000));
 
@@ -75,8 +72,6 @@ public class TrafficProfileTests
         Assert.Equal(mix, profile.MixAt(10_000));
     }
 
-    /// <summary>Per-point mixes change which trip is drawn, never how many random numbers are drawn: a profile
-    /// whose per-point mix equals its default generates exactly the same passengers (existing scenarios stay byte-identical).</summary>
     [Fact]
     public void A_per_point_mix_equal_to_the_default_draws_the_same_passengers()
     {
@@ -131,7 +126,6 @@ public class TrafficProfileTests
         Assert.Contains(errors, e => e.Contains("rate[0].mix", StringComparison.Ordinal));
     }
 
-    /// <summary>The working day: up-peak in the morning, two lunch humps, down-peak in the evening (counts are means over seeds).</summary>
     [Fact]
     public void The_working_day_has_its_three_peaks_in_the_right_directions()
     {

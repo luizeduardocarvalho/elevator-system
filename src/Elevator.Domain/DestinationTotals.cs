@@ -2,11 +2,6 @@ using System.Collections.Immutable;
 
 namespace Elevator.Domain;
 
-/// <summary>
-/// How many people (and how much load) are headed to each destination floor, for a group of requests: the riders of
-/// an elevator, or the requests sharing one pickup stop. Maintained incrementally by the elevator (O(floors) per
-/// change), so route projections can work per stop instead of per passenger (ADR-006).
-/// </summary>
 public sealed record DestinationTotals(ImmutableArray<int> Counts, ImmutableArray<int> Loads, int TotalCount, int TotalLoad)
 {
     public static DestinationTotals Empty { get; } = new([], [], 0, 0);

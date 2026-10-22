@@ -4,7 +4,6 @@ using Elevator.Domain.Faults;
 
 namespace Elevator.Domain.Tests;
 
-/// <summary>Maintenance draining (ADR-013): no new work, riders delivered, then parked; pickups handed back at once.</summary>
 public class MaintenanceTests
 {
     private static Request R(int id, int from, int to) => Request.Create(from, to, SimTime.Zero, Harness.Floors, id: id).Value!;
@@ -17,7 +16,7 @@ public class MaintenanceTests
     {
         var e = Make(start: 4);
         Assert.True(e.RequestMaintenance());
-        Assert.False(e.RequestMaintenance()); // already requested
+        Assert.False(e.RequestMaintenance());
         var events = e.DrainEvents();
         Assert.IsType<MaintenanceRequested>(events[0]);
         Assert.Contains(events, ev => ev is StateChanged { From: ElevatorState.Idle, To: ElevatorState.Maintenance, Trigger: Trigger.EnterMaintenance });
@@ -41,14 +40,13 @@ public class MaintenanceTests
         Assert.Equal([(2, AssignmentReason.Maintenance), (3, AssignmentReason.Maintenance)], released.Select(r => (r.RequestId, r.Reason)));
         Assert.Empty(e.HallCalls);
 
-        // Still delivers its rider: 1 -> 6 is 5 floors (10 s) + doors 1 s.
         e.Tick(new SimTime(11_000));
         Assert.Contains(e.DrainEvents(), ev => ev is DoorsOpened { Floor: 6 });
-        Assert.Equal(ElevatorMode.Draining, e.Mode); // the rider is still inside until they step out
+        Assert.Equal(ElevatorMode.Draining, e.Mode);
         e.Alight(1);
         e.Tick(new SimTime(60_000));
         var parked = e.DrainEvents();
-        Assert.Equal(new MaintenanceEntered(new SimTime(15_000), 0, 6), parked.OfType<MaintenanceEntered>().Single()); // dwell 3 s + closing 1 s
+        Assert.Equal(new MaintenanceEntered(new SimTime(15_000), 0, 6), parked.OfType<MaintenanceEntered>().Single());
         Assert.Equal((ElevatorState.Maintenance, ElevatorMode.Maintenance, 6), (e.State, e.Mode, e.CurrentFloor));
     }
 
@@ -61,7 +59,7 @@ public class MaintenanceTests
         Assert.True(e.EndMaintenance());
         Assert.Equal(new MaintenanceExited(SimTime.Zero, 0), e.DrainEvents().OfType<MaintenanceExited>().Single());
         Assert.Equal((ElevatorState.Idle, ElevatorMode.Normal), (e.State, e.Mode));
-        Assert.False(e.EndMaintenance()); // nothing to end
+        Assert.False(e.EndMaintenance());
     }
 
     [Fact]
@@ -86,7 +84,7 @@ public class MaintenanceTests
         h.Handle(new Boarded(R(1, 1, 6)), SimTime.Zero, o);
         h.Handle(new ApplyFault(new FaultCommand(SimTime.Zero, 0, FaultKind.MaintenanceOn)), SimTime.Zero, o);
         o.Clear();
-        h.Handle(new Assign(R(2, 3, 9), null, Forced: true), new SimTime(500), o); // even forced
+        h.Handle(new Assign(R(2, 3, 9), null, Forced: true), new SimTime(500), o);
         Assert.Equal(AssignmentReason.Maintenance, o.Events.OfType<AssignmentRejected>().Single().Reason);
 
         h.Handle(new WakeUp(), new SimTime(11_000), o);

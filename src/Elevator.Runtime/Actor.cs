@@ -4,32 +4,20 @@ using Elevator.Domain.Control;
 
 namespace Elevator.Runtime;
 
-/// <summary>
-/// A single-writer actor: one loop owns one handler and is the only code that ever touches it. Messages arrive on
-/// the actor's own mailbox (and, for the dispatcher, the bounded request channel). Between messages the loop sleeps
-/// until the handler's next wake-up (an elevator's phase deadline) or the next message, whichever comes first.
-/// There is no shared mutable state and no lock anywhere: other actors only ever see messages and immutable snapshots.
-/// </summary>
 internal sealed class Actor(IHandler handler, ElevatorSystem system, ChannelReader<SubmitRequest>? requests = null)
 {
     private static readonly WakeUp WakeUpMessage = new();
 
     public Channel<Message> Mailbox { get; } = Channel.CreateUnbounded<Message>(new UnboundedChannelOptions { SingleReader = true });
 
-    /// <summary>
-    /// Priority control channel (ADR-013): read before the mailbox, so an emergency stop takes effect before anything
-    /// already queued. Still a message to the single owner of the handler: no flag shared across threads, no lock.
-    /// </summary>
     public Channel<Message> Control { get; } = Channel.CreateUnbounded<Message>(new UnboundedChannelOptions { SingleReader = true });
 
     public IHandler Handler => handler;
 
-    /// <summary>Messages handled and Stopwatch ticks spent inside the handler (written by this actor's loop only).</summary>
     public long MessagesHandled { get; private set; }
 
     public long HandlerTicks { get; private set; }
 
-    /// <summary>Ticks spent delivering this actor's outgoing messages (channel writes, ack completion).</summary>
     public long DeliveryTicks { get; private set; }
 
     public Task Start(CancellationToken ct) => Task.Run(() => Loop(ct), ct);
@@ -41,8 +29,8 @@ internal sealed class Actor(IHandler handler, ElevatorSystem system, ChannelRead
         while (!ct.IsCancellationRequested)
         {
             Message? message = null;
-            if (Control.Reader.TryRead(out var c)) message = c;                 // emergency stops before anything queued
-            else if (Mailbox.Reader.TryRead(out var m)) message = m;            // control traffic first
+            if (Control.Reader.TryRead(out var c)) message = c;
+            else if (Mailbox.Reader.TryRead(out var m)) message = m;
             else if (requests is not null && requests.TryRead(out var r)) message = r;
             else if (handler.NextWakeUp is { } wake && system.Clock.Now >= wake) message = WakeUpMessage;
 
@@ -53,7 +41,7 @@ internal sealed class Actor(IHandler handler, ElevatorSystem system, ChannelRead
             }
 
             var now = system.Clock.Now;
-            if (now < last) now = last; // handlers need monotonic time; Stopwatch is monotonic, this is belt and braces
+            if (now < last) now = last;
             last = now;
 
             outbox.Clear();
@@ -68,7 +56,6 @@ internal sealed class Actor(IHandler handler, ElevatorSystem system, ChannelRead
         }
     }
 
-    /// <summary>Sleeps until a message is available or the next wake-up time arrives.</summary>
     private async Task WaitAsync(CancellationToken ct)
     {
         using var wait = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -82,7 +69,6 @@ internal sealed class Actor(IHandler handler, ElevatorSystem system, ChannelRead
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            // the wake-up time arrived
         }
     }
 }

@@ -2,9 +2,6 @@ using Elevator.Domain.Events;
 
 namespace Elevator.Domain.Control;
 
-/// <summary>
-/// Collects what a handler produces while handling one message: messages to send and events to log.
-/// </summary>
 public sealed class Outbox
 {
     public List<Envelope> Messages { get; } = [];

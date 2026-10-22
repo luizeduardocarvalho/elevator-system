@@ -8,18 +8,6 @@ using FsCheck.Xunit;
 
 namespace Elevator.Simulation.Tests;
 
-/// <summary>
-/// The Hard stage's invariants (ADR-012, ADR-013) over random buildings, elevator types, access policies, passengers and
-/// fault schedules, checked on the event log:
-/// <list type="bullet">
-/// <item>no assignment is accepted by an elevator that is draining, parked for maintenance, in an emergency or faulty;</item>
-/// <item>no request is lost: each is delivered, or refused by access policy (AccessDenied with no elevator);</item>
-/// <item>every rider is delivered, at the right floor, by the elevator they boarded;</item>
-/// <item>a VIP-dedicated elevator never carries a non-VIP; a restricted floor is never served to an unauthorised passenger;
-/// an elevator never opens at a floor its type does not serve; load never exceeds capacity;</item>
-/// <item>wait attribution still sums exactly, and the log is the same at any tick size.</item>
-/// </list>
-/// </summary>
 public class HardStageProperties
 {
     public sealed record Case(Scenario Scenario, Strategy Strategy)
@@ -40,12 +28,9 @@ public class HardStageProperties
         select kind switch
         {
             0 => ElevatorType.Standard(ElevatorTiming.Default, capacity),
-            // Express: lobby + top half, faster.
             1 => new ElevatorType("express", new ElevatorTiming(1_000, 800, 2_000, 800), capacity,
                 FloorMask.Of([1, .. Enumerable.Range(floors / 2 + 1, floors - floors / 2)])),
-            // Low-rise local: the bottom half (+1).
             2 => new ElevatorType("low", ElevatorTiming.Default, capacity, FloorMask.Of(Enumerable.Range(1, floors / 2 + 1))),
-            // Freight: slow, long dwell, twice the capacity.
             _ => new ElevatorType("freight", new ElevatorTiming(3_000, 2_000, 6_000, 2_000), capacity * 2),
         };
 
@@ -58,7 +43,6 @@ public class HardStageProperties
         from load in Gen.Elements(1, 1, 1, 1, 2, 3, 12)
         select new PassengerSpec(new SimTime(at), from_, (from_ - 1 + offset) % floors + 1) { Vip = vip, AccessLevel = level, Load = load };
 
-    /// <summary>Commands that always end: maintenance on/off, emergency stop/clear, stuck with a duration or an unstick.</summary>
     private static Gen<FaultCommand[]> FaultsGen(int elevators) =>
         from n in Gen.Choose(0, 4)
         from episodes in Gen.ArrayOf(
@@ -111,7 +95,6 @@ public class HardStageProperties
         var passengers = ScenarioRunner.BuildPassengers(scenario).ToDictionary(p => p.Id);
         var fleet = scenario.EffectiveFleet;
 
-        // No request lost: delivered, or refused by every elevator's access policies (and then never boarded).
         var refused = events.OfType<AccessDenied>().Where(a => a.ElevatorId is null).Select(a => a.RequestId).ToHashSet();
         var delivered = events.OfType<PassengerAlighted>().Select(a => a.PassengerId).ToList();
         var lost = passengers.Keys.Except(delivered).Except(refused).ToList();
@@ -130,8 +113,8 @@ public class HardStageProperties
         Assert.Equal(passengers.Count - delivered.Count, result.Unserved);
 
         var mode = Enumerable.Range(0, scenario.Elevators).ToDictionary(e => e, _ => (Requested: false, Parked: false, Emergency: false, Faulty: false));
-        var riding = new Dictionary<int, int>();   // passenger → elevator
-        var load = new Dictionary<int, int>();     // elevator → load units
+        var riding = new Dictionary<int, int>();
+        var load = new Dictionary<int, int>();
         foreach (var e in events)
         {
             switch (e)

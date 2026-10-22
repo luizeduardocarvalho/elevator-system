@@ -52,7 +52,7 @@ public sealed record RunReport(
     /// <summary>Operations metrics: maintenance, emergency stops, faults, reassignments and their wait penalty (ADR-013).</summary>
     public OpsReport Ops { get; init; } = OpsReport.Empty;
 
-    /// <summary>Wait of delivered VIP passengers (v3.1 PassengerArrived.Vip); null when the run had no VIPs.</summary>
+    /// <summary>Wait of delivered VIP passengers; null when the run had no VIPs.</summary>
     public DurationStats? VipWait { get; init; }
 
     /// <summary>Wait of delivered non-VIP passengers, for comparison; null when the run had no VIPs.</summary>

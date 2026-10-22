@@ -14,7 +14,7 @@ public static class ReportBuilder
         var delivered = records.Where(r => r.Delivered && r.BoardedAt is not null).ToList();
         var passengers = started?.Passengers ?? records.Count;
         var refused = list.Count(e => e is AccessDenied { ElevatorId: null });
-        var vips = list.OfType<PassengerArrived>().Where(a => a.IsVip).Select(a => a.PassengerId).ToHashSet(); // v3.1
+        var vips = list.OfType<PassengerArrived>().Where(a => a.IsVip).Select(a => a.PassengerId).ToHashSet();
 
         var breakdown = Enum.GetValues<WaitBucket>().ToDictionary(
             b => b,

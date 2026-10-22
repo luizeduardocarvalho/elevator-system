@@ -18,7 +18,7 @@ public sealed record HallCall(int Floor, Direction Direction, SimTime Registered
         init
         {
             field = value;
-            _totals = null; // any change of requests invalidates the totals unless they are set alongside
+            _totals = null;
             _maxLoad = null;
         }
     } = Requests;
@@ -36,7 +36,6 @@ public sealed record HallCall(int Floor, Direction Direction, SimTime Registered
     /// queue fits, so a stop here always boards someone (ADR-012).</summary>
     public int MaxLoad => _maxLoad ??= Requests.Count == 0 ? 0 : Requests.Max(r => r.Load);
 
-    // Value equality on the data, not on the cached totals.
     public bool Equals(HallCall? other) =>
         other is not null && Floor == other.Floor && Direction == other.Direction && RegisteredAt == other.RegisteredAt
         && Requests.SequenceEqual(other.Requests);

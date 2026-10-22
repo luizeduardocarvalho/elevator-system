@@ -32,7 +32,7 @@ public sealed class LiveSession : ISession
         _strategy = strategy;
         _injector = faultInjector ?? SimFaultInjector.Factory;
         (Engine, State) = Fresh();
-        Fold(); // SimulationStarted is logged at Create: the first frame already shows the building
+        Fold();
     }
 
     public string Source => "LIVE";
@@ -58,8 +58,6 @@ public sealed class LiveSession : ISession
     {
         _folded = 0;
         var engine = SimEngine.Create(_scenario, _strategy, new SimEngineOptions(EmitDispatchEvaluations: true, _injector));
-        // Deliver what is due at t = 0 (passengers arriving at once), so the screen at 0:00:00.0 shows exactly the
-        // events stamped 0, as a replay at that time does. A zero step: the log is step-independent.
         engine.AdvanceTo(SimTime.Zero);
         return (engine, new BuildingState());
     }
@@ -74,7 +72,6 @@ public sealed class LiveSession : ISession
     public void SeekTo(SimTime target)
     {
         if (target < SimTime.Zero) target = SimTime.Zero;
-        // Stay on the tick grid so stepping after the seek makes the same AdvanceTo calls as a run that never seeked.
         target = new SimTime(target.Ms / Pacer.TickMs * Pacer.TickMs);
         if (target < Engine.Now)
         {
@@ -117,7 +114,7 @@ public sealed class LiveSession : ISession
 
     private void Fold()
     {
-        if (Engine.Finished) Engine.Finish(); // idempotent: logs SimulationEnded once, like SimEngine.Run
+        if (Engine.Finished) Engine.Finish();
         var log = Engine.Log;
         for (; _folded < log.Count; _folded++) State.Apply(log[_folded]);
         State.AdvanceTo(Engine.Now);

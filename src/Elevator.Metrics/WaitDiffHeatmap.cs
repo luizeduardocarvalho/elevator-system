@@ -10,8 +10,7 @@ namespace Elevator.Metrics;
 /// so it holds the same people in both runs. With <see cref="HeatStat.Avg"/> a cell is the mean over those people of
 /// (wait under A − wait under B): a paired difference, not a difference of two unrelated averages.</item>
 /// <item><b>Only people who boarded in both runs</b> are paired; the others are counted in <see cref="Excluded"/>.</item>
-/// <item><b>P95</b> is p95(A) − p95(B) over the paired people of the cell (a percentile of differences would answer a
-/// different question: how much worse the unluckiest individual got).</item>
+/// <item><b>P95</b> is p95(A) − p95(B) over the paired people of the cell.</item>
 /// <item>Refuses runs whose passengers differ (id, origin, destination or call time): that would not be a paired comparison.</item>
 /// </list>
 /// </summary>

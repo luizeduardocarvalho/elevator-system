@@ -5,11 +5,6 @@ using FsCheck.Xunit;
 
 namespace Elevator.Simulation.Tests;
 
-/// <summary>
-/// Causality on the simulator's log (ADR-015), over random buildings, strategies, capacities and link latencies:
-/// sim time never goes backwards, and per request the log reads arrival, submission, proposal, then acceptance, then
-/// boarding, then alighting. Every consumer (metrics, heatmaps, TUI fold, replay) relies on this order.
-/// </summary>
 public class LogCausalityProperties
 {
     [Property(MaxTest = 80)]

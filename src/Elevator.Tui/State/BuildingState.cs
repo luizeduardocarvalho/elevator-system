@@ -7,11 +7,6 @@ namespace Elevator.Tui.State;
 /// What the screen shows, rebuilt by folding the event log (ADR-007, ADR-011): the only input is events, in log
 /// order. Live, the TUI folds the engine's new log entries after each step; in <c>replay</c> it folds the file. Both
 /// use this one class, so a replay shows exactly what the live run showed at the same sim time.
-///
-/// It is proved against the engine's own read-only views (BuildingStateTests): at sampled times every elevator's
-/// floor, state, shown direction, riders and mode, and the waiting counts, equal <c>SimEngine.Elevators</c> and
-/// <c>SimEngine.Waiting</c>.
-///
 /// Single-threaded and mutable on purpose: the loop owns it, and the renderer only sees the immutable ScreenModel
 /// built from it.
 /// </summary>
@@ -25,7 +20,7 @@ public sealed class BuildingState
 
     private sealed class PassengerView(int from, Direction direction, SimTime calledAt, int load = 1)
     {
-        public readonly int Load = load; // load units (v3.1 PassengerArrived.Load; a person is 1)
+        public readonly int Load = load;
         public readonly int From = from;
         public readonly Direction Direction = direction;
         public readonly SimTime CalledAt = calledAt;
@@ -67,7 +62,7 @@ public sealed class BuildingState
     /// <summary>Accepted assignments after a passenger's first (same definition as the run report).</summary>
     public int Reassignments { get; private set; }
 
-    /// <summary>Pickups handed back for maintenance, emergency or a fault (the Hard stage's reassignments).</summary>
+    /// <summary>Pickups handed back for maintenance, emergency or a fault.</summary>
     public int OpsReassignments { get; private set; }
 
     /// <summary>Sim time those passengers spent unassigned between an ops hand-back and their next assignment.</summary>
@@ -112,7 +107,7 @@ public sealed class BuildingState
                 Dispatch = s.Dispatch;
                 ExpectedPassengers = s.Passengers;
                 for (var i = 0; i < s.Elevators; i++) View(i);
-                foreach (var f in s.Fleet ?? []) // v3.1: a typed fleet carries each elevator's own type and capacity
+                foreach (var f in s.Fleet ?? [])
                     if (View(f.ElevatorId) is { } typed)
                     {
                         typed.TypeName = f.Type;
@@ -124,7 +119,7 @@ public sealed class BuildingState
                 break;
 
             case PassengerArrived a:
-                if (_passengers.ContainsKey(a.PassengerId)) break; // a re-registration: already counted as waiting
+                if (_passengers.ContainsKey(a.PassengerId)) break;
                 if (Directions.Between(a.From, a.To) is not { } direction) break;
                 _passengers[a.PassengerId] = new PassengerView(a.From, direction, a.At, a.LoadUnits);
                 Arrived++;
@@ -187,8 +182,6 @@ public sealed class BuildingState
                 break;
             case AccessDenied denied:
                 AccessDenials++;
-                // No elevator named = every elevator refused (ADR-012): the engine drops the passenger from the
-                // waiting set (PassengersHandler, RequestRefused), so the fold stops counting them too.
                 if (denied.ElevatorId is null && _passengers.Remove(denied.RequestId, out var refused) && !refused.Boarded)
                     Increment((refused.From, refused.Direction), -1);
                 break;
@@ -208,10 +201,6 @@ public sealed class BuildingState
         }
     }
 
-    /// <summary>
-    /// FloorReached is one line per floor travelled (the elevator glyph already shows it), and a proposal right after
-    /// its own DispatchEvaluated repeats the ASSIGN line; both would only push useful lines out of the tail.
-    /// </summary>
     private bool ShowInTail(DomainEvent e) => e switch
     {
         FloorReached => false,
@@ -232,10 +221,9 @@ public sealed class BuildingState
         else _waiting.Remove(key);
     }
 
-    /// <summary>The view of elevator <paramref name="id"/>, growing the list if the log names one not announced at start.</summary>
     private ElevatorView? View(int id)
     {
-        if (id is < 0 or > 1_000) return null; // a corrupt id: ignore rather than allocate
+        if (id is < 0 or > 1_000) return null;
         while (_elevators.Count <= id) _elevators.Add(new ElevatorView(_elevators.Count, Now));
         return _elevators[id];
     }
@@ -254,11 +242,11 @@ public sealed class ElevatorView(int id, SimTime createdAt)
     public int Floor { get; internal set; } = Domain.Floors.Lowest;
     public ElevatorState State { get; private set; } = ElevatorState.Idle;
     public ElevatorMode Mode { get; private set; } = ElevatorMode.Normal;
-    /// <summary>Load on board in load units (a person is 1; freight per v3.1 PassengerArrived.Load).</summary>
+    /// <summary>Load on board in load units (a person is 1).</summary>
     public int Riders { get; internal set; }
-    /// <summary>Its own capacity when the log describes a typed fleet (v3.1); null = the building's.</summary>
+    /// <summary>Its own capacity when the log describes a typed fleet; null = the building's.</summary>
     public int? Capacity { get; internal set; }
-    /// <summary>Elevator type from the fleet (v3.1); "standard" otherwise.</summary>
+    /// <summary>Elevator type from the fleet; "standard" otherwise.</summary>
     public string TypeName { get; internal set; } = "standard";
     public int EmergencyStops { get; internal set; }
     public int Faults { get; internal set; }
@@ -303,7 +291,6 @@ public sealed class ElevatorView(int id, SimTime createdAt)
         _modeSince = at;
     }
 
-    /// <summary>Emergency or fault: remember the mode it interrupted (e.g. Draining) to return to it afterwards.</summary>
     internal void Interrupt(ElevatorMode mode, SimTime at)
     {
         if (Mode is not (ElevatorMode.Emergency or ElevatorMode.Fault)) _modeBefore = Mode;

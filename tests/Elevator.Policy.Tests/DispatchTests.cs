@@ -27,7 +27,6 @@ public class DispatchTests
     [Fact]
     public void Same_direction_ahead_counts_plain_distance()
     {
-        // E0 at 3 going up to 12; request at 8 going up: on the way, 5 floors.
         var e0 = Car(0, 3, Direction.Up, [12], ElevatorState.MovingUp);
         Assert.Equal(5, NearestDispatch.EffectiveDistance(e0, Req(8, 15)));
     }
@@ -35,17 +34,14 @@ public class DispatchTests
     [Fact]
     public void Opposite_direction_must_finish_the_sweep_first()
     {
-        // E0 at 3 going up to 12; request at 8 going down: up to 12 (9 floors) then back down to 8 (4) = 13.
         var e0 = Car(0, 3, Direction.Up, [12], ElevatorState.MovingUp);
         Assert.Equal(13, NearestDispatch.EffectiveDistance(e0, Req(8, 1)));
-        // An idle elevator at 14 (distance 6) therefore beats it.
         Assert.Equal(1, new NearestDispatch().Choose(Ctx(Req(8, 1), 0, e0, Car(1, 14)))!.ElevatorId);
     }
 
     [Fact]
     public void Behind_a_moving_elevator_counts_the_sweep_and_back()
     {
-        // E0 at 10 going up to 15; request at 6 going up: 5 up + 9 back down = 14.
         Assert.Equal(14, NearestDispatch.EffectiveDistance(Car(0, 10, Direction.Up, [15], ElevatorState.MovingUp), Req(6, 9)));
     }
 
@@ -56,7 +52,7 @@ public class DispatchTests
     [Fact]
     public void Elevators_with_room_are_preferred_and_maintenance_is_never_chosen()
     {
-        var full = Car(0, 5, load: 8);           // 8 ≥ 0.8 × 10
+        var full = Car(0, 5, load: 8);
         var maintenance = Car(1, 5, state: ElevatorState.Maintenance);
         var far = Car(2, 20);
         Assert.Equal(2, new NearestDispatch().Choose(Ctx(Req(5, 9), 0, full, maintenance, far))!.ElevatorId);

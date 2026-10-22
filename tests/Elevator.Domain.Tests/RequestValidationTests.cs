@@ -54,7 +54,7 @@ public class RequestValidationTests
     public void Pressing_a_lit_hall_button_again_registers_nothing_new()
     {
         var h = new Harness(startFloor: 5);
-        h.Elevator.EnterMaintenance(); // keep it from answering
+        h.Elevator.EnterMaintenance();
         h.Hall(0, 3, Direction.Up);
         h.Hall(100, 3, Direction.Up);
 

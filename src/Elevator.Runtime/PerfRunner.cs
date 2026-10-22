@@ -30,8 +30,7 @@ public static class PerfRunner
 {
     /// <summary>
     /// <paramref name="submitters"/> async submitters wait on one gate, then each submits
-    /// <paramref name="requestsEach"/> requests back to back. Async tasks rather than threads: 10k OS threads would
-    /// measure the OS scheduler, not the system; thread-level races are covered by the Barrier stress test.
+    /// <paramref name="requestsEach"/> requests back to back.
     /// </summary>
     public static async Task<BurstResult> Burst(RuntimeOptions options, int submitters, int requestsEach, TimeSpan timeout, int seed = 1, TextWriter? log = null)
     {
@@ -69,7 +68,7 @@ public static class PerfRunner
         var wall = Stopwatch.GetElapsedTime(started);
         if (system.Fault is { } fault) throw new InvalidOperationException("actor fault during perf run", fault);
 
-        await system.DisposeAsync().ConfigureAwait(false); // stop first: counters are then final
+        await system.DisposeAsync().ConfigureAwait(false);
         var submitted = submitters * requestsEach;
         return new BurstResult(submitters, submitted, assigned, submitted - assigned, checker.Violations,
             Summarize(latencies.Where(t => t > 0)), wall)
@@ -138,7 +137,7 @@ public static class PerfRunner
         var any = false;
         foreach (var t in stopwatchTicks)
         {
-            histogram.RecordValue(Math.Max(1, t * TimeSpan.TicksPerSecond / Stopwatch.Frequency)); // in TimeSpan ticks (100 ns)
+            histogram.RecordValue(Math.Max(1, t * TimeSpan.TicksPerSecond / Stopwatch.Frequency));
             any = true;
         }
         if (!any) return new LatencySummary(double.NaN, double.NaN, double.NaN, double.NaN);
@@ -147,7 +146,6 @@ public static class PerfRunner
             Ms(histogram.GetValueAtPercentile(99)), Ms(histogram.GetMaxValue()));
     }
 
-    /// <summary>Counts requests accepted by a second elevator while still owned by another (must stay 0). Runs on the log writer only.</summary>
     private sealed class OwnershipChecker
     {
         private readonly Dictionary<int, int> _owner = [];
