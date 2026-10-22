@@ -1,3 +1,5 @@
+using Elevator.EventLog;
+
 namespace Elevator.Simulation.Tests;
 
 internal static class Repo

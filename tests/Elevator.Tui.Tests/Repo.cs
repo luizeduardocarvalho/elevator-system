@@ -1,3 +1,4 @@
+using Elevator.EventLog;
 using Elevator.Simulation;
 
 namespace Elevator.Tui.Tests;

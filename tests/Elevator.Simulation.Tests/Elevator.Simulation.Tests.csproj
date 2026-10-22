@@ -9,6 +9,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Elevator.Simulation\Elevator.Simulation.csproj" />
     <ProjectReference Include="..\..\src\Elevator.Metrics\Elevator.Metrics.csproj" />
+    <ProjectReference Include="..\..\src\Elevator.EventLog\Elevator.EventLog.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />

@@ -5,6 +5,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Elevator.Domain\Elevator.Domain.csproj" />
+    <ProjectReference Include="..\Elevator.EventLog\Elevator.EventLog.csproj" />
     <ProjectReference Include="..\Elevator.Policy\Elevator.Policy.csproj" />
     <ProjectReference Include="..\Elevator.Runtime\Elevator.Runtime.csproj" />
     <ProjectReference Include="..\Elevator.Simulation\Elevator.Simulation.csproj" />

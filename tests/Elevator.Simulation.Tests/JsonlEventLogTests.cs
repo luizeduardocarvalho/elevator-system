@@ -1,5 +1,6 @@
 using Elevator.Domain;
 using Elevator.Domain.Events;
+using Elevator.EventLog;
 
 namespace Elevator.Simulation.Tests;
 

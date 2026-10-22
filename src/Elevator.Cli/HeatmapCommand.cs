@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Globalization;
 using Elevator.Domain.Events;
+using Elevator.EventLog;
 using Elevator.Metrics;
 using Elevator.Policy;
 using Elevator.Policy.Dispatch;

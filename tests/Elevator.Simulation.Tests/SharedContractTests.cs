@@ -2,6 +2,7 @@ using Elevator.Domain;
 using Elevator.Domain.Control;
 using Elevator.Domain.Events;
 using Elevator.Domain.Faults;
+using Elevator.EventLog;
 using FsCheck;
 using FsCheck.Fluent;
 using FsCheck.Xunit;

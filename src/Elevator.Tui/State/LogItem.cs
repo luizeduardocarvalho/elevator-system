@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using Elevator.Domain;
 using Elevator.Domain.Events;
-using Elevator.Simulation;
+using Elevator.EventLog;
 
 namespace Elevator.Tui.State;
 

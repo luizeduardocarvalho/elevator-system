@@ -5,6 +5,7 @@
   <Folder Name="/src/">
     <Project Path="src/Elevator.Cli/Elevator.Cli.csproj" />
     <Project Path="src/Elevator.Domain/Elevator.Domain.csproj" />
+    <Project Path="src/Elevator.EventLog/Elevator.EventLog.csproj" />
     <Project Path="src/Elevator.Metrics/Elevator.Metrics.csproj" />
     <Project Path="src/Elevator.Policy/Elevator.Policy.csproj" />
     <Project Path="src/Elevator.Runtime/Elevator.Runtime.csproj" />

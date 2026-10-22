@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Elevator.Domain;
 using Elevator.Domain.Events;
+using Elevator.EventLog;
 using Elevator.Metrics;
 using HdrHistogram;
 
@@ -40,7 +41,7 @@ public static class PerfRunner
         var system = ElevatorSystem.Start(options with { KeepEvents = false }, (seq, e) =>
         {
             checker.Observe(seq, e);
-            log?.WriteLine(Simulation.JsonlEventLog.Serialize(e, seq));
+            log?.WriteLine(JsonlEventLog.Serialize(e, seq));
             if (e is OverloadModeChanged o) overloaded = o.Active;
             if (e is AssignmentProposed) { if (overloaded) fallback++; else primary++; }
         });

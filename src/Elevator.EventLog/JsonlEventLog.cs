@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 using Elevator.Domain;
 using Elevator.Domain.Events;
 
-namespace Elevator.Simulation;
+namespace Elevator.EventLog;
 
 /// <summary>
 /// The event log: one JSON object per line, <c>{"seq":n,"type":"...","t":ms,...}</c>. Enums use the spec's

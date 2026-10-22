@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The event log's wire format (JSONL, ADR-007). The event records themselves live in the domain, which emits them. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Elevator.Domain\Elevator.Domain.csproj" />
+  </ItemGroup>
+</Project>

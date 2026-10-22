@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Globalization;
 using Elevator.Domain;
+using Elevator.EventLog;
 using Elevator.Policy.Dispatch;
 using Elevator.Simulation;
 using Elevator.Tui.Host;
