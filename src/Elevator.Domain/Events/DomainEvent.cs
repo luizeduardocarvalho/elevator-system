@@ -42,8 +42,6 @@ namespace Elevator.Domain.Events;
 [JsonDerivedType(typeof(DispatchEvaluated), nameof(DispatchEvaluated))]
 public abstract record DomainEvent([property: JsonPropertyName("t"), JsonPropertyOrder(-1)] Instant At);
 
-/// <param name="Fleet">v3.1 contract: per-elevator type, capacity, bypass threshold and served floors. Written only for
-/// a configured (typed) fleet; null for the default building, whose values are the building-wide ones above.</param>
 public sealed record RunStarted(
     Instant At, string Scenario, int Seed, int Floors, string Scheduling, int Passengers,
     int Elevators = 1, string Dispatch = "none", int Capacity = int.MaxValue, double BypassThreshold = 1.0,
@@ -61,8 +59,6 @@ public sealed record RunStarted(
     public override int GetHashCode() => HashCode.Combine(At, Scenario, Seed, Floors, Passengers, Elevators, Fleet?.Count);
 }
 
-/// <summary>One elevator of a configured fleet (v3.1 contract), as logged in <see cref="RunStarted.Fleet"/>.</summary>
-/// <param name="ServedFloors">Bit f = floor f, as in ElevatorSnapshot.ServedFloors.</param>
 public sealed record FleetEntry(int ElevatorId, string Type, int Capacity, double BypassThreshold, ulong ServedFloors);
 
 public sealed record RunEnded(Instant At, int Delivered, int Unserved) : DomainEvent(At);

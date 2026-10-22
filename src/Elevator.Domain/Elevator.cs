@@ -3,26 +3,6 @@ using Elevator.Domain.Events;
 
 namespace Elevator.Domain;
 
-/// <summary>
-/// One elevator: a pure, single-threaded state machine (ADR-002, ADR-003).
-///
-/// It never reads a clock. Time only advances through <see cref="Tick"/>, which runs every timed phase whose
-/// deadline has passed (one floor of travel, doors opening, dwell, doors closing). Because deadlines are
-/// processed one at a time at their exact instant, the outcome does not depend on how often Tick is called.
-///
-/// Mechanics (fixed, whatever the policy):
-/// <list type="bullet">
-/// <item>On reaching a floor it stops if a drop-off is registered there or the floor is the policy's target.
-/// It never carries a rider past their floor.</item>
-/// <item>On stopping it lights a direction lantern. Only the pickup in that direction is answered, so only
-/// riders going that way board.</item>
-/// <item>A matching pickup at the floor where it stands is answered at once (doors open), reopens the doors
-/// (doors closing) or opens them (idle).</item>
-/// <item>Full-load bypass: at or above the bypass threshold it only serves its riders. It keeps its pickups and comes
-/// back for them once riders get off (next trip, ADR-010).</item>
-/// </list>
-/// The policy only answers "where next, and which lantern?" (<see cref="ISchedulingPolicy.Decide"/>).
-/// </summary>
 public sealed class Elevator
 {
     private readonly ElevatorTiming _timing;
@@ -42,7 +22,6 @@ public sealed class Elevator
     private Instant _closingStartedAt;
     private bool _levelWithFloor;
 
-    /// <param name="servedFloors">Floors this elevator serves (its type, ADR-012): it never stops at any other.</param>
     public Elevator(int id, int floors, ElevatorTiming timing, ISchedulingPolicy policy, int startFloor = Floors.Lowest,
         int capacity = int.MaxValue, double bypassThreshold = 1.0, ulong servedFloors = FloorMask.All, string typeName = ElevatorType.StandardName)
     {
@@ -66,9 +45,6 @@ public sealed class Elevator
         _levelWithFloor = true;
     }
 
-    /// <summary>
-    /// Rebuilds an elevator in exactly the state captured by <paramref name="s"/>, including a phase in progress.
-    /// </summary>
     public static Elevator FromSnapshot(ElevatorSnapshot s, ElevatorTiming timing, ISchedulingPolicy policy)
     {
         var anyServed = Enumerable.Range(Floors.Lowest, s.Floors).First(f => FloorMask.Contains(s.ServedFloors, f));
@@ -95,7 +71,6 @@ public sealed class Elevator
 
     public int FloorCount { get; }
 
-    /// <summary>Floors this elevator serves (<see cref="FloorMask"/>). It passes the others without stopping.</summary>
     public ulong ServedFloors { get; }
 
     public string TypeName { get; }
@@ -110,16 +85,10 @@ public sealed class Elevator
 
     private bool Bypassing => IsFull;
 
-    /// <summary>The floor the elevator is at, or the last floor it passed while moving.</summary>
     public int CurrentFloor { get; private set; }
 
     public ElevatorState State { get; private set; } = ElevatorState.Idle;
 
-    /// <summary>
-    /// Operating mode (ADR-013), alongside the spec's state: Emergency while an emergency stop is in effect (it wins
-    /// over everything), Maintenance once parked, Fault from the watchdog's declaration until it moves again, Draining
-    /// while maintenance is requested and riders are still on board. Only a Normal elevator takes new assignments.
-    /// </summary>
     public ElevatorMode Mode =>
         _emergency ? ElevatorMode.Emergency
         : State == ElevatorState.Maintenance ? ElevatorMode.Maintenance
@@ -127,15 +96,12 @@ public sealed class Elevator
         : _maintenanceRequested ? ElevatorMode.Draining
         : ElevatorMode.Normal;
 
-    /// <summary>Direction of travel while moving; the lit lantern while stopped; null when there is no work.</summary>
     public Direction? CommittedDirection { get; private set; }
 
     public Instant Now { get; private set; } = Instant.Zero;
 
-    /// <summary>Increments on every observable change.</summary>
     public long Version { get; private set; }
 
-    /// <summary>When the next timed phase ends, if any. Lets a discrete-event runner jump straight to it.</summary>
     public Instant? NextDeadline => _deadline;
 
     public IReadOnlyCollection<int> CarCalls => _carCalls;
@@ -148,7 +114,6 @@ public sealed class Elevator
 
     public bool IsFull => Load >= BypassThreshold * Capacity;
 
-    /// <summary>Spec's <c>targetFloors</c>: floors with a pending stop, car calls (ascending) then hall calls (oldest first).</summary>
     public IReadOnlyList<int> TargetFloors => _carCalls.Concat(_hallCalls.Select(c => c.Floor)).Distinct().ToList();
 
     public ElevatorSnapshot Snapshot() =>
@@ -170,7 +135,6 @@ public sealed class Elevator
         return Snapshot() with { HallCalls = [.. _hallCalls.Where(c => c.MaxLoad <= room)] };
     }
 
-    /// <summary>Returns and clears the events produced since the last call.</summary>
     public IReadOnlyList<DomainEvent> DrainEvents()
     {
         var events = _outbox.ToArray();
@@ -178,7 +142,6 @@ public sealed class Elevator
         return events;
     }
 
-    /// <summary>Advances sim time to <paramref name="now"/>, running every phase that ends on or before it.</summary>
     public void Tick(Instant now)
     {
         if (now < Now) throw new ArgumentOutOfRangeException(nameof(now), $"time went backwards: {now} < {Now}");
@@ -263,10 +226,6 @@ public sealed class Elevator
         StartPhase(_timing.FloorTravelMs);
     }
 
-    /// <summary>
-    /// Opens the doors at the current floor. While doors are closing this reverses them, otherwise it is a stop
-    /// (from Idle, or from a moving state at the instant the elevator is level with a floor).
-    /// </summary>
     public void OpenDoor()
     {
         if (State == ElevatorState.DoorClosing)
@@ -295,7 +254,6 @@ public sealed class Elevator
 
     public void EnterMaintenance() => Fire(Trigger.EnterMaintenance);
 
-    /// <summary>If idle, decide again whether there is work. Needed after <see cref="FromSnapshot"/> of a hand-built snapshot.</summary>
     public void Resume() => DecideFromIdle();
 
     public void ExitMaintenance()
@@ -304,13 +262,8 @@ public sealed class Elevator
         DecideFromIdle();
     }
 
-    /// <summary>Registers a hall call (v1 mode: a lit button, no request attached). Input must already be valid.</summary>
     public void AddHallCall(int floor, Direction direction) => AddPickup(floor, direction, request: null);
 
-    /// <summary>
-    /// Destination dispatch: the dispatcher assigned <paramref name="request"/> to this elevator. It joins the pickup
-    /// stop at its floor and direction, creating the stop if needed. Accept/reject is decided before this call.
-    /// </summary>
     public void AssignPickup(Request request) => AddPickup(request.PickupFloor, request.Direction, request);
 
     private void AddPickup(int floor, Direction direction, Request? request)
@@ -364,7 +317,6 @@ public sealed class Elevator
         }
     }
 
-    /// <summary>Spec's <c>addRequest</c>: a car call (a destination pressed inside the elevator).</summary>
     public void AddRequest(int floor)
     {
         if (Floors.Check(floor, FloorCount) is { } error) throw new ArgumentOutOfRangeException(nameof(floor), error);
@@ -386,7 +338,6 @@ public sealed class Elevator
         AddRequest(rider.DestinationFloor);
     }
 
-    /// <summary>Load sensor: the rider with <paramref name="requestId"/> stepped out.</summary>
     public void Alight(int requestId)
     {
         var index = _riders.FindIndex(r => r.Id == requestId);
@@ -400,7 +351,6 @@ public sealed class Elevator
         if (State == ElevatorState.Idle) DecideFromIdle();
     }
 
-    /// <summary>Removes a not-yet-picked-up request (a retired request, perf only). False if it is no longer pending here.</summary>
     public bool Unassign(int requestId)
     {
         var index = _hallCalls.FindIndex(c => c.Requests.Any(r => r.Id == requestId));
@@ -482,12 +432,6 @@ public sealed class Elevator
         else _deadline = Now.AddMs(ms);
     }
 
-    /// <summary>
-    /// Maintenance requested: the elevator drains. It takes no new assignment (Mode = Draining), hands every pending
-    /// pickup back at once (released with reason Maintenance, so the dispatcher reassigns them now rather than after the
-    /// riders are delivered), and keeps delivering its riders. Once it is idle and empty it parks where it is.
-    /// </summary>
-    /// <returns>False if maintenance was already requested or it is already parked.</returns>
     public bool RequestMaintenance()
     {
         if (_maintenanceRequested || State == ElevatorState.Maintenance) return false;
@@ -499,8 +443,6 @@ public sealed class Elevator
         return true;
     }
 
-    /// <summary>Back in service: leaves the parked state (Maintenance → Idle), or cancels a drain still in progress.</summary>
-    /// <returns>False if there was no maintenance to end.</returns>
     public bool EndMaintenance()
     {
         if (!_maintenanceRequested && State != ElevatorState.Maintenance) return false;
