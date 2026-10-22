@@ -50,4 +50,23 @@ public class EmergencyScenarioTests
         Assert.All(events.OfType<PassengerAlighted>().Where(a => riders.Contains(a.PassengerId)), a => Assert.True(a.At >= cleared.At));
         Assert.DoesNotContain(events, e => e is AssignmentAccepted { ElevatorId: 2 } a && a.At >= stoppedAt && a.At < cleared.At);
     }
+
+    /// <summary>
+    /// Emergency commands keep their posting order among themselves (ADR-015): a clear posted before a stop at the same
+    /// instant is applied first (a no-op), then the stop, so the elevator ends up stopped.
+    /// </summary>
+    [Fact]
+    public void A_clear_posted_before_a_stop_at_the_same_instant_leaves_the_elevator_stopped()
+    {
+        var engine = SimEngine.Create(Repo.Load("lunch.yaml"), options: new SimEngineOptions(FaultInjector: SimFaultInjector.Factory));
+        engine.AdvanceTo(new SimTime(120_000));
+        var from = engine.Log.Count;
+        engine.FaultInjector.ClearEmergency(0, engine.Now);
+        engine.FaultInjector.EmergencyStop(0, engine.Now);
+        engine.AdvanceTo(engine.Now.AddMs(1_000));
+
+        var log = engine.Log.Skip(from).ToList();
+        Assert.Equal([FaultKind.EmergencyStop], log.OfType<FaultCommandApplied>().Where(f => f.ElevatorId == 0).Select(f => f.Kind));
+        Assert.DoesNotContain(log, e => e is EmergencyCleared { ElevatorId: 0 });
+    }
 }

@@ -202,12 +202,15 @@ public sealed class SimEngine
     }
 
     /// <summary>
-    /// Emergency stops, on their way to the elevator (via the fault scheduler or directly), jump ahead of messages due
-    /// at the same instant: the simulator's equivalent of the actor runtime's priority channel (ADR-013). Every other
-    /// message keeps the (time, sequence) order, so <see cref="Post"/> delivers after what is already due.
+    /// Emergency commands (stop and clear), on their way to the elevator (via the fault scheduler or directly), jump
+    /// ahead of messages due at the same instant: the simulator's equivalent of the actor runtime's priority channel
+    /// (ADR-013). Among themselves they keep (time, sequence) order, so a clear posted before a stop stays before it
+    /// (ADR-015). Every other message keeps the (time, sequence) order, so <see cref="Post"/> delivers after what is
+    /// already due.
     /// </summary>
     private static int PriorityOf(Message message) =>
-        message is ApplyFault { Command.Kind: FaultKind.EmergencyStop } or ScheduleFault { Command.Kind: FaultKind.EmergencyStop } ? 0 : 1;
+        message is ApplyFault { Command.Kind: FaultKind.EmergencyStop or FaultKind.EmergencyClear }
+            or ScheduleFault { Command.Kind: FaultKind.EmergencyStop or FaultKind.EmergencyClear } ? 0 : 1;
 
     private bool AllDone =>
         _passengers.Arrived == _expectedPassengers && _passengers.Delivered + _passengers.Refused == _expectedPassengers

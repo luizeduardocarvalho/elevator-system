@@ -189,8 +189,9 @@ public sealed class ElevatorSystem : IAsyncDisposable
     public void Post(Address to, Message message)
     {
         var actor = _actors[to];
-        // Emergency stops preempt: the priority control channel is read before the mailbox (ADR-013).
-        var channel = message is ApplyFault { Command.Kind: FaultKind.EmergencyStop } ? actor.Control : actor.Mailbox;
+        // Emergency commands preempt: the priority control channel is read before the mailbox (ADR-013). Stop and clear
+        // share that lane, so they keep their posting order among themselves (ADR-015).
+        var channel = message is ApplyFault { Command.Kind: FaultKind.EmergencyStop or FaultKind.EmergencyClear } ? actor.Control : actor.Mailbox;
         channel.Writer.TryWrite(message);
     }
 
