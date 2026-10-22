@@ -27,7 +27,7 @@ passengers:
   # 3) Late arrival at floor 1 while the doors are closing (they close 4 to 5 s): the doors reopen.
   - { at: 4.5, from: 1, to: 2 }
 
-  # 4) FIFO's weak spot: an early call far away is served before a later call close by.
+  # 4) Two down calls, far (10) then near (5): LOOK finishes its way up, then serves 10, 7 and 5 on one way down.
   - { at: 15, from: 10, to: 1 }
   - { at: 16, from: 5,  to: 1 }
 

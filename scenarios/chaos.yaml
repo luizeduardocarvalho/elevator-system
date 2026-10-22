@@ -1,6 +1,6 @@
 # Chaos: the lunch profile (same building, same traffic for a given seed) plus a fault schedule mixing maintenance,
 # emergency stops and stuck drives (ADR-013). Compare with and without the schedule on the same seeds:
-#   elevator bench --scenarios chaos --strategies look+cost,look+nearest --faults on,off --baseline look+cost/no-faults
+#   elevator bench --scenarios chaos --strategies cost,nearest --faults on,off --baseline cost/no-faults
 # 20 floors, 4 elevators, 30 minutes of traffic; the run continues until everyone is delivered (or 90 min).
 name: chaos
 seed: 1

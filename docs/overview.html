@@ -167,7 +167,7 @@ flowchart TB
 
   <div class="grid">
     <div class="card"><h4>Elevator.Domain</h4><p>State machine with an explicit transition table; advances only through <code>Tick(simTime)</code>. Handlers implement <code>Handle(message, now, outbox)</code>.</p></div>
-    <div class="card"><h4>Elevator.Policy</h4><p>Scheduling (FIFO, LOOK) and dispatch (RoundRobin, Nearest, Cost) as pure functions over immutable snapshots. All stay selectable via <code>--dispatch</code>.</p></div>
+    <div class="card"><h4>Elevator.Policy</h4><p>LOOK scheduling and dispatch (Cost, with Nearest as the overload fallback) as pure functions over immutable snapshots. Superseded strategies were removed once measured (ADR-018) and live at tag <code>v3-full-grid</code>.</p></div>
     <div class="card"><h4>Elevator.Runtime</h4><p>One actor loop + <code>Channel&lt;T&gt;</code> mailbox per elevator, a single dispatcher on a bounded request channel, a log writer, a watchdog.</p></div>
     <div class="card"><h4>Elevator.Simulation</h4><p><code>SimEngine</code>, SimClock/RealClock, seeded Poisson traffic, YAML scenarios, fault injector. One seeded RNG → fully deterministic.</p></div>
     <div class="card"><h4>Elevator.Metrics</h4><p>Reads the event log only: wait/ride/journey, wait attribution buckets, ops metrics, the wait heatmap, Student-t CIs.</p></div>
@@ -181,6 +181,8 @@ flowchart TB
     <tr><td><code>v2-medium</code></td><td>4 elevators, destination dispatch, LOOK, cost-based dispatch, capacity, actor runtime</td><td>004 LOOK · 005 actors vs locks · 006 cost function · 007 event log · 008 metrics · 009/010 capacity</td></tr>
     <tr><td><code>v3-hard</code></td><td>TUI ∥ elevator types, access policies (VIP, restricted floors), maintenance, emergency stop, watchdog, fault injection</td><td>011 TUI · 012 eligibility &amp; types · 013 maintenance / emergency / watchdog</td></tr>
     <tr><td>after v3</td><td>A working-day scenario (stepwise traffic mixes), the wait heatmap and the paired difference map: <code>elevator heatmap [--vs]</code></td><td>014 working day &amp; heatmap</td></tr>
+    <tr><td><code>v3-full-grid</code></td><td>The last commit with every strategy selectable: every results file reproduces here</td><td>015 ordering rules · 016 throughput ramp</td></tr>
+    <tr><td><code>main</code></td><td>The final design only: superseded strategies removed; requests validated at the runtime boundary; fail-stop actor supervision</td><td>017 validation &amp; supervision · 018 final design</td></tr>
   </table></div>
 
   <h3>Dispatch: the cost function</h3>
@@ -258,7 +260,7 @@ traffic:
     <tr><td>± rebalancing (held-out, paired vs sticky LOOK + Cost)</td><td class="n">−0.2 s (n.s.)</td><td class="n">−0.8 ± 0.5 s</td><td class="n">−0.4 s (n.s.)</td></tr>
     <tr><td><strong>Final default: LOOK + Cost, next-trip capacity, sticky (no rebalancing)</strong></td><td class="n"><strong>15.8 / 37.9</strong></td><td class="n"><strong>20.6 / 53.2</strong></td><td class="n"><strong>13.8 / 38.4</strong></td></tr>
   </table></div>
-  <div class="callout"><strong>Rebalancing was measured and left off.</strong> On top of cost dispatch it saves at most 0.8 ± 0.5 s on average (down-peak), is not significant at up-peak or lunch, and moves about one passenger in eight to a different elevator. Under destination dispatch the passenger has already been told which door to go to, so each move sends someone to the wrong door: a real cost that the simulation does not model. That doesn't justify it, so assignments stay sticky. Rebalancing remains selectable (<code>+rebalance</code>) for buildings that weigh it differently (ADR-006).</div>
+  <div class="callout"><strong>Rebalancing was measured and left off.</strong> On top of cost dispatch it saves at most 0.8 ± 0.5 s on average (down-peak), is not significant at up-peak or lunch, and moves about one passenger in eight to a different elevator. Under destination dispatch the passenger has already been told which door to go to, so each move sends someone to the wrong door: a real cost that the simulation does not model. That doesn't justify it, so assignments stay sticky. Rebalancing was then removed from <code>main</code> (ADR-018); it runs at tag <code>v3-full-grid</code>.</div>
 
   <h3>Hard stage, same method</h3>
   <div class="table-wrap"><table>

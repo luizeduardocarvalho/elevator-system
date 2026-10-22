@@ -15,7 +15,9 @@ Use the spec's terms: `Elevator` (never "car" in code), hall call = pickup reque
   - `Elevator.Domain`: state machine with an explicit transition table. No threads, locks, sleeps or DateTime.Now.
     Advances only through `Tick(simTime)`. Invariant: never moves unless doors are closed.
   - `Elevator.Policy`: scheduling and dispatch strategies as pure functions over immutable snapshots
-    (FIFO, LOOK, NearestElevator, CostBased). All strategies stay selectable forever (`--dispatch`).
+    (LOOK; CostBased, with Nearest as the overload fallback and baseline). `main` holds only the final design:
+    superseded strategies are removed once measured, and live at the stage tags (`v1-easy`, `v2-medium`,
+    `v3-full-grid`; ADR-018).
   - `Elevator.Runtime`: single-writer actors — one loop + `Channel<T>` mailbox per elevator, a single
     dispatcher consuming a bounded request channel, a watchdog. No shared mutable state between elevators.
   - `Elevator.Simulation`: `IClock` (SimClock / RealClock), seeded traffic generator (Poisson, time-varying

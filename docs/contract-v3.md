@@ -106,3 +106,10 @@ before and logs written before the amendment read the same (tested with v2-mediu
 - **Helpers:** `PassengerArrived.LoadUnits` and `.IsVip` (never serialised).
 - **No per-boarding fields.** `PassengerBoarded` and `PassengerAlighted` are unchanged: consumers join the arrival by
   passenger id.
+
+## Amendment: the final design (ADR-018)
+
+The contract is unchanged. Two of its values became constants: `SimulationStarted.scheduling` is always `look` and
+`SimulationStarted.capacityMode` is always `next-trip`. The fields stay so that older logs keep their meaning and
+replay unchanged. The release reasons `Rebalance` and `BypassedFull` are gone. Only runs with rebalancing or capacity
+mode `defer` ever emitted them; read those logs at tag `v3-full-grid`. (The TUI's tolerant reader skips such lines.)

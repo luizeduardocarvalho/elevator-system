@@ -265,3 +265,16 @@ into the pure core and the shared handlers, so both shells got them at once:
 With faults off and the default config, every v2 result regenerates byte-identically.
 Results: [h1-chaos](results/h1-chaos.md), [h2-fleet](results/h2-fleet.md), [h3](results/h3-watchdog-timeout.md),
 [h4](results/h4-watchdog-false-positives.md).
+
+## Final: superseded strategies removed (ADR-017, ADR-018)
+
+The shape did not change. The final design kept one configuration and removed what the measurements had replaced:
+FIFO scheduling, round-robin dispatch, hysteresis rebalancing, the Defer capacity mode, and the Easy-stage
+`ElevatorController`. The diagrams above show the code at each stage tag; on `main`:
+- **Policy:** `LookScheduling`; `CostBasedDispatch`, with `NearestDispatch` as the overload fallback.
+- **Dispatcher:** assign, retry, overlay, overload fallback, watchdog. No rebalance timer.
+- **Runtime boundary:** `AssignRequest` and `FindBestElevator` validate each request, and every actor loop runs under
+  fail-stop supervision (ADR-017).
+
+The golden event logs of `lunch.yaml` and `chaos.yaml` are byte-identical before and after the removal. Every
+comparison in `docs/results/` reproduces at tag `v3-full-grid`.

@@ -36,7 +36,7 @@ consecutive events, which is exact and equivalent to infinitely fine ticks. The 
 |---|---|
 | `dispatch` | not yet assigned for the first time |
 | `reassignment` | unassigned after a stale reject or a rebalance move |
-| `bypassed_full` | unassigned after a capacity reject or a full-load release (defer mode), **or** assigned to an elevator that is full (next-trip mode, ADR-010) |
+| `bypassed_full` | unassigned after a capacity reject, **or** assigned to an elevator that is full (next-trip, ADR-010). Before ADR-018 also after a full-load release in defer mode |
 | `blocked` | left behind at an open door and still waiting, or the assigned elevator is in maintenance / rejected for maintenance |
 | `finishing_door_cycle` | assigned while the elevator was already stopped at a floor; until that stop ends |
 | `serving_others` | the assigned elevator is at a stop that began after the assignment (another floor, or this floor in the wrong direction) |

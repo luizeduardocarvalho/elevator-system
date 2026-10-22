@@ -1,7 +1,7 @@
 # Evening down-peak: most trips end at the lobby.
 # 20 floors, 4 elevators, 30 minutes of traffic; the run continues until everyone is delivered (or 90 min).
-# Same peak rate (12/min) for every profile: same building, same population. Under FIFO, down-peak saturates
-# (see docs/results/m1-baseline.md); that is a finding, not a calibration error.
+# Same peak rate (12/min) for every profile: same building, same population. Under FIFO (removed, ADR-018),
+# down-peak saturated (see docs/results/m1-baseline.md); that was a finding, not a calibration error.
 name: down-peak
 seed: 1
 building:

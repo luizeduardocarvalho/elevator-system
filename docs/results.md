@@ -1,6 +1,8 @@
 # Results
 
 Every number here comes from a file in [`docs/results/`](results/) that records the exact command that produced it.
+Commands that name a removed strategy (FIFO, round robin, rebalancing, `defer`; ADR-018) run at tag `v3-full-grid`,
+where every file reproduces byte for byte.
 Simulation results are deterministic (same command → byte-identical file). Wall-clock results depend on the machine
 and its load; they are labelled with the machine and were taken on a quiet one.
 

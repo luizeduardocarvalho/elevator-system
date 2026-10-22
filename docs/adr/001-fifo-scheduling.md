@@ -2,8 +2,9 @@
 
 ## Status
 
-Superseded by [ADR-004](004-look-scheduling.md) as the default scheduling policy (v2-medium). FIFO stays selectable
-(`--scheduling fifo`) and remains the measured baseline.
+Superseded by [ADR-004](004-look-scheduling.md) as the default scheduling policy (v2-medium). FIFO was then kept
+selectable as the measured baseline, until [ADR-018](018-prune-superseded-strategies.md) removed it from `main`. The
+code is at tags `v1-easy`, `v2-medium` and `v3-full-grid`.
 
 Originally accepted in v1-easy, 2026-10-21.
 

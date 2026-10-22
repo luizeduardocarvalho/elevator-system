@@ -3,8 +3,8 @@
 ## Status
 
 Accepted (v2-medium, 2026-10-21). Supersedes the full-load part of [ADR-009](009-destination-dispatch-and-capacity.md):
-releasing pickups at the bypass threshold and deferring requests no elevator can take. That behaviour stays
-selectable as capacity mode `defer`.
+releasing pickups at the bypass threshold and deferring requests no elevator can take. That behaviour stayed
+selectable as capacity mode `defer` until [ADR-018](018-prune-superseded-strategies.md) removed it (tag `v3-full-grid`).
 
 ## Context
 

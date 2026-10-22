@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted (v2-medium, 2026-10-21).
+Accepted (v2-medium, 2026-10-21). Round-robin dispatch and the optional rebalancer were removed by
+[ADR-018](018-prune-superseded-strategies.md); their code is at `v3-full-grid`.
 
 ## Context
 
@@ -218,3 +219,9 @@ Pending requests are served oldest first by (t_call, id), and nothing reorders t
 a queue position). An elevator hands a batch of pickups back in (t_call, id) order, after publishing the snapshot that
 explains it, so requests already waiting are served before a hand-back and a hand-back keeps each passenger's place.
 
+## Amendment: superseded strategies removed (ADR-018)
+
+Round-robin dispatch and `HysteresisRebalance` (with `--rebalance`, `RebalanceTimer`, `Unassign` and the
+`Rebalance` release reason) are no longer on `main`. The measurements above stand, and run at tag `v3-full-grid`.
+Dispatch is `cost`, with `nearest` as the overload fallback and the comparison baseline. The spec's `balanceLoad()`
+is the predicted-load term of the cost function, so `ElevatorSystem.BalanceLoad()` deliberately does nothing.

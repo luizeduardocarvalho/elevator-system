@@ -5,6 +5,29 @@ four elevators with dispatch (Medium), and elevator types, access rules, and fau
 experiment. The code runs a deterministic simulation, the results are measured, and every design change cites the
 measurement that justified it.
 
+## The stages and their tags
+
+`main` holds only the final design. Each earlier stage is a git tag, so the Easy and Medium solutions can be read
+and run exactly as they were submitted:
+
+| Tag | Stage | What it holds |
+|---|---|---|
+| `v1-easy` | Easy | One elevator, floors 1–10, FIFO scheduling, the spec's `ElevatorController` (`requestElevator`, `processRequests`) |
+| `v2-medium` | Medium | 3–5 elevators, floors 1–20, LOOK, cost-based dispatch, the threaded actor runtime. FIFO, round robin, nearest, rebalancing and both capacity modes are all selectable |
+| `v3-hard` | Hard | Express, local and freight elevators, floor restrictions and VIP access, maintenance, emergency stop, watchdog, fault injection, the terminal UI |
+| `v3-full-grid` | Hard, all strategies | The last commit where every strategy is still selectable. Every file in `docs/results/` reproduces here, byte for byte |
+| `main` | Final | LOOK, cost-based dispatch (nearest as fallback), next-trip capacity. Superseded strategies removed ([ADR-018](docs/adr/018-prune-superseded-strategies.md)) |
+
+To see a stage, check out its tag, for example `git checkout v1-easy`.
+
+Where the spec's Easy and Medium items went in the final design:
+
+| Spec item | Final design | Earlier form |
+|---|---|---|
+| FIFO scheduling | LOOK, which cut the down-peak wait from 255.6 s to 28.2 s ([ADR-004](docs/adr/004-look-scheduling.md)) | `v1-easy`, `v2-medium` |
+| `ElevatorController` | `ElevatorSystem`, the threaded multi-elevator controller ([ADR-005](docs/adr/005-actors-vs-locks.md)) | `v1-easy` |
+| `balanceLoad()` | The cost function's predicted-load term, applied on every assignment ([ADR-006](docs/adr/006-dispatch-cost-function.md)) | Periodic rebalancing at `v2-medium`, measured and dropped |
+
 ## Run it
 
 You need the .NET 10 SDK.
@@ -48,14 +71,15 @@ Every command takes `--help`. The scenarios live in `scenarios/`.
 | Command | What it does |
 |---|---|
 | `run <scenario>` | Runs a YAML scenario headless, writes the JSONL event log, and prints a report. |
-| `bench` | Compares strategies across seeds, paired on the same passengers, with 95% confidence intervals. Writes a markdown results file. |
+| `bench` | Compares dispatch policies across seeds, paired on the same passengers, with 95% confidence intervals. Writes a markdown results file. |
 | `perf` | Runs the threaded runtime on the real clock. Measures assignment latency, lost and duplicated requests, and memory, then prints PASS or FAIL against the spec targets. |
 | `tui <scenario>` | Shows the building, metrics, and event tail live. Speed runs from 0.25× to 50× or max, with pause and single-step. |
 | `replay <log>` | Shows the same view, driven from a JSONL event log. |
-| `heatmap <scenario or log>` | Shows wait time by floor and time of day. `--vs` draws the difference between two strategies. |
+| `heatmap <scenario or log>` | Shows wait time by floor and time of day. `--vs` draws the difference against another dispatch policy. |
 
-Scheduling (`--scheduling`) is `fifo` or `look`. Dispatch (`--dispatch`) is `roundrobin`, `nearest`, or `cost`.
-Every strategy stays selectable, so any earlier result can be rerun.
+Scheduling is LOOK. Dispatch (`--dispatch`) is `cost` (the default) or `nearest`. An unknown option is an error, so a
+command written for an earlier stage fails instead of silently running something else. To rerun an earlier
+comparison, check out `v3-full-grid`.
 
 ## How the code is laid out
 
@@ -65,7 +89,7 @@ threads, no locks, no clock. The same seed gives a byte-identical event log at a
 | Project | Role |
 |---|---|
 | `src/Elevator.Domain` | The elevator state machine with an explicit transition table. It advances only through `Tick(simTime)` and never moves with its doors open. |
-| `src/Elevator.Policy` | Scheduling (FIFO, LOOK) and dispatch (round robin, nearest, cost-based) as pure functions over snapshots. |
+| `src/Elevator.Policy` | LOOK scheduling and dispatch (cost-based, nearest) as pure functions over snapshots. |
 | `src/Elevator.Simulation` | The simulated clock, the seeded traffic generator, the YAML scenario loader, and the fault schedule. |
 | `src/Elevator.Runtime` | The threaded system: one actor and mailbox per elevator, one dispatcher, and a watchdog. |
 | `src/Elevator.Metrics` | Reports built only from the event log. |
@@ -80,11 +104,12 @@ stage.
 ## What the measurements show
 
 Each cell is the average and p95 wait in simulated seconds, over 20 held-out seeds. Both rows ran on the same
-passengers: 20 floors, 4 elevators, capacity 10. The source is [`m5-next-trip`](docs/results/m5-next-trip.md).
+passengers: 20 floors, 4 elevators, capacity 10. The source is [`m5-next-trip`](docs/results/m5-next-trip.md). The
+baseline no longer exists on `main`; its row reproduces at `v3-full-grid`.
 
 | Strategy | Up-peak | Down-peak | Lunch |
 |---|---|---|---|
-| FIFO + nearest (baseline) | 26.9 / 103.9 | 251.1 / 584.6 | 95.4 / 325.7 |
+| FIFO + nearest (baseline, `v3-full-grid`) | 26.9 / 103.9 | 251.1 / 584.6 | 95.4 / 325.7 |
 | LOOK + cost-based dispatch (default) | 15.8 / 37.9 | 20.6 / 53.2 | 13.8 / 38.4 |
 
 Under load, the threaded runtime assigns a request in 12.2 ms at p99 with 100 simultaneous requests and 53.6 ms with
@@ -102,5 +127,5 @@ replaced stays in place, marked as superseded, with the evidence for the change.
 - [ADR-006](docs/adr/006-dispatch-cost-function.md): how cost-based dispatch picks an elevator.
 - [ADR-007](docs/adr/007-event-log-backbone.md): why the event log is the backbone.
 - [ADR-015](docs/adr/015-ordering-rules.md): the ordering rules. FIFO keeps correctness, a priority lane handles urgency, and cost handles fairness.
-
-The tags `v1-easy`, `v2-medium`, and `v3-hard` mark the end of each stage.
+- [ADR-017](docs/adr/017-request-validation-and-fail-stop.md): why an invalid request is refused at the boundary, and why a handler bug stops the whole system.
+- [ADR-018](docs/adr/018-prune-superseded-strategies.md): why `main` holds only the final design, and where the rest lives.
