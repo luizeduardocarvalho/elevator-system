@@ -167,7 +167,18 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
     private void Release(int requestId, AssignmentReason reason, SimTime now, Outbox outbox)
     {
         outbox.Emit(new AssignmentReleased(now, requestId, Elevator.Id, reason));
-        outbox.Send(Address.Dispatcher, new AssignmentReleasedMsg(requestId, Elevator.Id, reason));
+        SendRelease(requestId, reason, outbox);
+    }
+
+    /// <summary>
+    /// Causality (ADR-013, ADR-015): the dispatcher must hold the snapshot that explains a release (pickup removed, out
+    /// of service, full) before the release itself, or it re-dispatches against the old view. So the snapshot is
+    /// published first, and the release travels with the same link delay: it can never overtake it.
+    /// </summary>
+    private void SendRelease(int requestId, AssignmentReason reason, Outbox outbox)
+    {
+        Publish(outbox);
+        outbox.Send(Address.Dispatcher, new AssignmentReleasedMsg(requestId, Elevator.Id, reason), _options.SnapshotDelayMs);
         outbox.Send(Address.Passengers, new AssignmentReleasedMsg(requestId, Elevator.Id, reason));
     }
 
@@ -184,9 +195,8 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
                 case FloorReached reached when _options.ReportProgress:
                     outbox.Send(Address.Dispatcher, new ProgressReported(Elevator.Id, reached.Floor, reached.At), _options.SnapshotDelayMs);
                     break;
-                case AssignmentReleased released: // full-load bypass, raised by the elevator itself
-                    outbox.Send(Address.Dispatcher, new AssignmentReleasedMsg(released.RequestId, Elevator.Id, released.Reason));
-                    outbox.Send(Address.Passengers, new AssignmentReleasedMsg(released.RequestId, Elevator.Id, released.Reason));
+                case AssignmentReleased released: // raised by the elevator itself (full-load bypass, out of service)
+                    SendRelease(released.RequestId, released.Reason, outbox);
                     break;
             }
         }
