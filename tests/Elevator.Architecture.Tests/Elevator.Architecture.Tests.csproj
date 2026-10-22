@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- References the system projects only: the test inspects them, and must not need the lab to do it (ADR-019). -->
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Elevator.Domain\Elevator.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Elevator.Policy\Elevator.Policy.csproj" />
+    <ProjectReference Include="..\..\src\Elevator.EventLog\Elevator.EventLog.csproj" />
+    <ProjectReference Include="..\..\src\Elevator.Runtime\Elevator.Runtime.csproj" />
+    <ProjectReference Include="..\..\src\Elevator.Metrics\Elevator.Metrics.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+</Project>

@@ -14,6 +14,7 @@
     <Project Path="src/Elevator.Tui/Elevator.Tui.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Elevator.Architecture.Tests/Elevator.Architecture.Tests.csproj" />
     <Project Path="tests/Elevator.Domain.Tests/Elevator.Domain.Tests.csproj" />
     <Project Path="tests/Elevator.Lab.Tests/Elevator.Lab.Tests.csproj" />
     <Project Path="tests/Elevator.Metrics.Tests/Elevator.Metrics.Tests.csproj" />
