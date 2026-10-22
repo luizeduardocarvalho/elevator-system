@@ -568,7 +568,7 @@ flowchart LR
     <li><strong>Definition</strong>: wall clock from <code>AssignRequest</code> to the elevator's <em>accepted</em> assignment, queueing included. It is not the moment the dispatcher picks a candidate.</li>
     <li><strong>Recording</strong>: HdrHistogram per run; p50 / p99 / max reported.</li>
     <li><strong>Method</strong>: a burst of N callers released together, a fresh process per point, warm-up first, median p99 of 3 repeats, taken when the 1-minute load average was under 3.</li>
-    <li><strong>Gate</strong>: <code>PerfGateTests</code> (1,000 submitters plus a soak) runs in its own non-parallel test collection; it passed 3 / 3.</li>
+    <li><strong>Gate</strong>: <code>PerfGateTests</code> (1,000 submitters plus a soak) runs alone, with <code>scripts/perf-tests.sh</code> on a quiet machine; it passed 3 / 3.</li>
   </ul>
 
   <h3>Where the ≈ 4.5k number comes from</h3>
@@ -664,7 +664,7 @@ flowchart LR
 <!-- ============================== TESTS ============================== -->
 <section role="tabpanel" id="p-tests" aria-labelledby="t-tests">
   <h2>Test results</h2>
-  <p class="lede">Now: <code>dotnet build -warnaserror</code> clean, 587 tests passing (480 at the <code>v3-hard</code> merge, plus the working day, the heatmaps, the ordering audit, the architecture test, the log-compatibility test and two regression fixes). Tests came first for the domain and the policies; no test uses <code>Thread.Sleep</code>.</p>
+  <p class="lede">Now: <code>dotnet build -warnaserror</code> clean, 587 tests passing (480 at the <code>v3-hard</code> merge, plus the working day, the heatmaps, the ordering audit, the architecture test, the log-compatibility test and two regression fixes). <code>dotnet test</code> runs 584 of them; the 3 wall-clock perf tests are skipped there and run alone with <code>scripts/perf-tests.sh</code>, because the test projects run in parallel processes and starve them. Tests came first for the domain and the policies; no test uses <code>Thread.Sleep</code>.</p>
 
   <div class="grid">
     <div class="stat card good"><div class="num">191</div><div class="lbl">Domain: transition table, mechanics, handlers</div></div>

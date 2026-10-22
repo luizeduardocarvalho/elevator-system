@@ -58,11 +58,16 @@ You need the .NET 10 SDK.
 4. Run the tests:
 
 	```sh
-	dotnet test --filter "Category!=Perf"
+	dotnet test
 	```
 
-	The filter skips `PerfGateTests`, which run real threads under load and include a 20-second soak. Drop the filter to
-	include them.
+	The three wall-clock perf tests (the perf gate, the soak and the ramp smoke test) report as skipped: they measure
+	latency on real threads, and the test projects run in parallel processes, which starves them. Run them alone, on a
+	quiet machine:
+
+	```sh
+	scripts/perf-tests.sh
+	```
 
 ## The CLI
 

@@ -11,7 +11,7 @@ namespace Elevator.Lab.Tests;
 [Collection(nameof(PerfCollection))]
 public class RampSmokeTests
 {
-    [Fact]
+    [PerfFact]
     public async Task A_short_ramp_keeps_up_loses_nothing_and_agrees_with_littles_law()
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
