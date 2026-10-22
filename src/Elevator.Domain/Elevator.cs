@@ -466,10 +466,13 @@ public sealed class Elevator
         return true;
     }
 
+    /// <summary>
+    /// Hands every pending pickup back, oldest call first (ADR-015): re-dispatch keeps each passenger's place by call
+    /// time (then id), not by where their stop sat in this elevator's list.
+    /// </summary>
     private void ReleaseAllPickups(AssignmentReason reason)
     {
-        foreach (var call in _hallCalls)
-        foreach (var request in call.Requests)
+        foreach (var request in _hallCalls.SelectMany(c => c.Requests).OrderBy(r => r.Timestamp.Ms).ThenBy(r => r.Id))
             Emit(new AssignmentReleased(Now, request.Id, Id, reason));
         _hallCalls = _hallCalls.RemoveAll(c => c.Requests.Count > 0);
         Version++;
