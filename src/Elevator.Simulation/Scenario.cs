@@ -1,5 +1,7 @@
 using Elevator.Domain;
+using Elevator.Domain.Control;
 using Elevator.Domain.Faults;
+using Elevator.Policy.Access;
 
 namespace Elevator.Simulation;
 
@@ -51,16 +53,6 @@ public sealed record Scenario(
     public TimeSpan? ClockStart { get; init; }
 }
 
-/// <summary>Access configuration of a building (ADR-012); YAML <c>access:</c>.</summary>
-/// <param name="RestrictedFloors">Floor → minimum access level to be picked up there or taken there.</param>
-/// <param name="VipElevators">Elevators dedicated to VIPs (everyone else is denied on them).</param>
-/// <param name="VipPriority">A VIP request does not pay for the delay it adds to others in the cost function, so it takes
-/// the fastest pickup (ADR-015). It never reorders requests.</param>
-public sealed record AccessConfig(IReadOnlyDictionary<int, int> RestrictedFloors, IReadOnlyList<int> VipElevators, bool VipPriority)
-{
-    public static AccessConfig None { get; } = new(new Dictionary<int, int>(), [], false);
-}
-
 /// <summary>An explicitly scripted passenger: arrives at <paramref name="At"/> on <paramref name="From"/>, wants <paramref name="To"/>.</summary>
 public sealed record PassengerSpec(SimTime At, int From, int To)
 {
@@ -85,10 +77,4 @@ public sealed record Passenger(int Id, SimTime ArrivesAt, int From, int To)
     public int Load { get; init; } = 1;
 
     public Request ToRequest() => new(From, To, Direction, ArrivesAt, Id, Load) { Vip = Vip, AccessLevel = AccessLevel };
-}
-
-/// <summary>Sim-time delays on control messages, to model a dispatcher working from stale snapshots (default: none).</summary>
-public sealed record MessageLatency(long SnapshotMs = 0, long DispatchMs = 0)
-{
-    public static MessageLatency None { get; } = new();
 }

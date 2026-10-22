@@ -23,7 +23,7 @@ public class SteadyStateTests
         (s.CurrentFloor, s.State, string.Join(",", s.Riders.Select(r => r.Id).Order()),
             string.Join(",", s.HallCalls.SelectMany(c => c.Requests).Select(r => r.Id).Order()));
 
-    private static List<ElevatorHandler> Elevators(EngineHandover h) =>
+    private static List<ElevatorHandler> Elevators(Handover h) =>
         [.. h.Handlers.OfType<ElevatorHandler>().OrderBy(e => e.Elevator.Id)];
 
     [Fact]

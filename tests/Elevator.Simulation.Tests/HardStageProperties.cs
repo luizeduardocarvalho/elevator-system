@@ -1,7 +1,9 @@
 using Elevator.Domain;
+using Elevator.Domain.Control;
 using Elevator.Domain.Events;
 using Elevator.Domain.Faults;
 using Elevator.Metrics;
+using Elevator.Policy.Access;
 using FsCheck;
 using FsCheck.Fluent;
 using FsCheck.Xunit;

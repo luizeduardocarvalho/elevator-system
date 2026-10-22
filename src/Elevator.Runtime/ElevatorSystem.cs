@@ -55,7 +55,7 @@ public sealed class ElevatorSystem : IAsyncDisposable
     private readonly RuntimeOptions _options;
     private readonly DelayedDelivery _delayed;
 
-    private ElevatorSystem(RuntimeOptions options, Action<long, DomainEvent>? sink, EngineHandover? handover = null)
+    private ElevatorSystem(RuntimeOptions options, Action<long, DomainEvent>? sink, Handover? handover = null)
     {
         _options = options;
         _sink = sink;
@@ -85,14 +85,14 @@ public sealed class ElevatorSystem : IAsyncDisposable
             throw new ArgumentException($"the fleet has {fleet.Count} elevators but the options say {options.Elevators}", nameof(options));
         for (var i = 0; i < options.Elevators; i++)
         {
-            var elevator = Building.CreateElevator(i, options.Floors, fleet[i], scheduling, options.BypassThreshold);
+            var elevator = fleet[i].CreateElevator(i, options.Floors, scheduling, options.BypassThreshold);
             var handlerOptions = new ElevatorHandlerOptions(SnapshotDelayMs: latency.SnapshotMs, ReportProgress: options.WatchdogTimeoutMs is not null);
             Add(new Actor(new ElevatorHandler(elevator, handlerOptions, estimator), this));
         }
         Add(new Actor(new DispatcherHandler(dispatch, options.Elevators, timing,
             new DispatcherOptions(latency.DispatchMs, options.OverloadThreshold)
             {
-                Access = Building.CreateAccess(options.Access),
+                Access = options.Access.CreatePipeline(),
                 WatchdogTimeoutMs = options.WatchdogTimeoutMs,
                 VipPriority = options.Access.VipPriority,
             },
@@ -112,10 +112,10 @@ public sealed class ElevatorSystem : IAsyncDisposable
     /// Every message still in flight is delivered with its remaining delay, except future passenger arrivals: the
     /// scenario's traffic is replaced by whoever calls <see cref="AssignRequest"/>.
     /// </summary>
-    public static ElevatorSystem FromEngine(EngineHandover handover, RuntimeOptions options, Action<long, DomainEvent>? sink = null) =>
+    public static ElevatorSystem FromEngine(Handover handover, RuntimeOptions options, Action<long, DomainEvent>? sink = null) =>
         new(options, sink, handover);
 
-    private void TakeOver(EngineHandover handover)
+    private void TakeOver(Handover handover)
     {
         var elevators = handover.Handlers.Count(h => h.Address.Kind == ActorKind.Elevator);
         if (elevators != _options.Elevators)

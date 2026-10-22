@@ -1,4 +1,5 @@
 using Elevator.Domain;
+using Elevator.Domain.Control;
 
 namespace Elevator.Simulation.Tests;
 

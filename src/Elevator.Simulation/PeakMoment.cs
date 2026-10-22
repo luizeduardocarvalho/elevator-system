@@ -1,4 +1,5 @@
 using Elevator.Domain;
+using Elevator.Domain.Control;
 
 namespace Elevator.Simulation;
 
@@ -30,7 +31,7 @@ public static class PeakMoment
     }
 
     /// <summary>A fresh engine run to <paramref name="at"/> and handed over (each ramp step starts from its own copy).</summary>
-    public static EngineHandover HandOverAt(Scenario scenario, SimTime at, Strategy? strategy = null)
+    public static Handover HandOverAt(Scenario scenario, SimTime at, Strategy? strategy = null)
     {
         var engine = SimEngine.Create(scenario, strategy);
         engine.AdvanceTo(at);

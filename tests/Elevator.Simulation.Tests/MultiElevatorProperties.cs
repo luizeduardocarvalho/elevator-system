@@ -1,4 +1,5 @@
 using Elevator.Domain;
+using Elevator.Domain.Control;
 using Elevator.Domain.Events;
 using Elevator.Metrics;
 using FsCheck;

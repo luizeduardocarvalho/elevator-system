@@ -7,13 +7,6 @@ using Elevator.Policy.Dispatch;
 
 namespace Elevator.Simulation;
 
-/// <summary>
-/// What a simulation hands to the actor runtime (ADR-015): its handler objects (elevators, dispatcher, passengers) as
-/// they are at <paramref name="At"/>, and the messages still in flight, each with its remaining delay. Ownership moves
-/// once, before any thread starts: the engine refuses to run afterwards, so a handler never has two owners.
-/// </summary>
-public sealed record EngineHandover(IReadOnlyList<IHandler> Handlers, SimTime At, IReadOnlyList<Envelope> InFlight);
-
 public sealed record SimulationResult(IReadOnlyList<DomainEvent> Events, int Delivered, int Unserved, SimTime EndedAt);
 
 /// <param name="EmitDispatchEvaluations">Log every candidate's cost per dispatch decision (DispatchEvaluated). Off by
@@ -81,7 +74,7 @@ public sealed class SimEngine
             throw new ArgumentException($"the fleet has {fleet.Count} elevators but the scenario says {scenario.Elevators}", nameof(scenario));
         for (var i = 0; i < scenario.Elevators; i++)
         {
-            var elevator = Building.CreateElevator(i, scenario.Floors, fleet[i], scheduling, scenario.BypassThreshold);
+            var elevator = fleet[i].CreateElevator(i, scenario.Floors, scheduling, scenario.BypassThreshold);
             var handler = new ElevatorHandler(elevator,
                 new ElevatorHandlerOptions(SnapshotDelayMs: latency.SnapshotMs, ReportProgress: scenario.WatchdogTimeoutMs is not null), estimator);
             _elevators.Add(handler);
@@ -90,7 +83,7 @@ public sealed class SimEngine
         Register(new DispatcherHandler(dispatch, scenario.Elevators, scenario.Timing,
             new DispatcherOptions(latency.DispatchMs, OverloadThreshold: OverloadThreshold, EmitDispatchEvaluations: options.EmitDispatchEvaluations)
             {
-                Access = Building.CreateAccess(scenario.Access),
+                Access = scenario.Access.CreatePipeline(),
                 WatchdogTimeoutMs = scenario.WatchdogTimeoutMs,
                 VipPriority = scenario.Access.VipPriority,
             },
@@ -186,7 +179,7 @@ public sealed class SimEngine
     /// runtime seeding a steady-state perf run from a busy moment, ADR-015). Wake-ups are left out: a handler's next
     /// wake-up is part of its state (<see cref="IHandler.NextWakeUp"/>). The engine cannot run afterwards.
     /// </summary>
-    public EngineHandover HandOver()
+    public Handover HandOver()
     {
         if (_handedOver) throw new InvalidOperationException("already handed over");
         _handedOver = true;
@@ -195,7 +188,7 @@ public sealed class SimEngine
             .OrderBy(item => item.Priority)
             .Select(item => item.Element with { DelayMs = Math.Max(0, item.Priority.TimeMs - Now.Ms) })
             .ToList();
-        return new EngineHandover([.. _handlers.Values.Where(h => h.Address.Kind != ActorKind.FaultScheduler)], Now, inFlight);
+        return new Handover([.. _handlers.Values.Where(h => h.Address.Kind != ActorKind.FaultScheduler)], Now, inFlight);
     }
 
     /// <summary>Ends the run: logs SimulationEnded and returns the result. Idempotent.</summary>

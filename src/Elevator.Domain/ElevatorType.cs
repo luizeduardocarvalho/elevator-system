@@ -14,6 +14,13 @@ public sealed record ElevatorType(string Name, ElevatorTiming Timing, int Capaci
 
     /// <summary>The lowest served floor of a building of <paramref name="floors"/> floors: where this elevator starts.</summary>
     public int LowestServed(int floors) => Enumerable.Range(Floors.Lowest, floors).First(Serves);
+
+    /// <summary>
+    /// An elevator of this type, starting idle at the lowest floor it serves. Both shells (the sim engine and the
+    /// actor runtime) build their elevators here, so the same configuration gives the same elevators (ADR-005).
+    /// </summary>
+    public Elevator CreateElevator(int id, int floors, ISchedulingPolicy scheduling, double bypassThreshold) =>
+        new(id, floors, Timing, scheduling, LowestServed(floors), Capacity, bypassThreshold, ServedFloors, Name);
 }
 
 /// <summary>
