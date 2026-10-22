@@ -2,10 +2,6 @@ using Elevator.Domain;
 
 namespace Elevator.Policy.Access;
 
-/// <summary>
-/// Restricted floors (ADR-012): a floor may require a minimum access level, for the pickup as well as the destination
-/// (a badge reader in the hall and in the car). A passenger without it is never taken there or from there.
-/// </summary>
 /// <param name="minimumLevel">Floor → minimum <see cref="Request.AccessLevel"/>.</param>
 public sealed class FloorRestrictionPolicy(IReadOnlyDictionary<int, int> minimumLevel) : IAccessPolicy
 {

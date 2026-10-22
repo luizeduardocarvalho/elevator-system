@@ -61,7 +61,7 @@ public class ViewModelTests
     public void Unbounded_capacity_shows_the_rider_count_only()
     {
         var state = new BuildingState();
-        state.Apply(new SimulationStarted(SimTime.Zero, "v1", 1, 10, "fifo", 3)); // Capacity = int.MaxValue
+        state.Apply(new SimulationStarted(SimTime.Zero, "v1", 1, 10, "fifo", 3));
         Assert.Equal("■ 0", Build(state).Building.Rows.Single(r => r.Floor == 1).Shafts[0].Text);
     }
 
@@ -136,7 +136,6 @@ public class ViewModelTests
     [Fact]
     public void Metrics_panel_computes_wait_avg_p95_max_and_long_waits()
     {
-        // Waits 10, 20, 30, 70 s: avg 32.5, p95 (nearest rank) 70, max 70, one of four > 60 s.
         var events = new List<DomainEvent>();
         double[] waits = [10, 20, 30, 70];
         for (var i = 0; i < waits.Length; i++)
@@ -176,7 +175,7 @@ public class ViewModelTests
 
         var busy = Fold(new MaintenanceEntered(S(10), 2, 1), new EmergencyStopped(S(10), 0, 1), new EmergencyCleared(S(40), 0),
             new FaultDetected(S(50), 1, 1, 30_000));
-        busy.AdvanceTo(S(70)); // the fault and the maintenance are still going: their time so far counts
+        busy.AdvanceTo(S(70));
         var ops = Build(busy).Ops;
         Assert.Equal(("1 (30 s)", "1 (20 s)", "60 s"), (ops.EmergencyStops, ops.Faults, ops.Elevators[2].MaintenanceTime));
     }

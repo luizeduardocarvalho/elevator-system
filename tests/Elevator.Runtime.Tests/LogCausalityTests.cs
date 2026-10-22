@@ -4,16 +4,8 @@ using Elevator.Domain.Events;
 
 namespace Elevator.Runtime.Tests;
 
-/// <summary>
-/// Causality on the actor runtime's log (ADR-015): for every request submitted through AssignRequest, from many
-/// threads at once, the log (in seq order) shows the passenger arriving before the request is submitted, proposed or
-/// accepted. Metrics fold the log in this order; an acceptance logged before its passenger is dropped and the wait
-/// is mis-attributed.
-/// </summary>
 public class LogCausalityTests
 {
-    /// <param name="busyPassengers">No-op notices queued on the passengers mailbox first: a busy passengers actor is
-    /// what lets the dispatcher log a request before its passenger (the race this test pins).</param>
     [Theory]
     [InlineData(0)]
     [InlineData(200_000)]
@@ -21,7 +13,7 @@ public class LogCausalityTests
     {
         const int threads = 16, each = 50;
         await using var system = ElevatorSystem.Start(new RuntimeOptions(Speed: 50, Dispatch: "nearest"));
-        var noOp = new ElevatorNotice(new DoorsOpened(SimTime.Zero, 0, 20, null)); // nobody rides E0: nothing happens
+        var noOp = new ElevatorNotice(new DoorsOpened(SimTime.Zero, 0, 20, null));
         for (var i = 0; i < busyPassengers; i++) system.Post(Address.Passengers, noOp);
         var rng = new Random(5);
         var requests = Enumerable.Range(0, threads * each).Select(i =>
@@ -40,7 +32,7 @@ public class LogCausalityTests
         })).ToList();
         gate.Set();
         await Task.WhenAll(tasks);
-        await Task.Delay(200); // let the log writer catch up
+        await Task.Delay(200);
 
         var firstSeq = new Dictionary<(Type, int), int>();
         var events = system.Events;

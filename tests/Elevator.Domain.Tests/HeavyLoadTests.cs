@@ -3,10 +3,6 @@ using Elevator.Domain.Events;
 
 namespace Elevator.Domain.Tests;
 
-/// <summary>
-/// Loads above one unit (freight, ADR-012). Found by the Hard stage's invariant properties: without these rules a load
-/// that cannot fit made the elevator reopen for it forever. With one-unit loads none of them changes anything.
-/// </summary>
 public class HeavyLoadTests
 {
     private static Request R(int id, int from, int to, int load = 1) => Request.Create(from, to, SimTime.Zero, Harness.Floors, id: id, load: load).Value!;
@@ -18,13 +14,13 @@ public class HeavyLoadTests
     public void A_pickup_whose_load_does_not_fit_is_bypassed_until_riders_get_off()
     {
         var e = Make(capacity: 6);
-        e.Board(R(1, 1, 5, load: 4));       // 2 units of room left
-        e.AssignPickup(R(2, 1, 8, load: 3)); // right here, but 3 does not fit
-        Assert.Equal(ElevatorState.MovingUp, e.State); // goes to drop off first instead of opening for it
-        e.Tick(new SimTime(9_000));          // at 5, doors open
+        e.Board(R(1, 1, 5, load: 4));
+        e.AssignPickup(R(2, 1, 8, load: 3));
+        Assert.Equal(ElevatorState.MovingUp, e.State);
+        e.Tick(new SimTime(9_000));
         e.Alight(1);
         e.Tick(new SimTime(60_000));
-        Assert.Contains(e.DrainEvents(), ev => ev is HallCallAnswered { Floor: 1 }); // came back for it
+        Assert.Contains(e.DrainEvents(), ev => ev is HallCallAnswered { Floor: 1 });
     }
 
     [Fact]
@@ -32,7 +28,7 @@ public class HeavyLoadTests
     {
         var e = Make(capacity: 6);
         e.Board(R(1, 1, 5, load: 4));
-        e.Tick(new SimTime(9_000));          // doors open at 5 (rider still inside)
+        e.Tick(new SimTime(9_000));
         e.DrainEvents();
         e.AssignPickup(R(2, 5, 9, load: 3));
         Assert.DoesNotContain(e.DrainEvents(), ev => ev is HallCallAnswered);
@@ -51,6 +47,6 @@ public class HeavyLoadTests
         o.Clear();
         p.Handle(new ElevatorNotice(new HallCallAnswered(SimTime.Zero, 0, 3, Direction.Up)), SimTime.Zero, o);
         Assert.Equal([1], o.Events.OfType<PassengerBoarded>().Select(b => b.PassengerId));
-        Assert.Equal([2, 3], o.Events.OfType<PassengerLeftBehind>().Select(b => b.PassengerId)); // 3 would fit, but 2 is ahead
+        Assert.Equal([2, 3], o.Events.OfType<PassengerLeftBehind>().Select(b => b.PassengerId));
     }
 }

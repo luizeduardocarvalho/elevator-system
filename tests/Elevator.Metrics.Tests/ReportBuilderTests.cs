@@ -31,8 +31,8 @@ public class ReportBuilderTests
 
         Assert.Equal(("synthetic", "fifo", 9), (report.Scenario, report.Scheduling, report.Seed));
         Assert.Equal((3, 2, 1, 1), (report.Passengers, report.Delivered, report.Unserved, report.RejectedRequests));
-        Assert.Equal(new DurationStats(2, 5.5, 10, 10), report.Wait); // waits 1 s and 10 s
-        Assert.Equal(new DurationStats(2, 6, 8, 8), report.Ride);     // rides 8 s and 4 s
+        Assert.Equal(new DurationStats(2, 5.5, 10, 10), report.Wait);
+        Assert.Equal(new DurationStats(2, 6, 8, 8), report.Ride);
         Assert.Equal((1, 2, 20.0), (report.FloorsTravelled, report.Stops, report.SimTimeS));
     }
 

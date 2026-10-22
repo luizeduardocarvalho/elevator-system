@@ -79,7 +79,6 @@ internal sealed class LivePresenter(LiveDisplayContext context) : IPresenter
         {
             try
             {
-                // One row less than the terminal so the live region never scrolls it.
                 return (Math.Max(1, Console.WindowWidth), Math.Max(1, Console.WindowHeight - 1));
             }
             catch (IOException)

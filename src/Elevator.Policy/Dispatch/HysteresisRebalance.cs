@@ -27,7 +27,7 @@ public sealed class HysteresisRebalance(ISchedulingPolicy scheduling, ElevatorTi
 
         var without = Without(current, request.Id);
         var mine = _cost.Evaluate(without, request, now);
-        if (mine.PickupAt is { } pickup && pickup.Ms - now.Ms <= _commitWindowMs) return null; // committed
+        if (mine.PickupAt is { } pickup && pickup.Ms - now.Ms <= _commitWindowMs) return null;
 
         int? best = null;
         var bestCost = mine.Cost - hysteresisS;
@@ -43,7 +43,6 @@ public sealed class HysteresisRebalance(ISchedulingPolicy scheduling, ElevatorTi
         return best;
     }
 
-    /// <summary>The snapshot as if <paramref name="requestId"/> had never been assigned (its stop dropped if it was alone there).</summary>
     private static ElevatorSnapshot Without(ElevatorSnapshot s, int requestId) => s with
     {
         HallCalls = s.HallCalls

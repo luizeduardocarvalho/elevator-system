@@ -1,6 +1,5 @@
 namespace Elevator.Domain;
 
-/// <summary>What happens when an elevator is full (load at or above its bypass threshold). ADR-010.</summary>
 public enum CapacityMode
 {
     /// <summary>

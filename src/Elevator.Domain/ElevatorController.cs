@@ -5,9 +5,6 @@ namespace Elevator.Domain;
 /// <summary>
 /// The spec's ElevatorController: the entry point for requests. It validates input (rejecting gracefully with a
 /// <see cref="RequestRejected"/> event, never throwing) and advances the elevator.
-///
-/// v1 is synchronous and single-threaded by design (ADR-003). Thread safety arrives in v2 with one actor per
-/// elevator in Elevator.Runtime, wrapping this same pure core.
 /// </summary>
 public sealed class ElevatorController(Elevator elevator)
 {
@@ -19,7 +16,6 @@ public sealed class ElevatorController(Elevator elevator)
 
     public SimTime? NextDeadline => Elevator.NextDeadline;
 
-    /// <summary>Hall call: someone on <paramref name="floor"/> pressed <paramref name="direction"/>.</summary>
     public RequestResult RequestElevator(int floor, Direction direction)
     {
         if (Floors.CheckHallButton(floor, direction, Elevator.FloorCount) is { } error)
@@ -30,7 +26,6 @@ public sealed class ElevatorController(Elevator elevator)
         return RequestResult.Ok;
     }
 
-    /// <summary>Car call: a rider pressed <paramref name="floor"/> inside the elevator.</summary>
     public RequestResult SelectFloor(int floor)
     {
         if (Floors.Check(floor, Elevator.FloorCount) is { } error)

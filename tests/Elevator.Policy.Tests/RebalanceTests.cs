@@ -3,7 +3,6 @@ using Elevator.Policy.Dispatch;
 
 namespace Elevator.Policy.Tests;
 
-/// <summary>Hysteresis rebalancing (ADR-006). Timing: 2 s/floor, doors 1 + 3 + 1 s.</summary>
 public class RebalanceTests
 {
     private static readonly LookScheduling Look = new();
@@ -25,8 +24,6 @@ public class RebalanceTests
     [Fact]
     public void Moves_a_request_when_another_elevator_is_better_by_more_than_the_hysteresis()
     {
-        // R (10→15) is assigned to E0 idle at 1 (ETA 18 + 1 = 19 s). E1 is idle at 10: ETA 1 s (doors only).
-        // 19 − 1 = 18 s > H = 15 s → move to E1.
         var r = Req(1, 10, 15);
         var e0 = Car(0, 1, pickups: [Pickup(r)]);
         Assert.Equal(1, Rebalance.BetterElevator(r, 0, 0, [e0, Car(1, 10)], SimTime.Zero));
@@ -35,7 +32,6 @@ public class RebalanceTests
     [Fact]
     public void Does_not_move_within_the_hysteresis()
     {
-        // E1 idle at 4: ETA 12 + 1 = 13 s against 19 s → only 6 s better → stay.
         var r = Req(1, 10, 15);
         Assert.Null(Rebalance.BetterElevator(r, 0, 0, [Car(0, 1, pickups: [Pickup(r)]), Car(1, 4)], SimTime.Zero));
     }
@@ -43,7 +39,6 @@ public class RebalanceTests
     [Fact]
     public void Does_not_move_past_the_commit_point()
     {
-        // E0 is one floor away and heading for the pickup (it will be level with floor 10 at t = 2 s): committed.
         var r = Req(1, 10, 15);
         var e0 = Car(0, 9, Direction.Up, pickups: [Pickup(r)], state: ElevatorState.MovingUp, phaseEnds: new SimTime(2_000));
         Assert.Null(Rebalance.BetterElevator(r, 0, 0, [e0, Car(1, 10)], SimTime.Zero));

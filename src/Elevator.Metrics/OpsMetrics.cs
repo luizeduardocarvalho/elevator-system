@@ -92,7 +92,7 @@ public static class OpsMetrics
                     break;
                 case FaultCommandApplied { Kind: FaultKind.Stuck } stuck:
                     var st = E(stuck.ElevatorId);
-                    st.EndStuck(at); // a new Stuck replaces the previous one
+                    st.EndStuck(at);
                     st.StuckFrom = at;
                     st.LastStuckStart = at;
                     st.StuckUntil = stuck.DurationMs is { } d ? at + d : long.MaxValue;
@@ -117,7 +117,7 @@ public static class OpsMetrics
                 case MaintenanceExited m:
                     var mt = E(m.ElevatorId);
                     if (mt.MaintenanceFrom is { } since) mt.MaintenanceMs += at - since;
-                    if (mt.DrainFrom is { } drainSince) mt.DrainMs += at - drainSince; // drain cancelled
+                    if (mt.DrainFrom is { } drainSince) mt.DrainMs += at - drainSince;
                     mt.MaintenanceFrom = mt.DrainFrom = null;
                     break;
                 case EmergencyStopped s:
@@ -132,7 +132,6 @@ public static class OpsMetrics
                     var ft = E(f.ElevatorId);
                     ft.Faults++;
                     ft.DetectedAt = at;
-                    // Time to detect: from the moment it got stuck, if a stuck was injected; else the silence the watchdog saw.
                     detect.Add((ft.LastStuckStart is { } stuckAt && stuckAt <= at ? at - stuckAt : f.SilentForMs) / 1000.0);
                     break;
                 case FaultRecovered r when E(r.ElevatorId).DetectedAt is { } detectedAt:
@@ -151,7 +150,6 @@ public static class OpsMetrics
             }
         }
 
-        // Whatever is still open runs to the end of the run.
         foreach (var t in trackers.Values)
         {
             if (t.MaintenanceFrom is { } m) t.MaintenanceMs += end - m;

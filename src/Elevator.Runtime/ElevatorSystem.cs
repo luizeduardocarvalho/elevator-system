@@ -30,15 +30,7 @@ public sealed record Assignment(int RequestId, int ElevatorId, WallDuration Late
 
 /// <summary>
 /// The spec's ElevatorSystem, as a running, thread-safe system (ADR-005).
-/// <list type="bullet">
-/// <item><c>requestQueue</c> → <see cref="RequestQueueCapacity"/>: a bounded channel read by the single dispatcher;
-/// submitters wait when it is full.</item>
-/// <item><c>assignRequest()</c> → <see cref="AssignRequest"/>: submit and await the accepted assignment.</item>
-/// <item><c>findBestElevator()</c> → the dispatch policy inside the dispatcher actor (<see cref="DispatchPolicy"/>).</item>
-/// <item><c>balanceLoad()</c> → the cost function's load terms, plus optional rebalancing (ADR-006).</item>
-/// </list>
 /// Elevators, the dispatcher and the passengers are actors running the same pure handlers as the simulator.
-/// This class only moves messages and time: it makes no decisions.
 /// </summary>
 public sealed class ElevatorSystem : IAsyncDisposable
 {
@@ -191,7 +183,6 @@ public sealed class ElevatorSystem : IAsyncDisposable
             throw new InvalidOperationException($"request {request.Id} is already pending");
         Interlocked.Increment(ref _inFlight);
 
-        // Backpressure stays with the caller (spec requestQueue): wait while the bounded request queue is full.
         try
         {
             if (!await _requests.Writer.WaitToWriteAsync(ct).ConfigureAwait(false))
@@ -202,9 +193,6 @@ public sealed class ElevatorSystem : IAsyncDisposable
             if (_pending.TryRemove(request.Id, out _)) Interlocked.Decrement(ref _inFlight);
             throw;
         }
-        // Causality by construction (ADR-015): the passengers actor logs PassengerArrived and then submits the request,
-        // in one handler call, so nothing about the request can be logged before its passenger. (Registering the passenger
-        // and writing the request from here let the dispatcher log it first whenever the passengers actor was busy.)
         _actors[Address.Passengers].Mailbox.Writer.TryWrite(new PassengerArrives(request));
         using (ct.Register(() => tcs.TrySetCanceled(ct)))
             return await tcs.Task.ConfigureAwait(false);
@@ -292,7 +280,7 @@ public sealed class ElevatorSystem : IAsyncDisposable
     {
         if (envelope.DelayMs > 0)
         {
-            _delayed.Schedule(envelope); // link latency, FIFO per sender for equal delays (ADR-015)
+            _delayed.Schedule(envelope);
             return;
         }
 
@@ -326,7 +314,7 @@ public sealed class ElevatorSystem : IAsyncDisposable
             case { To.Kind: ActorKind.Client }:
                 break;
             case { To.Kind: ActorKind.Dispatcher, Message: SubmitRequest submit }:
-                await _requests.Writer.WriteAsync(submit, ct).ConfigureAwait(false); // passengers' submissions share the bounded queue
+                await _requests.Writer.WriteAsync(submit, ct).ConfigureAwait(false);
                 break;
             default:
                 Route(envelope.To, envelope.Message);
@@ -355,7 +343,6 @@ public sealed class ElevatorSystem : IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
-            // stopping
         }
         _log.Writer.TryComplete();
         await _logWriter.ConfigureAwait(false);

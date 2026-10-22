@@ -7,10 +7,6 @@ using Spectre.Console.Cli;
 
 namespace Elevator.Cli;
 
-/// <summary>
-/// Real clock, real threads: assignment latency under concurrent submitters, lost/duplicated assignments and a
-/// memory soak, judged against the spec's performance requirements.
-/// </summary>
 internal sealed class PerfCommand : AsyncCommand<PerfCommand.Settings>
 {
     public sealed class Settings : CommandSettings
@@ -101,8 +97,6 @@ internal sealed class PerfCommand : AsyncCommand<PerfCommand.Settings>
         var levels = ScenarioPaths.List(s.Levels).Select(l => int.Parse(l, CultureInfo.InvariantCulture)).ToList();
         var bursts = new List<BurstResult>();
 
-        // Warm-up (JIT, tiered compilation, thread pool growth) on a throwaway system, so the first level measures
-        // the system rather than the runtime starting up.
         AnsiConsole.MarkupLine("[grey]Warm-up...[/]");
         await PerfRunner.Burst(options, 200, 5, TimeSpan.FromSeconds(60), seed: 99);
 
@@ -134,7 +128,6 @@ internal sealed class PerfCommand : AsyncCommand<PerfCommand.Settings>
                 $"{b.Decisions.Fallback}/{b.Decisions.Primary + b.Decisions.Fallback}");
         AnsiConsole.Write(latency);
 
-        // Where the time goes, per request, on the largest burst: the dispatcher is the single serial stage.
         if (bursts.MaxBy(b => b.Submitted) is { } big)
         {
             var breakdown = new Table().Title($"Pipeline per request ({big.Submitters} submitters)")

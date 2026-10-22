@@ -5,7 +5,6 @@ namespace Elevator.Domain.Tests;
 
 public class DispatcherProtocolTests
 {
-    /// <summary>Picks the lowest-id candidate; ETA 1 s from now so elevators can be "stale".</summary>
     private sealed class LowestId : IDispatchPolicy
     {
         public string Name => "lowest";
@@ -115,7 +114,7 @@ public class DispatcherProtocolTests
 
         d.Handle(new ReRegister(1, AssignmentReason.LeftBehind), new SimTime(40_000), o);
         var again = LastAssign(o, out _);
-        Assert.Equal((1, 0L), (again.Request.Id, again.Request.Timestamp.Ms)); // same id, same t_call
+        Assert.Equal((1, 0L), (again.Request.Id, again.Request.Timestamp.Ms));
         Assert.Empty(o.Events.OfType<RequestSubmitted>());
     }
 
@@ -147,8 +146,8 @@ public class OverloadModeTests
             return o.Messages.Single(m => m.Message is Assign).To.Index;
         }
 
-        Assert.Equal([0, 0], new[] { AssignedTo(1), AssignedTo(2) }); // 1, 2 in flight: normal
-        Assert.Equal(1, AssignedTo(3));                                // 3 in flight > 2: fallback
+        Assert.Equal([0, 0], new[] { AssignedTo(1), AssignedTo(2) });
+        Assert.Equal(1, AssignedTo(3));
         Assert.Contains(o.Events, e => e is OverloadModeChanged { Active: true, InFlight: 3 });
 
         foreach (var id in new[] { 1, 2, 3 }) d.Handle(new RequestPickedUp(id, 0), SimTime.Zero, o);

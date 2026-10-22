@@ -4,10 +4,6 @@ using Elevator.Domain.Faults;
 
 namespace Elevator.Domain.Tests;
 
-/// <summary>
-/// Emergency stop (ADR-013): stop at the next safe point (the next floor, doors closed); doors in a cycle close and stay
-/// closed; riders stay inside; pickups are handed back; nothing moves until cleared.
-/// </summary>
 public class EmergencyTests
 {
     private static Request R(int id, int from, int to) => Request.Create(from, to, SimTime.Zero, Harness.Floors, id: id).Value!;
@@ -21,7 +17,7 @@ public class EmergencyTests
         var e = Make();
         e.Board(R(1, 1, 8));
         e.AssignPickup(R(2, 6, 9));
-        e.Tick(new SimTime(3_000));                  // between 2 and 3
+        e.Tick(new SimTime(3_000));
         e.DrainEvents();
 
         Assert.True(e.EmergencyStop());
@@ -35,7 +31,7 @@ public class EmergencyTests
         var after = e.DrainEvents();
         Assert.Equal(new StateChanged(new SimTime(4_000), 0, ElevatorState.MovingUp, ElevatorState.Idle, Trigger.EmergencyHalt, 3), after.OfType<StateChanged>().Single());
         Assert.DoesNotContain(after, ev => ev is DoorsOpened);
-        Assert.Equal((3, ElevatorState.Idle, 1), (e.CurrentFloor, e.State, e.Riders.Count)); // the rider stays inside
+        Assert.Equal((3, ElevatorState.Idle, 1), (e.CurrentFloor, e.State, e.Riders.Count));
         Assert.Null(e.NextDeadline);
     }
 
@@ -61,28 +57,28 @@ public class EmergencyTests
     public void Doors_open_close_at_once_and_stay_closed()
     {
         var e = Make();
-        e.AssignPickup(R(1, 1, 5));                  // opens at 1: fully open at 1 s
+        e.AssignPickup(R(1, 1, 5));
         e.Tick(new SimTime(2_000));
         e.DrainEvents();
         e.EmergencyStop();
         Assert.Contains(e.DrainEvents(), ev => ev is StateChanged { From: ElevatorState.DoorOpen, To: ElevatorState.DoorClosing, Trigger: Trigger.EmergencyClose });
         e.Tick(new SimTime(60_000));
-        Assert.Equal([ElevatorState.Idle], e.DrainEvents().OfType<StateChanged>().Select(s => s.To)); // closed at 3 s, then nothing
+        Assert.Equal([ElevatorState.Idle], e.DrainEvents().OfType<StateChanged>().Select(s => s.To));
     }
 
     [Fact]
     public void Opening_doors_reverse_and_the_riders_for_that_floor_get_off_when_cleared()
     {
         var e = Make();
-        e.Board(R(1, 1, 3));                         // arrives at 3 at 4 s, doors opening until 5 s
+        e.Board(R(1, 1, 3));
         e.Tick(new SimTime(4_400));
         e.DrainEvents();
         e.EmergencyStop();
-        Assert.Equal(new SimTime(4_800), e.NextDeadline); // open for 0.4 s: closing takes 0.4 s
+        Assert.Equal(new SimTime(4_800), e.NextDeadline);
         e.Tick(new SimTime(30_000));
         Assert.DoesNotContain(e.DrainEvents(), ev => ev is DoorsOpened);
 
-        e.ClearEmergency();                          // its rider never got off: open here first
+        e.ClearEmergency();
         e.Tick(new SimTime(31_000));
         Assert.Contains(e.DrainEvents(), ev => ev is DoorsOpened { Floor: 3, At.Ms: 31_000 });
     }
@@ -93,9 +89,9 @@ public class EmergencyTests
         var e = Make();
         e.Board(R(1, 1, 3));
         e.Board(R(2, 1, 9));
-        e.Tick(new SimTime(3_000));                  // between 2 and 3
+        e.Tick(new SimTime(3_000));
         e.EmergencyStop();
-        e.Tick(new SimTime(10_000));                 // halted at 3 (rider 1's floor), doors closed
+        e.Tick(new SimTime(10_000));
         e.DrainEvents();
         e.ClearEmergency();
         e.Tick(new SimTime(11_000));

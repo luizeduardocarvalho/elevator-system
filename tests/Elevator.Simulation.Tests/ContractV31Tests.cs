@@ -4,7 +4,6 @@ using Elevator.Metrics;
 
 namespace Elevator.Simulation.Tests;
 
-/// <summary>The v3.1 contract fields are emitted when they carry information, and used by the metrics.</summary>
 public class ContractV31Tests
 {
     [Fact]
@@ -20,7 +19,7 @@ public class ContractV31Tests
         Assert.Contains(arrivals, a => a is { From: 1, To: 9, Load: 15 });
         Assert.Contains(arrivals, a => a is { From: 1, To: 17, Vip: true });
         Assert.Contains(arrivals, a => a is { From: 1, To: 20, AccessLevel: 1 });
-        Assert.True(arrivals.Count(a => a.Load is null && a.Vip is null && a.AccessLevel is null) > 100); // plain traffic: no new fields
+        Assert.True(arrivals.Count(a => a.Load is null && a.Vip is null && a.AccessLevel is null) > 100);
     }
 
     [Fact]
@@ -33,10 +32,6 @@ public class ContractV31Tests
         Assert.DoesNotContain("\"accessLevel\"", jsonl, StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// E0 is a 20-unit elevator in a building whose default is 10 units at 0.8 (full at 8). It carries 10 units while
-    /// P1 waits for it: by the building's figure that is "full" (bypassed_full), by its own (full at 16) it is not.
-    /// </summary>
     [Fact]
     public void Bypassed_full_uses_each_elevators_own_capacity_when_the_log_has_a_fleet()
     {
@@ -53,8 +48,8 @@ public class ContractV31Tests
 
         var building = Analyze(null).Single(r => r.Id == 1);
         var own = Analyze([new FleetEntry(0, "freight", 20, 0.8, ulong.MaxValue)]).Single(r => r.Id == 1);
-        Assert.Equal(10.0, building.WaitBuckets[WaitBucket.BypassedFull]); // 10 units ≥ 8: full by the building figure
-        Assert.Equal(0.0, own.WaitBuckets[WaitBucket.BypassedFull]);        // 10 units < 16: not full for a 20-unit car
+        Assert.Equal(10.0, building.WaitBuckets[WaitBucket.BypassedFull]);
+        Assert.Equal(0.0, own.WaitBuckets[WaitBucket.BypassedFull]);
         Assert.Equal(10.0, own.WaitS!.Value);
     }
 

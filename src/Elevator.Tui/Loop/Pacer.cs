@@ -6,13 +6,11 @@ namespace Elevator.Tui.Loop;
 /// Fixed sim tick plus an accumulator (ADR-011), the classic "fix your timestep" loop:
 /// <list type="bullet">
 /// <item>The sim only ever advances in whole ticks of <see cref="TickMs"/> sim ms, so the engine sees the same
-/// calls whatever the frame rate (and its log is step-independent anyway, shared v3 contract).</item>
+/// calls whatever the frame rate.</item>
 /// <item>Each frame adds <c>realDelta × speed</c> to the accumulator and runs as many whole ticks as it holds;
 /// the remainder carries to the next frame, so 0.5× at 20 fps is exactly one tick every fourth frame.</item>
 /// <item>At most <see cref="MaxTicksPerFrame"/> ticks per frame (and the loop's work budget). Anything beyond is
-/// <b>dropped, not carried</b>: a slow frame (a debugger pause, a laptop waking up) must not trigger an
-/// ever-growing catch-up ("spiral of death"). The achieved speed then reads below the target, which the status
-/// bar shows.</item>
+/// <b>dropped, not carried</b>.</item>
 /// <item>MAX means "as many ticks as fit in the frame's work budget".</item>
 /// </list>
 /// Pure and clock-free: the loop passes in the real time elapsed, so tests drive it with exact numbers.
@@ -66,13 +64,13 @@ public sealed class Pacer
     private void SetSpeedIndex(int index)
     {
         SpeedIndex = Math.Clamp(index, 0, Speeds.Count - 1);
-        _accumulatorMs = Math.Min(_accumulatorMs, TickMs - 1); // never a burst of owed ticks at the new speed
+        _accumulatorMs = Math.Min(_accumulatorMs, TickMs - 1);
     }
 
     public void TogglePause()
     {
         Paused = !Paused;
-        _accumulatorMs = 0; // resuming starts a fresh accumulation, not a catch-up of the pause
+        _accumulatorMs = 0;
     }
 
     /// <summary>Single-step: pauses (if running) and owes exactly one tick to the next frame.</summary>
@@ -97,7 +95,7 @@ public sealed class Pacer
         var ticks = (long)(_accumulatorMs / TickMs);
         if (ticks > MaxTicksPerFrame)
         {
-            _accumulatorMs = 0; // the excess is dropped, not carried
+            _accumulatorMs = 0;
             return MaxTicksPerFrame;
         }
         _accumulatorMs -= ticks * TickMs;
@@ -109,8 +107,7 @@ public sealed class Pacer
 }
 
 /// <summary>
-/// Achieved speed = sim time advanced / real time elapsed over the last second of frames. Shown next to the
-/// target so a sim that cannot keep up (or a capped frame) is visible, never silent.
+/// Achieved speed = sim time advanced / real time elapsed over the last second of frames.
 /// </summary>
 public sealed class SpeedMeter(double windowMs = 1_000)
 {

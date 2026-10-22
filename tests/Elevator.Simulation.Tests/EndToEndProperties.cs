@@ -6,7 +6,6 @@ using FsCheck.Xunit;
 
 namespace Elevator.Simulation.Tests;
 
-/// <summary>Random passenger lists through the full pipeline (runner + FIFO + mechanics + passenger model).</summary>
 public class EndToEndProperties
 {
     private const int FloorCount = 10;
@@ -34,7 +33,7 @@ public class EndToEndProperties
 
         var boarded = result.Events.OfType<PassengerBoarded>().ToList();
         var alighted = result.Events.OfType<PassengerAlighted>().ToList();
-        Assert.Equal(passengers.Keys.Order(), boarded.Select(b => b.PassengerId).Order()); // exactly once each
+        Assert.Equal(passengers.Keys.Order(), boarded.Select(b => b.PassengerId).Order());
         Assert.Equal(passengers.Keys.Order(), alighted.Select(a => a.PassengerId).Order());
 
         var answers = result.Events.OfType<HallCallAnswered>().ToList();
@@ -43,7 +42,6 @@ public class EndToEndProperties
             var p = passengers[b.PassengerId];
             Assert.Equal(p.From, b.Floor);
             Assert.True(b.At >= p.ArrivesAt);
-            // Boarded only when the lantern showed their direction at their floor, at that instant.
             Assert.Contains(answers, a => a.At == b.At && a.Floor == p.From && a.Direction == p.Direction);
         }
         foreach (var a in alighted)

@@ -25,7 +25,6 @@ public sealed class FifoScheduling : IFastSchedulingPolicy
 
     public PolicyDecision Decide(ElevatorSnapshot s) => new(NextGoal(s));
 
-    /// <summary>The same rules on floor bitmasks (O(1)).</summary>
     public PolicyDecision Decide(in StopSet s)
     {
         if (s.CarCalls != 0)
@@ -37,7 +36,6 @@ public sealed class FifoScheduling : IFastSchedulingPolicy
                     return new PolicyDecision(direction == Direction.Up ? 63 - BitOperations.LeadingZeroCount(ahead) : BitOperations.TrailingZeroCount(ahead));
             }
 
-            // Nearest drop-off, ties to the lower floor: compare the closest below with the closest at or above.
             var below = s.CarCalls & StopSet.Below(s.Floor);
             var atOrAbove = s.CarCalls & ~StopSet.Below(s.Floor);
             int? low = below != 0 ? 63 - BitOperations.LeadingZeroCount(below) : null;

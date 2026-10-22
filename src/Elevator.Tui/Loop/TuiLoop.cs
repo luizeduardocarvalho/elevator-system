@@ -33,8 +33,6 @@ public sealed record LoopResult(int Frames, long Ticks, bool Quit);
 /// The frame loop (ADR-011), about 20 fps. Each frame: read keys; ask the <see cref="Pacer"/> how many fixed sim
 /// ticks are due for the real time that passed; run them (stopping early, and dropping the rest, if the frame's work
 /// budget runs out); build the ScreenModel from the folded state; present it; sleep to the next frame.
-///
-/// The renderer is downstream of all of this and never calls back: the sim advances only here, only in ticks.
 /// </summary>
 public sealed class TuiLoop(ISession session, Pacer pacer, IFrameClock clock, IKeySource keys, IPresenter presenter, LoopOptions? options = null)
 {
@@ -92,7 +90,6 @@ public sealed class TuiLoop(ISession session, Pacer pacer, IFrameClock clock, IK
         return ViewModel.Build(session.State, new ViewOptions(width, height, Selected, status));
     }
 
-    /// <summary>Applies pending keys; false on quit.</summary>
     private bool HandleKeys()
     {
         while (keys.TryRead(out var key))

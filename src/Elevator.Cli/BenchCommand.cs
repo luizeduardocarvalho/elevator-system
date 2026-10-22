@@ -11,10 +11,6 @@ using Spectre.Console.Cli;
 
 namespace Elevator.Cli;
 
-/// <summary>
-/// Runs a grid of strategies over many seeds and compares them to a baseline with paired confidence intervals.
-/// Every run is the deterministic sim, so the whole bench is reproducible; runs execute in parallel.
-/// </summary>
 internal sealed class BenchCommand : Command<BenchCommand.Settings>
 {
     public sealed class Settings : CommandSettings
@@ -71,7 +67,6 @@ internal sealed class BenchCommand : Command<BenchCommand.Settings>
         Domain.CapacityMode? singleMode = null;
         try
         {
-            // One capacity mode applies to the whole run (names unchanged); several become a grid dimension ("/defer").
             var modes = settings.CapacityMode is { } list ? ScenarioPaths.List(list).Select(CapacityModes.Parse).ToList() : [];
             if (modes.Count == 1) singleMode = modes[0];
             var modeDimension = modes.Count > 1 ? modes.Select(m => (Domain.CapacityMode?)m).ToList() : [null];
@@ -89,7 +84,6 @@ internal sealed class BenchCommand : Command<BenchCommand.Settings>
                 DispatchPolicies.Create(s.Dispatch, SchedulingPolicies.Create(s.Scheduling), Domain.ElevatorTiming.Default);
             }
 
-            // Faults on/off (ADR-013): one value applies to the whole run; both become a paired dimension.
             var faults = ScenarioPaths.List(settings.Faults).Select(f => f switch
             {
                 "on" => true,

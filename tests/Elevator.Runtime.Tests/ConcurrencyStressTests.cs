@@ -5,11 +5,6 @@ namespace Elevator.Runtime.Tests;
 
 public class ConcurrencyStressTests
 {
-    /// <summary>
-    /// Many threads released at the same instant by a <see cref="Barrier"/>, round after round, all submitting at once.
-    /// Every submission must be assigned exactly once, no request may be owned by two elevators, and every elevator's
-    /// state changes must form one valid chain (single writer).
-    /// </summary>
     [Theory]
     [InlineData("nearest", 32, 300)]
     [InlineData("cost", 16, 60)]
@@ -35,14 +30,13 @@ public class ConcurrencyStressTests
                         var from = rng.Next(1, 21);
                         var to = from == 20 ? 1 : rng.Next(from + 1, 21);
                         var request = Request.Create(from, to, system.Clock.Now, 20, id: id).Value!;
-                        // A plain thread blocking on its own submission, as a synchronous caller would.
                         assignments[id - 1] = system.AssignRequest(request).WaitAsync(TimeSpan.FromSeconds(10)).GetAwaiter().GetResult();
                     }
                 }
                 catch (Exception ex)
                 {
                     failures.Enqueue(ex);
-                    barrier.RemoveParticipant(); // let the others finish instead of waiting forever
+                    barrier.RemoveParticipant();
                 }
             })).ToList();
             workers.ForEach(w => w.Start());
