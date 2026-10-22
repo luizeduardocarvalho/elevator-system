@@ -86,16 +86,22 @@ comparison, check out `v3-full-grid`.
 The core is pure and the shell is threaded. The domain and the policies are functions of their inputs: no
 threads, no locks, no clock. The same seed gives a byte-identical event log at any tick size and any UI speed.
 
-| Project | Role |
-|---|---|
-| `src/Elevator.Domain` | The elevator state machine with an explicit transition table. It advances only through `Tick(simTime)` and never moves with its doors open. |
-| `src/Elevator.Policy` | LOOK scheduling and dispatch (cost-based, nearest) as pure functions over snapshots. |
-| `src/Elevator.Simulation` | The simulated clock, the seeded traffic generator, the YAML scenario loader, and the fault schedule. |
-| `src/Elevator.Runtime` | The threaded system: one actor and mailbox per elevator, one dispatcher, and a watchdog. |
-| `src/Elevator.Metrics` | Reports built only from the event log. |
-| `src/Elevator.Tui` | The terminal UI. It reads snapshots and never drives the simulation. |
-| `src/Elevator.Cli` | The `elevator` command. |
-| `benchmarks/Elevator.Benchmarks` | BenchmarkDotNet measurements of one dispatch decision. |
+The projects split into **the system**, which is what would ship, and **the lab**, which is what we use to study
+it. The lab depends on the system, never the reverse; an architecture test enforces this
+([ADR-019](docs/adr/019-system-and-lab.md)).
+
+| Project | Side | Role |
+|---|---|---|
+| `src/Elevator.Domain` | system | The elevator state machine with an explicit transition table. It advances only through `Tick(simTime)` and never moves with its doors open. |
+| `src/Elevator.Policy` | system | LOOK scheduling, dispatch (cost-based, nearest) and access policies, as pure functions over snapshots. |
+| `src/Elevator.EventLog` | system | The JSONL event-log format: writing and reading. |
+| `src/Elevator.Runtime` | system | The threaded system: one actor and mailbox per elevator, one dispatcher, a watchdog, and the wall-driven clock. |
+| `src/Elevator.Metrics` | system | Reports built only from the event log. |
+| `src/Elevator.Simulation` | lab | The deterministic engine, the seeded traffic generator, the YAML scenario loader, and the fault schedule. |
+| `src/Elevator.Lab` | lab | Experiments against the real runtime: perf bursts, the soak and the throughput ramp. |
+| `src/Elevator.Tui` | lab | The terminal UI. It reads snapshots and never drives the simulation. |
+| `src/Elevator.Cli` | lab | The `elevator` command. |
+| `benchmarks/Elevator.Benchmarks` | lab | BenchmarkDotNet measurements of one dispatch decision. |
 
 The event log is the one record of a run. Metrics, the UI, and replay all read it.
 [Architecture evolution](docs/architecture-evolution.md) shows how this layout grew stage by stage, with a diagram per

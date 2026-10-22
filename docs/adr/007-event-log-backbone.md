@@ -73,3 +73,9 @@ are in [contract-v3.md](../contract-v3.md).
 - `SimulationStarted` gains an optional `Fleet`.
 - All are written only when set, so default logs are byte-identical and older logs still read (see
   [contract-v3.md](../contract-v3.md) § v3.1).
+
+## Amendment: the wire format has its own project (ADR-019)
+
+`JsonlEventLog` moved from `Elevator.Simulation` to a new `Elevator.EventLog` project that depends only on Domain.
+The runtime writes the log, so the format belongs to the system, not the lab. The event records stay in
+`Domain.Events`, because the domain emits them. The format itself is unchanged, and logs are byte-identical.

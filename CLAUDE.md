@@ -19,11 +19,16 @@ Use the spec's terms: `Elevator` (never "car" in code), hall call = pickup reque
     superseded strategies are removed once measured, and live at the stage tags (`v1-easy`, `v2-medium`,
     `v3-full-grid`; ADR-018).
   - `Elevator.Runtime`: single-writer actors — one loop + `Channel<T>` mailbox per elevator, a single
-    dispatcher consuming a bounded request channel, a watchdog. No shared mutable state between elevators.
-  - `Elevator.Simulation`: `IClock` (SimClock / RealClock), seeded traffic generator (Poisson, time-varying
+    dispatcher consuming a bounded request channel, a watchdog, `IClock` / `RealClock`, the runtime defaults.
+    No shared mutable state between elevators.
+  - `Elevator.EventLog`: the JSONL format (the event records live in `Domain.Events`).
+  - `Elevator.Simulation`: SimEngine, `SimClock`, seeded traffic generator (Poisson, time-varying
     rate), YAML scenario loader, fault injector. One seeded RNG → fully deterministic runs.
+  - `Elevator.Lab`: perf, soak and the throughput ramp against the real runtime; scenario → runtime options.
   - `Elevator.Metrics`: consumers of the event log only (never call into the domain).
   - `Elevator.Cli`: commands `run | tui | replay | bench | perf`.
+- **System vs lab (ADR-019).** System = Domain, Policy, EventLog, Runtime, Metrics. Lab = Simulation, Lab, Tui,
+  Cli. The lab depends on the system, never the reverse; `tests/Elevator.Architecture.Tests` enforces it.
 - **The event log (JSONL) is the backbone.** The domain emits events; metrics, TUI and replay consume them.
 - **Two kinds of time:** sim seconds (wait time, maintenance time…) vs wall-clock ms (assignment latency).
   Never mix them.

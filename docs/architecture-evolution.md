@@ -278,3 +278,53 @@ FIFO scheduling, round-robin dispatch, hysteresis rebalancing, the Defer capacit
 
 The golden event logs of `lunch.yaml` and `chaos.yaml` are byte-identical before and after the removal. Every
 comparison in `docs/results/` reproduces at tag `v3-full-grid`.
+
+## Final: the system and the lab (ADR-019)
+
+The runtime used to reference the simulator, for its clock, the building factory, the JSONL writer, its defaults and
+the perf code. Now the projects are split into two sides, and dependencies point one way: the lab depends on the
+system, never the reverse.
+
+```mermaid
+flowchart BT
+    subgraph System["System: what would ship"]
+        direction BT
+        DOM["Elevator.Domain<br/>state machine · handlers · events ·<br/>ElevatorType.CreateElevator · Handover · MessageLatency"]
+        POL["Elevator.Policy<br/>LOOK · Cost · Nearest ·<br/>AccessConfig.CreatePipeline"]
+        LOGF["Elevator.EventLog<br/>JSONL format"]
+        MET["Elevator.Metrics<br/>reports from the log"]
+        RT["Elevator.Runtime<br/>actors · IClock · RealClock ·<br/>RuntimeOptions + defaults"]
+        POL --> DOM
+        LOGF --> DOM
+        MET --> DOM
+        RT --> POL
+        RT --> MET
+    end
+    subgraph Lab["Lab: how we study it"]
+        direction BT
+        SIM["Elevator.Simulation<br/>SimEngine · SimClock · scenarios · traffic"]
+        LAB["Elevator.Lab<br/>perf · soak · throughput ramp ·<br/>Scenario.ToRuntimeOptions"]
+        TUI["Elevator.Tui"]
+        CLI["Elevator.Cli"]
+        LAB --> SIM
+        TUI --> SIM
+        CLI --> LAB
+        CLI --> TUI
+    end
+    SIM --> RT
+    LAB --> RT
+    LAB --> LOGF
+    TUI --> LOGF
+    TUI --> MET
+```
+
+- **Each moved piece went to the home of its concept**, not to a shared grab-bag project. For example, the factory
+  that builds an elevator from its type now lives on `ElevatorType`, and the access pipeline is built by
+  `AccessConfig`.
+- **The clocks moved last.** `SimClock` implements the runtime's `IClock`, so it needed Simulation → Runtime, which
+  was only possible once Runtime no longer referenced Simulation.
+- **An architecture test holds the line.** It checks the declared project graph, the compiled references and the
+  namespaces of every system project, and it requires every project to be classified as system or lab.
+
+Every commit of the move left the event logs of all nine scenarios, a bench and a heatmap byte-identical
+(115,310 log lines).

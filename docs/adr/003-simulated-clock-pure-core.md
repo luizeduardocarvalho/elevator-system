@@ -57,3 +57,9 @@ The TUI needs to drive the simulation tick by tick, so the deterministic runner 
 - **Commands enter only in sim time.** `Post(to, message)` delivers at `Now`, after anything already due, so
   operator and fault commands stay deterministic and replayable.
 - **Read-only views for rendering.** `Elevators` and `Waiting` are views that never drive the engine.
+
+## Amendment: where the clocks live (ADR-019)
+
+`IClock` and `RealClock` moved from `Elevator.Simulation` to `Elevator.Runtime`, because the runtime is what uses a
+wall-driven clock, and the system may not depend on the lab. `SimClock` stays in Simulation and implements the
+runtime's `IClock`. The pure core is unchanged: it still never sees a clock.

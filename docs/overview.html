@@ -108,7 +108,7 @@ header { position: relative; }
   <h1>Elevator System</h1>
   <p>Easy → Medium → Hard, built as an experiment: build, simulate, measure, evolve. State at tag <code>v3-hard</code>.</p>
   <div class="badges">
-    <span class="badge">.NET 10</span><span class="badge">559 tests passing</span><span class="badge">15 ADRs</span>
+    <span class="badge">.NET 10</span><span class="badge">571 tests passing</span><span class="badge">18 ADRs</span>
     <span class="badge">deterministic sim + actor runtime</span><span class="badge">p99 12.2 ms @ 100 concurrent (perf run)</span>
   </div>
   <div class="theme-toggle"><button id="theme" type="button" aria-label="Toggle colour theme">Theme</button></div>
@@ -144,8 +144,8 @@ flowchart TB
     end
     subgraph Policy["Elevator.Policy"]
       ACC["IAccessPolicy pipeline"]
-      DISP["RoundRobin · Nearest · Cost"]
-      SCHED["FIFO · LOOK"]
+      DISP["Cost · Nearest (fallback)"]
+      SCHED["LOOK"]
     end
     DH --> ACC --> DISP --> SCHED
     EH --> ELEV --> SCHED
@@ -165,13 +165,51 @@ flowchart TB
   CLI --> RT
   </pre></div>
 
+  <h3>The system and the lab</h3>
+  <p>The projects split into <strong>the system</strong>, which is what would ship, and <strong>the lab</strong>, which is what we use to study it. Dependencies point one way: the lab depends on the system, never the reverse. An architecture test checks the declared project graph, the compiled references and the namespaces of every system project (ADR-019).</p>
+
+  <div class="diagram"><pre class="mermaid">
+flowchart BT
+  subgraph System["System: what would ship"]
+    direction BT
+    DOM["Elevator.Domain&lt;br/&gt;state machine · handlers · events"]
+    POL["Elevator.Policy&lt;br/&gt;LOOK · Cost · Nearest · access"]
+    LOGF["Elevator.EventLog&lt;br/&gt;JSONL format"]
+    MET["Elevator.Metrics&lt;br/&gt;reports from the log"]
+    RT["Elevator.Runtime&lt;br/&gt;actors · RealClock · defaults"]
+    POL --> DOM
+    LOGF --> DOM
+    MET --> DOM
+    RT --> POL
+    RT --> MET
+  end
+  subgraph Lab["Lab: how we study it"]
+    direction BT
+    SIM["Elevator.Simulation&lt;br/&gt;SimEngine · scenarios · traffic"]
+    LAB["Elevator.Lab&lt;br/&gt;perf · soak · throughput ramp"]
+    TUI["Elevator.Tui"]
+    CLI["Elevator.Cli"]
+    LAB --> SIM
+    TUI --> SIM
+    CLI --> LAB
+    CLI --> TUI
+  end
+  SIM --> RT
+  LAB --> RT
+  LAB --> LOGF
+  TUI --> LOGF
+  TUI --> MET
+  </pre></div>
+
   <div class="grid">
-    <div class="card"><h4>Elevator.Domain</h4><p>State machine with an explicit transition table; advances only through <code>Tick(simTime)</code>. Handlers implement <code>Handle(message, now, outbox)</code>.</p></div>
-    <div class="card"><h4>Elevator.Policy</h4><p>LOOK scheduling and dispatch (Cost, with Nearest as the overload fallback) as pure functions over immutable snapshots. Superseded strategies were removed once measured (ADR-018) and live at tag <code>v3-full-grid</code>.</p></div>
-    <div class="card"><h4>Elevator.Runtime</h4><p>One actor loop + <code>Channel&lt;T&gt;</code> mailbox per elevator, a single dispatcher on a bounded request channel, a log writer, a watchdog.</p></div>
-    <div class="card"><h4>Elevator.Simulation</h4><p><code>SimEngine</code>, SimClock/RealClock, seeded Poisson traffic, YAML scenarios, fault injector. One seeded RNG → fully deterministic.</p></div>
-    <div class="card"><h4>Elevator.Metrics</h4><p>Reads the event log only: wait/ride/journey, wait attribution buckets, ops metrics, the wait heatmap, Student-t CIs.</p></div>
-    <div class="card"><h4>Elevator.Tui</h4><p>A fold over the log; reads at ~20 fps and never drives decisions. Same view for live runs and replays.</p></div>
+    <div class="card"><h4>Elevator.Domain <span class="badge">system</span></h4><p>State machine with an explicit transition table; advances only through <code>Tick(simTime)</code>. Handlers implement <code>Handle(message, now, outbox)</code>.</p></div>
+    <div class="card"><h4>Elevator.Policy <span class="badge">system</span></h4><p>LOOK scheduling, dispatch (Cost, with Nearest as the overload fallback) and access policies, as pure functions over immutable snapshots. Superseded strategies were removed once measured (ADR-018) and live at tag <code>v3-full-grid</code>.</p></div>
+    <div class="card"><h4>Elevator.EventLog <span class="badge">system</span></h4><p>The JSONL wire format, one event per line. The event records themselves live in the domain, which emits them.</p></div>
+    <div class="card"><h4>Elevator.Runtime <span class="badge">system</span></h4><p>One actor loop + <code>Channel&lt;T&gt;</code> mailbox per elevator, a single dispatcher on a bounded request channel, a log writer, a watchdog, the wall-driven <code>RealClock</code> and the runtime defaults.</p></div>
+    <div class="card"><h4>Elevator.Metrics <span class="badge">system</span></h4><p>Reads the event log only: wait/ride/journey, wait attribution buckets, ops metrics, the wait heatmap, Student-t CIs.</p></div>
+    <div class="card"><h4>Elevator.Simulation <span class="badge">lab</span></h4><p><code>SimEngine</code>, <code>SimClock</code>, seeded Poisson traffic, YAML scenarios, fault injector. One seeded RNG → fully deterministic.</p></div>
+    <div class="card"><h4>Elevator.Lab <span class="badge">lab</span></h4><p>Experiments against the real runtime: perf bursts, the soak, the open-loop throughput ramp, and the scenario → runtime options mapping.</p></div>
+    <div class="card"><h4>Elevator.Tui <span class="badge">lab</span></h4><p>A fold over the log; reads at ~20 fps and never drives decisions. Same view for live runs and replays.</p></div>
   </div>
 
   <h3>How it evolved</h3>
@@ -182,7 +220,7 @@ flowchart TB
     <tr><td><code>v3-hard</code></td><td>TUI ∥ elevator types, access policies (VIP, restricted floors), maintenance, emergency stop, watchdog, fault injection</td><td>011 TUI · 012 eligibility &amp; types · 013 maintenance / emergency / watchdog</td></tr>
     <tr><td>after v3</td><td>A working-day scenario (stepwise traffic mixes), the wait heatmap and the paired difference map: <code>elevator heatmap [--vs]</code></td><td>014 working day &amp; heatmap</td></tr>
     <tr><td><code>v3-full-grid</code></td><td>The last commit with every strategy selectable: every results file reproduces here</td><td>015 ordering rules · 016 throughput ramp</td></tr>
-    <tr><td><code>main</code></td><td>The final design only: superseded strategies removed; requests validated at the runtime boundary; fail-stop actor supervision</td><td>017 validation &amp; supervision · 018 final design</td></tr>
+    <tr><td><code>main</code></td><td>The final design only: superseded strategies removed; requests validated at the runtime boundary; fail-stop actor supervision; the system/lab split, with the lab depending on the system</td><td>017 validation &amp; supervision · 018 final design · 019 system and lab</td></tr>
   </table></div>
 
   <h3>Dispatch: the cost function</h3>
@@ -601,7 +639,7 @@ flowchart LR
 <!-- ============================== TESTS ============================== -->
 <section role="tabpanel" id="p-tests" aria-labelledby="t-tests">
   <h2>Test results</h2>
-  <p class="lede">Now: <code>dotnet build -warnaserror</code> clean, 559 tests passing (480 at the <code>v3-hard</code> merge, plus the working day, the heatmaps and the ordering audit). Tests came first for the domain and the policies; no test uses <code>Thread.Sleep</code>.</p>
+  <p class="lede">Now: <code>dotnet build -warnaserror</code> clean, 571 tests passing (480 at the <code>v3-hard</code> merge, plus the working day, the heatmaps, the ordering audit and the architecture test). Tests came first for the domain and the policies; no test uses <code>Thread.Sleep</code>.</p>
 
   <div class="grid">
     <div class="stat card good"><div class="num">189</div><div class="lbl">Domain: transition table, mechanics, handlers</div></div>
@@ -627,7 +665,7 @@ flowchart LR
   <h3>Merge verification (v2 → TUI ∥ Hard → v3)</h3>
   <div class="table-wrap"><table>
     <tr><th>Check</th><th>Result</th></tr>
-    <tr><td>All tests with warnings as errors (at the merge; 559 / 559 now)</td><td class="pass">480 / 480</td></tr>
+    <tr><td>All tests with warnings as errors (at the merge; 571 / 571 now)</td><td class="pass">480 / 480</td></tr>
     <tr><td>Same seed across TUI speeds (0.5×, 10×, MAX, headless)</td><td class="pass">identical hash</td></tr>
     <tr><td>v2 results with faults off</td><td class="pass">12 / 12 byte-identical</td></tr>
     <tr><td>chaos.yaml in the TUI: maintenance / emergency / fault markers and the ops panel</td><td class="pass">live; 9 / 9 commands applied; 264 / 264 served</td></tr>
