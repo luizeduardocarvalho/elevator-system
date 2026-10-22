@@ -105,6 +105,16 @@ public sealed record PassengerArrives(Request Request) : Message;
 /// <summary>Something passengers can see: doors opening (to get off) or a lantern answering their call (to get on).</summary>
 public sealed record ElevatorNotice(DomainEvent Event) : Message;
 
+// ---- Perf only (ADR-015) ---------------------------------------------------------------------------------
+/// <summary>
+/// The steady-state throughput ramp retires each generated request as soon as it is accepted, so the building keeps
+/// its seeded backlog instead of accumulating requests it could never serve at thousands per second. Sent by the actor
+/// runtime (only with <c>RetireOnAccept</c>) to the elevator and to the passengers, never in a simulation or a real run.
+/// The elevator drops the pickup without releasing it; the passengers handler tells the dispatcher with the
+/// <see cref="RequestPickedUp"/> it already handles when a passenger boards.
+/// </summary>
+public sealed record PassengerRetired(int RequestId, int ElevatorId) : Message;
+
 // ---- To the simulator's fault scheduler -------------------------------------------------------------------
 /// <summary>Deliver <paramref name="Command"/> to its elevator at max(Command.At, now), as <see cref="ApplyFault"/>.</summary>
 public sealed record ScheduleFault(Faults.FaultCommand Command) : Message;

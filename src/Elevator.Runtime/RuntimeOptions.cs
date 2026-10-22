@@ -39,6 +39,12 @@ public sealed record RuntimeOptions(
     /// <summary>Floor restrictions and VIP service (ADR-012).</summary>
     public AccessConfig Access { get; init; } = AccessConfig.None;
 
+    /// <summary>
+    /// Perf only (ADR-015): retire each request as soon as it is accepted (<see cref="Elevator.Domain.Control.PassengerRetired"/>),
+    /// so a steady-state ramp keeps the building's seeded backlog constant. Never set for a real system.
+    /// </summary>
+    public bool RetireOnAccept { get; init; }
+
     /// <summary>Watchdog timeout in sim ms (ADR-013); null = no watchdog.</summary>
     public long? WatchdogTimeoutMs { get; init; } = Scenario.DefaultWatchdogTimeoutMs;
 

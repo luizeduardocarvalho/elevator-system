@@ -7,6 +7,13 @@ using Elevator.Policy.Dispatch;
 
 namespace Elevator.Simulation;
 
+/// <summary>
+/// What a simulation hands to the actor runtime (ADR-015): its handler objects (elevators, dispatcher, passengers) as
+/// they are at <paramref name="At"/>, and the messages still in flight, each with its remaining delay. Ownership moves
+/// once, before any thread starts: the engine refuses to run afterwards, so a handler never has two owners.
+/// </summary>
+public sealed record EngineHandover(IReadOnlyList<IHandler> Handlers, SimTime At, IReadOnlyList<Envelope> InFlight);
+
 public sealed record SimulationResult(IReadOnlyList<DomainEvent> Events, int Delivered, int Unserved, SimTime EndedAt);
 
 /// <param name="EmitDispatchEvaluations">Log every candidate's cost per dispatch decision (DispatchEvaluated). Off by
@@ -44,6 +51,7 @@ public sealed class SimEngine
     private long _seq;
 
     private bool _ended;
+    private bool _handedOver;
 
     /// <summary>Runs the scenario to the end in fixed ticks (the headless path used by run and bench).</summary>
     public static SimulationResult Run(Scenario scenario, Strategy? strategy = null, long tickMs = ScenarioRunner.DefaultTickMs)
@@ -155,6 +163,7 @@ public sealed class SimEngine
     /// </summary>
     public void AdvanceTo(SimTime target)
     {
+        if (_handedOver) throw new InvalidOperationException("this engine handed its handlers over (HandOver) and can no longer run");
         if (Finished) return;
         if (target < Now) throw new ArgumentOutOfRangeException(nameof(target), $"time went backwards: {target} < {Now}");
         target = SimTime.Min(target, Scenario.MaxSimTime);
@@ -179,6 +188,23 @@ public sealed class SimEngine
     /// are the one exception: they go ahead of what is due at the same instant (ADR-013).
     /// </summary>
     public void Post(Address to, Message message) => Enqueue(Now, new Envelope(to, message));
+
+    /// <summary>
+    /// Gives up this engine's handlers and in-flight messages, as of <see cref="Now"/>, to another shell (the actor
+    /// runtime seeding a steady-state perf run from a busy moment, ADR-015). Wake-ups are left out: a handler's next
+    /// wake-up is part of its state (<see cref="IHandler.NextWakeUp"/>). The engine cannot run afterwards.
+    /// </summary>
+    public EngineHandover HandOver()
+    {
+        if (_handedOver) throw new InvalidOperationException("already handed over");
+        _handedOver = true;
+        var inFlight = _queue.UnorderedItems
+            .Where(item => item.Element.Message is not WakeUp)
+            .OrderBy(item => item.Priority)
+            .Select(item => item.Element with { DelayMs = Math.Max(0, item.Priority.TimeMs - Now.Ms) })
+            .ToList();
+        return new EngineHandover([.. _handlers.Values.Where(h => h.Address.Kind != ActorKind.FaultScheduler)], Now, inFlight);
+    }
 
     /// <summary>Ends the run: logs SimulationEnded and returns the result. Idempotent.</summary>
     public SimulationResult Finish()

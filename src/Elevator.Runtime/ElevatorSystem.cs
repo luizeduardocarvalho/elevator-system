@@ -24,7 +24,9 @@ public sealed class RequestRefusedException(int requestId, string policy, string
 }
 
 /// <summary>An accepted assignment, as seen by whoever submitted the request.</summary>
-public sealed record Assignment(int RequestId, int ElevatorId, WallDuration Latency);
+/// <param name="CompletedAt">Stopwatch timestamp when the acceptance reached the runtime (before any continuation runs),
+/// so an open-loop generator can measure from its own intended send time (ADR-015).</param>
+public sealed record Assignment(int RequestId, int ElevatorId, WallDuration Latency, long CompletedAt = 0);
 
 /// <summary>
 /// The spec's ElevatorSystem, as a running, thread-safe system (ADR-005).
@@ -48,23 +50,29 @@ public sealed class ElevatorSystem : IAsyncDisposable
     private int _nextQuery;
     private readonly CancellationTokenSource _stop = new();
     private readonly List<Task> _loops = [];
-    private readonly Task _logWriter;
+    private Task _logWriter = Task.CompletedTask;
     private readonly ConcurrentQueue<DomainEvent> _events = new();
     private readonly Action<long, DomainEvent>? _sink;
     private readonly RuntimeOptions _options;
     private readonly DelayedDelivery _delayed;
 
-    private ElevatorSystem(RuntimeOptions options, Action<long, DomainEvent>? sink)
+    private ElevatorSystem(RuntimeOptions options, Action<long, DomainEvent>? sink, EngineHandover? handover = null)
     {
         _options = options;
         _sink = sink;
-        Clock = new RealClock(options.Speed);
+        Clock = new RealClock(options.Speed, handover?.At ?? SimTime.Zero);
         _delayed = new DelayedDelivery(Clock, Deliver);
         _requests = Channel.CreateBounded<SubmitRequest>(new BoundedChannelOptions(options.RequestQueueCapacity)
         {
             FullMode = BoundedChannelFullMode.Wait,
             SingleReader = true,
         });
+
+        if (handover is not null)
+        {
+            TakeOver(handover);
+            return;
+        }
 
         var timing = options.EffectiveTiming;
         var scheduling = SchedulingPolicies.Create(options.Scheduling);
@@ -100,6 +108,40 @@ public sealed class ElevatorSystem : IAsyncDisposable
         if (!options.StartPaused) Resume();
     }
 
+    /// <summary>
+    /// The actor runtime taking over a simulation's handlers mid-run (ADR-015): the throughput ramp seeds the building
+    /// with a busy moment of a real scenario (riders, accepted pickups, the dispatcher's view) instead of an empty one.
+    /// Every message still in flight is delivered with its remaining delay, except future passenger arrivals: the
+    /// scenario's traffic is replaced by whoever calls <see cref="AssignRequest"/>.
+    /// </summary>
+    public static ElevatorSystem FromEngine(EngineHandover handover, RuntimeOptions options, Action<long, DomainEvent>? sink = null) =>
+        new(options, sink, handover);
+
+    private void TakeOver(EngineHandover handover)
+    {
+        var elevators = handover.Handlers.Count(h => h.Address.Kind == ActorKind.Elevator);
+        if (elevators != _options.Elevators)
+            throw new ArgumentException($"the handover has {elevators} elevators but the options say {_options.Elevators}", nameof(handover));
+        foreach (var handler in handover.Handlers.OrderBy(h => h.Address.Kind).ThenBy(h => h.Address.Index))
+        {
+            if (handler is DispatcherHandler dispatcher) DispatchPolicy = dispatcher.Policy.Name;
+            Add(new Actor(handler, this, handler.Address.Kind == ActorKind.Dispatcher ? _requests.Reader : null));
+        }
+        if (!_actors.ContainsKey(Address.Dispatcher) || !_actors.ContainsKey(Address.Passengers))
+            throw new ArgumentException("the handover needs a dispatcher and a passengers handler", nameof(handover));
+
+        FaultInjector = new RuntimeFaultInjector(this);
+        _logWriter = Task.Run(WriteLog);
+        foreach (var envelope in handover.InFlight)
+        {
+            if (envelope is { Message: PassengerArrives } or { To.Kind: ActorKind.Client }) continue;
+            if (!_actors.ContainsKey(envelope.To))
+                throw new ArgumentException($"a message in flight is addressed to {envelope.To}, which the runtime does not have", nameof(handover));
+            _ = Deliver(envelope, CancellationToken.None).AsTask();
+        }
+        if (!_options.StartPaused) Resume();
+    }
+
     /// <summary>Starts the actor loops of a system created with <see cref="RuntimeOptions.StartPaused"/>. Idempotent.</summary>
     public void Resume()
     {
@@ -117,16 +159,24 @@ public sealed class ElevatorSystem : IAsyncDisposable
     public int ElevatorCount => _options.Elevators;
 
     /// <summary>Injects maintenance, emergency stops and faults (ADR-013), at their sim time on <see cref="Clock"/>.</summary>
-    public IFaultInjector FaultInjector { get; }
+    public IFaultInjector FaultInjector { get; private set; } = null!;
 
     internal CancellationToken Stopping => _stop.Token;
 
-    public string DispatchPolicy { get; }
+    public string DispatchPolicy { get; private set; } = "";
 
     public int RequestQueueCapacity => _options.RequestQueueCapacity;
 
     /// <summary>Requests submitted and not yet assigned.</summary>
     public int PendingAssignments => _pending.Count;
+
+    private int _inFlight;
+
+    /// <summary>
+    /// Requests submitted by callers and not yet answered: a plain counter, cheap enough to sample every millisecond
+    /// (ConcurrentDictionary.Count takes every lock). The throughput ramp's Little's-law check reads it (ADR-015).
+    /// </summary>
+    public int InFlight => Volatile.Read(ref _inFlight);
 
     /// <summary>
     /// Submits <paramref name="request"/> and completes when an elevator has accepted it. Thread-safe; any number of
@@ -139,6 +189,7 @@ public sealed class ElevatorSystem : IAsyncDisposable
         var tcs = new TaskCompletionSource<Assignment>(TaskCreationOptions.RunContinuationsAsynchronously);
         if (!_pending.TryAdd(request.Id, (tcs, started)))
             throw new InvalidOperationException($"request {request.Id} is already pending");
+        Interlocked.Increment(ref _inFlight);
 
         // Backpressure stays with the caller (spec requestQueue): wait while the bounded request queue is full.
         try
@@ -148,7 +199,7 @@ public sealed class ElevatorSystem : IAsyncDisposable
         }
         catch
         {
-            _pending.TryRemove(request.Id, out _);
+            if (_pending.TryRemove(request.Id, out _)) Interlocked.Decrement(ref _inFlight);
             throw;
         }
         // Causality by construction (ADR-015): the passengers actor logs PassengerArrived and then submits the request,
@@ -249,11 +300,25 @@ public sealed class ElevatorSystem : IAsyncDisposable
         {
             case { To.Kind: ActorKind.Client, Message: RequestAssigned assigned }:
                 if (_pending.TryRemove(assigned.RequestId, out var p))
-                    p.Tcs.TrySetResult(new Assignment(assigned.RequestId, assigned.ElevatorId, WallDuration.Since(p.Started)));
+                {
+                    var completedAt = Stopwatch.GetTimestamp();
+                    Interlocked.Decrement(ref _inFlight);
+                    if (_options.RetireOnAccept)
+                    {
+                        // Perf only (ADR-015): the request leaves as soon as it is accepted, so the seeded backlog stays put.
+                        var retired = new PassengerRetired(assigned.RequestId, assigned.ElevatorId);
+                        _actors[Address.Elevator(assigned.ElevatorId)].Mailbox.Writer.TryWrite(retired);
+                        _actors[Address.Passengers].Mailbox.Writer.TryWrite(retired);
+                    }
+                    p.Tcs.TrySetResult(new Assignment(assigned.RequestId, assigned.ElevatorId, WallDuration.Since(p.Started), completedAt));
+                }
                 break;
             case { To.Kind: ActorKind.Client, Message: RequestRefused refused }:
                 if (_pending.TryRemove(refused.RequestId, out var r))
+                {
+                    Interlocked.Decrement(ref _inFlight);
                     r.Tcs.TrySetException(new RequestRefusedException(refused.RequestId, refused.Policy, refused.Reason));
+                }
                 break;
             case { To.Kind: ActorKind.Client, Message: BestElevatorAnswer answer }:
                 if (_queries.TryRemove(answer.QueryId, out var query)) query.TrySetResult(answer.ElevatorId);

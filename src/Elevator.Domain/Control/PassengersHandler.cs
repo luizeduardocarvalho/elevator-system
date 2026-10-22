@@ -52,6 +52,9 @@ public sealed class PassengersHandler : IHandler
     /// <summary>Passengers whose request every elevator's access policies refused (ADR-012); they left.</summary>
     public int Refused { get; private set; }
 
+    /// <summary>Passengers retired on acceptance by the throughput ramp (perf only, ADR-015).</summary>
+    public int Retired { get; private set; }
+
     public bool Empty => _byId.Count == 0;
 
     public void Handle(Message message, SimTime now, Outbox outbox)
@@ -64,6 +67,12 @@ public sealed class PassengersHandler : IHandler
                 break;
             case AssignmentAcceptedMsg accepted when _byId.GetValueOrDefault(accepted.RequestId) is { RidingOn: null } waiting:
                 waiting.AssignedTo = accepted.ElevatorId;
+                break;
+            case PassengerRetired retired when _byId.GetValueOrDefault(retired.RequestId) is { RidingOn: null } leaving:
+                _waiting[(leaving.Request.PickupFloor, leaving.Request.Direction)].Remove(leaving);
+                _byId.Remove(retired.RequestId);
+                Retired++;
+                outbox.Send(Address.Dispatcher, new RequestPickedUp(retired.RequestId, retired.ElevatorId));
                 break;
             case AssignmentReleasedMsg released when _byId.GetValueOrDefault(released.RequestId) is { } waiting
                                                      && waiting.AssignedTo == released.ElevatorId:

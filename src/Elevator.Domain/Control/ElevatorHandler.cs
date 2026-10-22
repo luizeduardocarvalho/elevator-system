@@ -69,6 +69,9 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
                 if (Elevator.Unassign(unassign.RequestId))
                     Release(unassign.RequestId, AssignmentReason.Rebalance, now, outbox);
                 break;
+            case PassengerRetired retired:
+                Elevator.Unassign(retired.RequestId); // no release: a released pickup would be re-dispatched (perf only, ADR-015)
+                break;
             case Boarded boarded:
                 Elevator.Board(boarded.Rider);
                 break;
