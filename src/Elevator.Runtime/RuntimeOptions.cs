@@ -1,7 +1,6 @@
 using Elevator.Domain;
 using Elevator.Domain.Control;
 using Elevator.Policy.Access;
-using Elevator.Simulation;
 
 namespace Elevator.Runtime;
 
@@ -19,8 +18,14 @@ public sealed record RuntimeOptions(
     bool KeepEvents = true,
     ElevatorTiming? Timing = null,
     MessageLatency? Latency = null,
-    int? OverloadThreshold = SimEngine.OverloadThreshold)
+    int? OverloadThreshold = RuntimeOptions.DefaultOverloadThreshold)
 {
+    /// <summary>Requests in flight above which the dispatcher falls back to Nearest (ADR-006).</summary>
+    public const int DefaultOverloadThreshold = 200;
+
+    /// <summary>Default watchdog timeout T (ADR-013): 30 s of sim time without progress while having work.</summary>
+    public const long DefaultWatchdogTimeoutMs = 30_000;
+
     public ElevatorTiming EffectiveTiming => Timing ?? ElevatorTiming.Default;
 
     /// <summary>Each elevator's type (ADR-012); null = <see cref="Elevators"/> standard elevators.</summary>
@@ -45,13 +50,5 @@ public sealed record RuntimeOptions(
     public bool RetireOnAccept { get; init; }
 
     /// <summary>Watchdog timeout in sim ms (ADR-013); null = no watchdog.</summary>
-    public long? WatchdogTimeoutMs { get; init; } = Scenario.DefaultWatchdogTimeoutMs;
-
-    public static RuntimeOptions From(Scenario s, double speed) =>
-        new(s.Floors, s.Elevators, s.Capacity, s.BypassThreshold, s.Dispatch, Speed: speed, Timing: s.Timing, Latency: s.Latency)
-        {
-            Fleet = s.Fleet,
-            Access = s.Access,
-            WatchdogTimeoutMs = s.WatchdogTimeoutMs,
-        };
+    public long? WatchdogTimeoutMs { get; init; } = DefaultWatchdogTimeoutMs;
 }

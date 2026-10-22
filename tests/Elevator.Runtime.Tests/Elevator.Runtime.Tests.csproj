@@ -7,6 +7,7 @@
     <PackageReference Include="FsCheck.Xunit" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Elevator.Lab\Elevator.Lab.csproj" />
     <ProjectReference Include="..\..\src\Elevator.Runtime\Elevator.Runtime.csproj" />
   </ItemGroup>
   <ItemGroup>

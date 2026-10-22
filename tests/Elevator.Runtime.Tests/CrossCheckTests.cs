@@ -1,5 +1,6 @@
 using Elevator.Domain;
 using Elevator.Domain.Events;
+using Elevator.Lab;
 using Elevator.Metrics;
 using Elevator.Simulation;
 
@@ -19,7 +20,7 @@ public class CrossCheckTests
         var passengers = ScenarioRunner.BuildPassengers(scenario);
         var sim = ReportBuilder.Build(SimEngine.Run(scenario).Events);
 
-        await using var system = ElevatorSystem.Start(RuntimeOptions.From(scenario, speed: 200));
+        await using var system = ElevatorSystem.Start(scenario.ToRuntimeOptions(speed: 200));
         await system.PlayPassengers(passengers);
         var deadline = DateTime.UtcNow.AddSeconds(30);
         while (system.PassengersForInspection.Delivered < passengers.Count && DateTime.UtcNow < deadline)

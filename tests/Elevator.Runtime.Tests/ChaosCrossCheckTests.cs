@@ -1,6 +1,7 @@
 using Elevator.Domain;
 using Elevator.Domain.Events;
 using Elevator.Domain.Faults;
+using Elevator.Lab;
 using Elevator.Metrics;
 using Elevator.Simulation;
 
@@ -29,7 +30,7 @@ public class ChaosCrossCheckTests
         var simEvents = SimEngine.Run(scenario).Events;
         var sim = ReportBuilder.Build(simEvents);
 
-        await using var system = ElevatorSystem.Start(RuntimeOptions.From(scenario, speed: 200));
+        await using var system = ElevatorSystem.Start(scenario.ToRuntimeOptions(speed: 200));
         foreach (var f in scenario.FaultSchedule) system.FaultInjector.Inject(f);
         await system.PlayPassengers(passengers);
         var deadline = DateTime.UtcNow.AddSeconds(40);

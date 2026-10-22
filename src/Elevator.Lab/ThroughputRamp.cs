@@ -45,7 +45,7 @@ public static class ThroughputRamp
     {
         var handover = PeakMoment.HandOverAt(scenario, seedAt);
         var counters = new ProposalCounter();
-        var runtime = RuntimeOptions.From(scenario, options.BuildingSpeed) with { KeepEvents = false, RetireOnAccept = true };
+        var runtime = scenario.ToRuntimeOptions(options.BuildingSpeed) with { KeepEvents = false, RetireOnAccept = true };
         var system = ElevatorSystem.FromEngine(handover, runtime, counters.Observe);
 
         var f = Stopwatch.Frequency;

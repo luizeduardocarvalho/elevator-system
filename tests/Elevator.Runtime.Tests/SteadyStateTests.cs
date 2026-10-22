@@ -1,5 +1,6 @@
 using Elevator.Domain;
 using Elevator.Domain.Control;
+using Elevator.Lab;
 using Elevator.Simulation;
 
 namespace Elevator.Runtime.Tests;
@@ -56,7 +57,7 @@ public class SteadyStateTests
         var reference = SimEngine.Create(lunch);
         reference.AdvanceTo(peak.At);
 
-        await using (var system = ElevatorSystem.FromEngine(handover, RuntimeOptions.From(lunch, speed: 0) with { KeepEvents = false }))
+        await using (var system = ElevatorSystem.FromEngine(handover, lunch.ToRuntimeOptions(speed: 0) with { KeepEvents = false }))
         {
             Assert.Equal(peak.At, system.Clock.Now);
             await Task.Delay(100); // frozen: nothing moves
@@ -89,7 +90,7 @@ public class SteadyStateTests
         var passengers = handover.Handlers.OfType<PassengersHandler>().Single();
 
         await using (var system = ElevatorSystem.FromEngine(handover,
-                         RuntimeOptions.From(lunch, speed: 0) with { KeepEvents = false, RetireOnAccept = true }))
+                         lunch.ToRuntimeOptions(speed: 0) with { KeepEvents = false, RetireOnAccept = true }))
         {
             var tasks = Enumerable.Range(0, 8).Select(t => Task.Run(async () =>
             {
