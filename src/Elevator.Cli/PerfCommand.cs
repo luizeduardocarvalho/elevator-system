@@ -59,6 +59,34 @@ internal sealed class PerfCommand : AsyncCommand<PerfCommand.Settings>
 
         [CommandOption("--out <PATH>")]
         public string Out { get; init; } = Path.Combine("out", "perf.md");
+
+        [CommandOption("--ramp")]
+        [Description("Open-loop steady-state throughput ramp from a scenario's busiest moment (ADR-016) instead of bursts.")]
+        public bool Ramp { get; init; }
+
+        [CommandOption("--rates <LIST>")]
+        [Description("Ramp: offered requests per second, in order. Default: 1000,2000,5000,10000,15000,20000,30000,40000,50000,60000,70000")]
+        public string Rates { get; init; } = "1000,2000,5000,10000,15000,20000,30000,40000,50000,60000,70000";
+
+        [CommandOption("--step-seconds <N>")]
+        [Description("Ramp: measured seconds per step. Default: 30")]
+        public double StepSeconds { get; init; } = 30;
+
+        [CommandOption("--warmup-seconds <N>")]
+        [Description("Ramp: seconds discarded at the start of each step. Default: 5")]
+        public double WarmupSeconds { get; init; } = 5;
+
+        [CommandOption("--repeats <N>")]
+        [Description("Ramp: repeat the whole ramp; each rate reports its median-p99 repeat. Default: 3")]
+        public int Repeats { get; init; } = 3;
+
+        [CommandOption("--building-speed <N>")]
+        [Description("Ramp: 0 = building frozen at the seeded moment (steady state, default); 1 = real time.")]
+        public double BuildingSpeed { get; init; }
+
+        [CommandOption("--scenario <NAME>")]
+        [Description("Ramp: the scenario whose busiest moment seeds every step. Default: lunch")]
+        public string Scenario { get; init; } = "lunch";
     }
 
     public const double LatencySloMs = 100;
@@ -66,6 +94,7 @@ internal sealed class PerfCommand : AsyncCommand<PerfCommand.Settings>
 
     public override async Task<int> ExecuteAsync(CommandContext context, Settings s, CancellationToken cancellationToken)
     {
+        if (s.Ramp) return await PerfRamp.Run(context, s).ConfigureAwait(false);
         int? overload = s.OverloadThreshold == "none" ? null : int.Parse(s.OverloadThreshold, CultureInfo.InvariantCulture);
         var options = new RuntimeOptions(s.Floors, s.Elevators, s.Capacity, Scheduling: s.Scheduling, Dispatch: s.Dispatch, Speed: 1,
             OverloadThreshold: overload);
