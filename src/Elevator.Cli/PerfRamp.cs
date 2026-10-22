@@ -57,7 +57,7 @@ internal static class PerfRamp
             .AppendLine("# Perf: open-loop steady-state throughput ramp").AppendLine()
             .AppendLine($"- **Command:** `elevator {string.Join(' ', context.Arguments)}`")
             .AppendLine($"- **Machine:** {Environment.ProcessorCount} logical cores, .NET {Environment.Version}, {System.Runtime.InteropServices.RuntimeInformation.OSDescription}; load average at start: {load}")
-            .AppendLine($"- **System:** {scenario.Scheduling}+{scenario.Dispatch}, {scenario.Elevators} elevators, {scenario.Floors} floors, capacity {scenario.Capacity}, overload fallback to Nearest above {SimEngine.OverloadThreshold} in flight")
+            .AppendLine($"- **System:** look+{scenario.Dispatch}, {scenario.Elevators} elevators, {scenario.Floors} floors, capacity {scenario.Capacity}, overload fallback to Nearest above {SimEngine.OverloadThreshold} in flight")
             .AppendLine($"- **Seed (steady state):** {scenario.Name} at its busiest moment, {peak.At}: {peak.Outstanding} outstanding " +
                 $"({string.Join(", ", peak.PerElevator.Select((e, i) => $"E{i} {e.Riders} riding + {e.Pickups} to pick up"))}). " +
                 $"Building {(s.BuildingSpeed == 0 ? "frozen at that moment" : $"at {s.BuildingSpeed}× speed")}; every request retired on acceptance, so the backlog stays constant.")

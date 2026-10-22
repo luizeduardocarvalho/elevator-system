@@ -61,7 +61,7 @@ public class ViewModelTests
     public void Unbounded_capacity_shows_the_rider_count_only()
     {
         var state = new BuildingState();
-        state.Apply(new SimulationStarted(SimTime.Zero, "v1", 1, 10, "fifo", 3)); // Capacity = int.MaxValue
+        state.Apply(new SimulationStarted(SimTime.Zero, "v1", 1, 10, "look", 3)); // Capacity = int.MaxValue
         Assert.Equal("■ 0", Build(state).Building.Rows.Single(r => r.Floor == 1).Shafts[0].Text);
     }
 

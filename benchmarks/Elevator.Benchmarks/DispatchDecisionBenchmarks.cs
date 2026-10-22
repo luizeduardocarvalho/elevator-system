@@ -36,7 +36,7 @@ public class DispatchDecisionBenchmarks
             elevator.Tick(new SimTime(3_000)); // mid-route
             snapshots.Add(elevator.Snapshot());
         }
-        _context = new DispatchContext(Random(rng, ++id), snapshots, new SimTime(3_000), ElevatorTiming.Default, 0);
+        _context = new DispatchContext(Random(rng, ++id), snapshots, new SimTime(3_000), ElevatorTiming.Default);
     }
 
     private static Request Random(Random rng, int id)

@@ -10,9 +10,8 @@ namespace Elevator.Simulation;
 public static class Building
 {
     /// <summary>An elevator of <paramref name="type"/> (ADR-012), starting idle at the lowest floor it serves.</summary>
-    public static ElevatorUnit CreateElevator(int id, int floors, ElevatorType type, ISchedulingPolicy scheduling, double bypassThreshold,
-        CapacityMode capacityMode) =>
-        new(id, floors, type.Timing, scheduling, type.LowestServed(floors), type.Capacity, bypassThreshold, capacityMode, type.ServedFloors, type.Name);
+    public static ElevatorUnit CreateElevator(int id, int floors, ElevatorType type, ISchedulingPolicy scheduling, double bypassThreshold) =>
+        new(id, floors, type.Timing, scheduling, type.LowestServed(floors), type.Capacity, bypassThreshold, type.ServedFloors, type.Name);
 
     /// <summary>
     /// The access pipeline (ADR-012), in this order: served floors, capacity units, floor restrictions, VIP. The first

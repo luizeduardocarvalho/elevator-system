@@ -67,48 +67,45 @@ public sealed class SimEngine
     /// tick) and the event log is identical to <see cref="Run"/>'s; end it with <see cref="Finish"/>.
     /// </summary>
     public static SimEngine Create(Scenario scenario, Strategy? strategy = null, SimEngineOptions? options = null) =>
-        new(scenario, strategy ?? new Strategy(scenario.Scheduling, scenario.Dispatch), options ?? SimEngineOptions.Default);
+        new(scenario, strategy ?? new Strategy(scenario.Dispatch), options ?? SimEngineOptions.Default);
 
     private SimEngine(Scenario scenario, Strategy strategy, SimEngineOptions options)
     {
         Scenario = scenario;
         Strategy = strategy;
         Options = options;
-        var scheduling = SchedulingPolicies.Create(strategy.Scheduling);
+        var scheduling = new LookScheduling(); // ADR-004
         var dispatch = DispatchPolicies.Create(strategy.Dispatch, scheduling, scenario.Timing);
         var latency = scenario.Latency ?? MessageLatency.None;
         var estimator = new StopProjection(scheduling, scenario.Timing); // each elevator's own view, for the staleness check
 
-        var capacityMode = strategy.Capacity ?? scenario.CapacityMode;
         var fleet = scenario.EffectiveFleet;
         if (fleet.Count != scenario.Elevators)
             throw new ArgumentException($"the fleet has {fleet.Count} elevators but the scenario says {scenario.Elevators}", nameof(scenario));
         for (var i = 0; i < scenario.Elevators; i++)
         {
-            var elevator = Building.CreateElevator(i, scenario.Floors, fleet[i], scheduling, scenario.BypassThreshold, capacityMode);
+            var elevator = Building.CreateElevator(i, scenario.Floors, fleet[i], scheduling, scenario.BypassThreshold);
             var handler = new ElevatorHandler(elevator,
                 new ElevatorHandlerOptions(SnapshotDelayMs: latency.SnapshotMs, ReportProgress: scenario.WatchdogTimeoutMs is not null), estimator);
             _elevators.Add(handler);
             Register(handler);
         }
-        var rebalance = strategy.Rebalance ? new HysteresisRebalance(scheduling, scenario.Timing) : null;
         Register(new DispatcherHandler(dispatch, scenario.Elevators, scenario.Timing,
-            new DispatcherOptions(latency.DispatchMs, RebalanceIntervalMs: rebalance is null ? null : 5_000, OverloadThreshold: OverloadThreshold,
-                EmitDispatchEvaluations: options.EmitDispatchEvaluations)
+            new DispatcherOptions(latency.DispatchMs, OverloadThreshold: OverloadThreshold, EmitDispatchEvaluations: options.EmitDispatchEvaluations)
             {
                 Access = Building.CreateAccess(scenario.Access),
                 WatchdogTimeoutMs = scenario.WatchdogTimeoutMs,
                 VipPriority = scenario.Access.VipPriority,
             },
-            rebalance, new NearestDispatch()));
+            new NearestDispatch()));
         _passengers = new PassengersHandler([.. fleet.Select(t => t.Capacity)]);
         Register(_passengers);
 
         var passengers = ScenarioRunner.BuildPassengers(scenario);
         _expectedPassengers = passengers.Count;
         Log.Add(new SimulationStarted(SimTime.Zero, scenario.Name, scenario.Seed, scenario.Floors, scheduling.Name, passengers.Count,
-            scenario.Elevators, dispatch.Name + (rebalance is null ? "" : "+rebalance"), scenario.Capacity,
-            scenario.BypassThreshold, CapacityModes.Name(capacityMode),
+            scenario.Elevators, dispatch.Name, scenario.Capacity,
+            scenario.BypassThreshold, "next-trip", // the log keeps the v3 fields; next-trip is the only capacity mode (ADR-018)
             // v3.1: the per-elevator description, only for a configured (typed) fleet; null keeps default logs unchanged.
             scenario.Fleet is null ? null : [.. fleet.Select((t, i) => new FleetEntry(i, t.Name, t.Capacity, scenario.BypassThreshold, t.ServedFloors))]));
 

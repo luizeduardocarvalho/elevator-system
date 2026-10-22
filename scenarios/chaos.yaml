@@ -9,7 +9,6 @@ building:
   elevators: 4
   capacity: 10
   bypassThreshold: 0.8
-scheduling: look
 dispatch: cost
 maxSimTimeS: 5400
 watchdog: { timeoutS: 30 }

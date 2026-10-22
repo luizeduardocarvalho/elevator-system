@@ -3,7 +3,6 @@
 name: v1-poisson
 seed: 42
 floors: 10
-scheduling: fifo
 maxSimTimeS: 3600
 traffic:
   poisson:

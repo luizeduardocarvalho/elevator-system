@@ -63,11 +63,3 @@ public sealed record Result<T>(T? Value, string? Error)
 
     public static Result<T> Fail(string error) => new(default, error);
 }
-
-/// <summary>Outcome of a call registration through <see cref="ElevatorController"/>; invalid input never throws.</summary>
-public sealed record RequestResult(bool Accepted, string? Reason)
-{
-    public static RequestResult Ok { get; } = new(true, null);
-
-    public static RequestResult Rejected(string reason) => new(false, reason);
-}

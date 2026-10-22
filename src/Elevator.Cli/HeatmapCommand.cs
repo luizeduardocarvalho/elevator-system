@@ -41,7 +41,7 @@ internal sealed class HeatmapCommand : Command<HeatmapCommand.Settings>
         public string? ClockStart { get; init; }
 
         [CommandOption("--vs <STRATEGY|LOG>")]
-        [Description("Difference map against B, on the same passengers: Δ = this run − B (blue: this run waits less). For a scenario, B is a strategy (look+nearest, or a dispatch name such as nearest); for a log, B is another log of the same scenario and seed.")]
+        [Description("Difference map against B, on the same passengers: Δ = this run − B (blue: this run waits less). For a scenario, B is a dispatch policy (such as nearest); for a log, B is another log of the same scenario and seed.")]
         public string? Vs { get; init; }
 
         [CommandOption("--plain")]
@@ -73,7 +73,7 @@ internal sealed class HeatmapCommand : Command<HeatmapCommand.Settings>
             events = JsonlEventLog.Read(reader).ToList();
             var started = events.OfType<SimulationStarted>().FirstOrDefault();
             if (started is null) return Fail($"{settings.Source} has no SimulationStarted event");
-            nameA = $"{started.Scheduling}+{started.Dispatch ?? "none"}";
+            nameA = started.Dispatch ?? "none";
             title = $"{started.Scenario} · {nameA} · seed {started.Seed} · {settings.Source}";
             if (settings.Vs is { } vsLog)
             {
@@ -82,7 +82,7 @@ internal sealed class HeatmapCommand : Command<HeatmapCommand.Settings>
                 eventsB = JsonlEventLog.Read(readerB).ToList();
                 var startedB = eventsB.OfType<SimulationStarted>().FirstOrDefault();
                 if (startedB is null) return Fail($"{vsLog} has no SimulationStarted event");
-                nameB = $"{startedB.Scheduling}+{startedB.Dispatch ?? "none"}";
+                nameB = startedB.Dispatch ?? "none";
                 title = $"{started.Scenario} · seed {started.Seed} · {settings.Source} vs {vsLog}";
             }
         }
@@ -105,17 +105,15 @@ internal sealed class HeatmapCommand : Command<HeatmapCommand.Settings>
             }
             clockStart ??= scenario.ClockStart;
             events = SimEngine.Run(scenario).Events;
-            nameA = $"{scenario.Scheduling}+{scenario.Dispatch}";
+            nameA = scenario.Dispatch;
             title = $"{scenario.Name} · {nameA} · seed {scenario.Seed}";
             if (settings.Vs is { } vs)
             {
-                // "look+nearest" names both policies; a bare name is a dispatch policy under the scenario's scheduling.
-                var parts = vs.ToLowerInvariant().Split('+');
-                var (scheduling, dispatchB) = parts.Length == 2 ? (parts[0], parts[1]) : (scenario.Scheduling, parts[0]);
-                if (parts.Length > 2 || !SchedulingPolicies.Names.Contains(scheduling, StringComparer.OrdinalIgnoreCase) || !DispatchPolicies.IsKnown(dispatchB))
-                    return Fail($"--vs '{vs}' is not a strategy (scheduling: {string.Join(", ", SchedulingPolicies.Names)}; dispatch: {string.Join(", ", DispatchPolicies.Names)})");
-                eventsB = SimEngine.Run(scenario with { Scheduling = scheduling, Dispatch = dispatchB }).Events;
-                nameB = $"{scheduling}+{dispatchB}";
+                var dispatchB = vs.ToLowerInvariant();
+                if (!DispatchPolicies.IsKnown(dispatchB))
+                    return Fail($"--vs '{vs}' is not a dispatch policy (known: {string.Join(", ", DispatchPolicies.Names)})");
+                eventsB = SimEngine.Run(scenario with { Dispatch = dispatchB }).Events;
+                nameB = dispatchB;
                 title = $"{scenario.Name} · seed {scenario.Seed} · {nameA} vs {nameB}";
             }
         }

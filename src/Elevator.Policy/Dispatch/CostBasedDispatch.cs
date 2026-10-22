@@ -30,17 +30,15 @@ public sealed record CostEvaluation(double Cost, double EtaS, double AddedDelayS
 /// <item><b>L̂/C</b>: predicted load at pickup (current riders + pickups before it − drop-offs before it) over capacity.
 /// This is the load-balancing term (the spec's balanceLoad): prefer emptier elevators.</item>
 /// </list>
-/// Ineligible (cost ∞): maintenance, or the request would not be picked up within the projection horizon. In Defer
-/// mode also: currently full, or at pickup the elevator would already be at the bypass threshold (L̂ ≥ threshold·C)
-/// or the passenger would not fit (L̂ + load > C). In NextTrip mode (default, ADR-010) a full elevator stays a
-/// candidate: its projected ETA includes waiting for its next drop-off cycle.
+/// Ineligible (cost ∞): maintenance, or the request would not be picked up within the projection horizon. A full
+/// elevator stays a candidate (ADR-010): its projected ETA includes waiting for its next drop-off cycle.
 /// </summary>
 public sealed class CostBasedDispatch(ISchedulingPolicy scheduling, ElevatorTiming timing, CostWeights? weights = null, string name = "cost") : IDispatchPolicy
 {
     private readonly StopProjection _projection = new(scheduling, timing);
     private readonly CostWeights _weights = weights ?? CostWeights.Default;
-    // Latest per elevator, keyed by the snapshot object itself. Not by (version, time): rebalancing evaluates derived
-    // snapshots (the same elevator with one request removed) that share the version but not the content.
+    // Latest per elevator, keyed by the snapshot object itself. Not by (version, time): the dispatcher's overlay builds
+    // derived snapshots (the same elevator with proposed pickups added) that share the version but not the content.
     private readonly Dictionary<int, (ElevatorSnapshot Snapshot, StopProjection.Outcome Result)> _baselines = [];
 
     public string Name => name;
@@ -60,9 +58,9 @@ public sealed class CostBasedDispatch(ISchedulingPolicy scheduling, ElevatorTimi
         }
         if (best is not null) return explained is null ? best : best with { Candidates = explained };
 
-        // NextTrip mode always names an elevator (ADR-010). If no projection reaches the pickup within its horizon
+        // A request is always given an elevator (ADR-010). If no projection reaches the pickup within its horizon
         // (a huge backlog), rank by Nearest's effective distance instead of deferring; no ETA, so no staleness check.
-        if (context.Candidates.Any(c => c.CapacityMode == CapacityMode.NextTrip && c.State != ElevatorState.Maintenance)
+        if (context.Candidates.Any(c => c.State != ElevatorState.Maintenance)
             && _beyondHorizon.Choose(context) is { } fallback)
             return fallback with { Cost = double.MaxValue, Eta = null, Candidates = explained };
         return null;
@@ -74,16 +72,12 @@ public sealed class CostBasedDispatch(ISchedulingPolicy scheduling, ElevatorTimi
     /// already riding or assigned, so it takes the fastest pickup. ΔD is still computed and reported.</param>
     public CostEvaluation Evaluate(ElevatorSnapshot s, Request r, SimTime now, bool vipPriority = false)
     {
-        var defer = s.CapacityMode == CapacityMode.Defer;
-        if (s.State == ElevatorState.Maintenance || (defer && s.IsFull)) return CostEvaluation.Ineligible(s.Load);
+        if (s.State == ElevatorState.Maintenance) return CostEvaluation.Ineligible(s.Load);
 
         var with = _projection.Project(s, r, now);
         if (with.PickupAt is not { } pickupAt) return CostEvaluation.Ineligible(with.LoadAtPickup);
-        // Defer mode: same rule as its mechanics (at or above the threshold it hands pickups back; the passenger must
-        // fit). NextTrip mode needs no such rule: the projection already puts a full elevator's pickup on its next
-        // trip, so the ETA carries the wait (ADR-010).
-        if (defer && (with.LoadAtPickup >= s.BypassThreshold * s.Capacity || with.LoadAtPickup + r.Load > s.Capacity))
-            return CostEvaluation.Ineligible(with.LoadAtPickup);
+        // No capacity rule here: the projection already puts a full elevator's pickup on its next trip, so the ETA
+        // carries the wait (ADR-010).
 
         var addedDelayMs = StopProjection.AddedDelayMs(Baseline(s, now), with);
 

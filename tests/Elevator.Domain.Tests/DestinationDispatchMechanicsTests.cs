@@ -7,8 +7,8 @@ public class DestinationDispatchMechanicsTests
     private static Request R(int id, int from, int to, long calledAtMs = 0) =>
         Request.Create(from, to, new SimTime(calledAtMs), Harness.Floors, id: id).Value!;
 
-    private static Elevator Make(int capacity = 10, double threshold = 0.8, int startFloor = 1, CapacityMode mode = CapacityMode.NextTrip) =>
-        new(0, Harness.Floors, ElevatorTiming.Default, TestPolicies.NearestCarCallThenOldestHallCall, startFloor, capacity, threshold, mode);
+    private static Elevator Make(int capacity = 10, double threshold = 0.8, int startFloor = 1) =>
+        new(0, Harness.Floors, ElevatorTiming.Default, TestPolicies.NearestCarCallThenOldestHallCall, startFloor, capacity, threshold);
 
     [Fact]
     public void Requests_at_the_same_floor_and_direction_share_one_stop()
@@ -57,26 +57,6 @@ public class DestinationDispatchMechanicsTests
         var answered = Assert.Single(e.DrainEvents().OfType<HallCallAnswered>());
         Assert.Equal(3, answered.Floor); // it came back for them
         Assert.True(answered.At > openAt4.At);
-    }
-
-    [Fact]
-    public void Defer_mode_reaching_the_bypass_threshold_hands_back_every_pending_pickup()
-    {
-        var e = Make(capacity: 5, threshold: 0.8, mode: CapacityMode.Defer); // full at 4
-        e.EnterMaintenance();
-        e.AssignPickup(R(10, 7, 9));
-        e.AssignPickup(R(11, 3, 1));
-        e.DrainEvents();
-
-        for (var i = 1; i <= 3; i++) e.Board(R(i, 1, 6));
-        Assert.False(e.IsFull);
-        Assert.Empty(e.DrainEvents().OfType<AssignmentReleased>());
-
-        e.Board(R(4, 1, 8));
-        Assert.True(e.IsFull);
-        Assert.Equal([10, 11], e.DrainEvents().OfType<AssignmentReleased>().Select(r => r.RequestId));
-        Assert.All(e.DrainEvents(), _ => Assert.Fail("drained twice"));
-        Assert.Empty(e.HallCalls);
     }
 
     [Fact]

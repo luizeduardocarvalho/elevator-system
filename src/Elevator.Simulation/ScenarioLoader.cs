@@ -54,20 +54,9 @@ public static class ScenarioLoader
         var bypass = dto.Building?.BypassThreshold ?? 0.8;
         if (bypass is <= 0 or > 1) errors.Add($"building.bypassThreshold must be in (0, 1] (got {bypass})");
 
-        var scheduling = dto.Scheduling ?? "look"; // ADR-004
-        if (!SchedulingPolicies.Names.Contains(scheduling, StringComparer.OrdinalIgnoreCase))
-            errors.Add($"unknown scheduling '{scheduling}' (known: {string.Join(", ", SchedulingPolicies.Names)})");
-
         var dispatch = dto.Dispatch ?? "cost"; // ADR-006
         if (!DispatchPolicies.IsKnown(dispatch))
             errors.Add($"unknown dispatch '{dispatch}' (known: {string.Join(", ", DispatchPolicies.Names)})");
-
-        var capacityMode = CapacityMode.NextTrip;
-        if (dto.Building?.CapacityMode is { } modeText)
-        {
-            try { capacityMode = CapacityModes.Parse(modeText); }
-            catch (FormatException ex) { errors.Add($"building.capacityMode: {ex.Message}"); }
-        }
 
         var latency = new MessageLatency(dto.Latency?.SnapshotMs ?? 0, dto.Latency?.DispatchMs ?? 0);
         if (latency.SnapshotMs < 0 || latency.DispatchMs < 0) errors.Add("latency values must be >= 0");
@@ -171,7 +160,6 @@ public static class ScenarioLoader
             dto.Seed ?? 1,
             floors,
             timing,
-            scheduling.ToLowerInvariant(),
             SimTime.FromSeconds(maxSimTimeS),
             passengers,
             traffic,
@@ -181,7 +169,6 @@ public static class ScenarioLoader
             dispatch.ToLowerInvariant(),
             profile,
             latency,
-            capacityMode,
             faults.OrderBy(f => f.At).ToList()) { Fleet = fleet, Access = access, WatchdogTimeoutMs = watchdogMs, ClockStart = clockStart }, []);
     }
 
@@ -248,7 +235,6 @@ public static class ScenarioLoader
         public string? Name { get; set; }
         public int? Seed { get; set; }
         public int? Floors { get; set; }
-        public string? Scheduling { get; set; }
         public string? Dispatch { get; set; }
         public BuildingDto? Building { get; set; }
         public LatencyDto? Latency { get; set; }
@@ -328,7 +314,6 @@ public static class ScenarioLoader
         public int? Elevators { get; set; }
         public int? Capacity { get; set; }
         public double? BypassThreshold { get; set; }
-        public string? CapacityMode { get; set; }
         public Dictionary<string, ElevatorTypeDto?>? Types { get; set; }
         public List<string>? Fleet { get; set; }
     }

@@ -18,9 +18,8 @@ namespace Elevator.Domain;
 /// riders going that way board.</item>
 /// <item>A matching pickup at the floor where it stands is answered at once (doors open), reopens the doors
 /// (doors closing) or opens them (idle).</item>
-/// <item>Full-load bypass: at or above the bypass threshold it only serves its riders. In NextTrip mode (default,
-/// ADR-010) it keeps its pickups and comes back for them once riders get off; in Defer mode it hands them back
-/// (<see cref="AssignmentReleased"/>).</item>
+/// <item>Full-load bypass: at or above the bypass threshold it only serves its riders. It keeps its pickups and comes
+/// back for them once riders get off (next trip, ADR-010).</item>
 /// </list>
 /// The policy only answers "where next, and which lantern?" (<see cref="ISchedulingPolicy.Decide"/>).
 /// </summary>
@@ -48,8 +47,7 @@ public sealed class Elevator
     /// <param name="servedFloors">Floors this elevator serves (its type, ADR-012): it never stops at any other.</param>
     /// <param name="typeName">Its type's name (Local, Express, Freight...).</param>
     public Elevator(int id, int floors, ElevatorTiming timing, ISchedulingPolicy policy, int startFloor = Floors.Lowest,
-        int capacity = int.MaxValue, double bypassThreshold = 1.0, CapacityMode capacityMode = CapacityMode.NextTrip,
-        ulong servedFloors = FloorMask.All, string typeName = ElevatorType.StandardName)
+        int capacity = int.MaxValue, double bypassThreshold = 1.0, ulong servedFloors = FloorMask.All, string typeName = ElevatorType.StandardName)
     {
         if (floors < 2) throw new ArgumentOutOfRangeException(nameof(floors), "need at least two floors");
         if (Floors.Check(startFloor, floors) is { } error) throw new ArgumentOutOfRangeException(nameof(startFloor), error);
@@ -65,7 +63,6 @@ public sealed class Elevator
         TypeName = typeName;
         Capacity = capacity;
         BypassThreshold = bypassThreshold;
-        CapacityMode = capacityMode;
         _timing = timing;
         _policy = policy;
         CurrentFloor = startFloor;
@@ -80,8 +77,8 @@ public sealed class Elevator
     {
         // Built at a served floor, then placed where the snapshot says: mid-route it may be passing an unserved one.
         var anyServed = Enumerable.Range(Floors.Lowest, s.Floors).First(f => FloorMask.Contains(s.ServedFloors, f));
-        var e = new Elevator(s.ElevatorId, s.Floors, s.Timing ?? timing, policy, anyServed, s.Capacity, s.BypassThreshold, s.CapacityMode,
-            s.ServedFloors, s.TypeName)
+        var e = new Elevator(s.ElevatorId, s.Floors, s.Timing ?? timing, policy, anyServed, s.Capacity, s.BypassThreshold, s.ServedFloors,
+            s.TypeName)
         {
             CurrentFloor = s.CurrentFloor,
             State = s.State,
@@ -116,10 +113,8 @@ public sealed class Elevator
 
     public double BypassThreshold { get; }
 
-    public CapacityMode CapacityMode { get; }
-
-    /// <summary>NextTrip mode and full: pickups are bypassed (not served, not shown to the policy) until there is room.</summary>
-    private bool Bypassing => CapacityMode == CapacityMode.NextTrip && IsFull;
+    /// <summary>Full: pickups are bypassed (not served, not shown to the policy) until there is room.</summary>
+    private bool Bypassing => IsFull;
 
     /// <summary>The floor the elevator is at, or the last floor it passed while moving.</summary>
     public int CurrentFloor { get; private set; }
@@ -167,7 +162,6 @@ public sealed class Elevator
             Capacity, BypassThreshold, Now, _deadline, _closingStartedAt, Version)
         {
             RiderTotals = _riderTotals,
-            CapacityMode = CapacityMode,
             Timing = _timing,
             TypeName = TypeName,
             ServedFloors = ServedFloors,
@@ -422,8 +416,8 @@ public sealed class Elevator
     }
 
     /// <summary>
-    /// Load sensor: <paramref name="rider"/> stepped in, and their destination becomes a drop-off. If that brings
-    /// the load to the bypass threshold, every pending pickup is handed back to the dispatcher.
+    /// Load sensor: <paramref name="rider"/> stepped in, and their destination becomes a drop-off. At the bypass
+    /// threshold the elevator keeps its pickups and bypasses them until riders get off (ADR-010).
     /// </summary>
     public void Board(Request rider)
     {
@@ -431,7 +425,6 @@ public sealed class Elevator
         _riderTotals = _riderTotals.Add(rider);
         Version++;
         AddRequest(rider.DestinationFloor);
-        if (CapacityMode == CapacityMode.Defer && IsFull) ReleaseAllPickups(AssignmentReason.BypassedFull);
     }
 
     /// <summary>Load sensor: the rider with <paramref name="requestId"/> stepped out.</summary>
@@ -444,13 +437,13 @@ public sealed class Elevator
         Version++;
 
         // Riders getting off can make room while the doors are open: a bypassed pickup here is answered now.
-        if (CapacityMode == CapacityMode.NextTrip && State == ElevatorState.DoorOpen && !IsFull && AnswerHallCallHere())
+        if (State == ElevatorState.DoorOpen && !IsFull && AnswerHallCallHere())
             StartPhase(_timing.DoorDwellMs);
         // Idle and no longer full: the bypassed pickups are visible to the policy again.
         if (State == ElevatorState.Idle) DecideFromIdle();
     }
 
-    /// <summary>Removes a not-yet-picked-up request (rebalancing). False if it is no longer pending here.</summary>
+    /// <summary>Removes a not-yet-picked-up request (a retired request, perf only). False if it is no longer pending here.</summary>
     public bool Unassign(int requestId)
     {
         var index = _hallCalls.FindIndex(c => c.Requests.Any(r => r.Id == requestId));

@@ -12,7 +12,6 @@ public sealed record Scenario(
     int Seed,
     int Floors,
     ElevatorTiming Timing,
-    string Scheduling,
     SimTime MaxSimTime,
     IReadOnlyList<PassengerSpec> Passengers,
     PoissonTraffic? Traffic,
@@ -22,7 +21,6 @@ public sealed record Scenario(
     string Dispatch = "cost",
     TrafficProfile? Profile = null,
     MessageLatency? Latency = null,
-    CapacityMode CapacityMode = CapacityMode.NextTrip,
     IReadOnlyList<FaultCommand>? Faults = null)
 {
     /// <summary>Scheduled fault and operator commands (shared v3 contract), applied at their sim time (ADR-013).</summary>

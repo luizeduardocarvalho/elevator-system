@@ -13,9 +13,9 @@ public class AssignmentAcceptanceTests
 
     private static Request R(int id, long calledAtMs = 0) => Request.Create(5, 9, new SimTime(calledAtMs), 10, id: id).Value!;
 
-    private static (ElevatorHandler Handler, Outbox Outbox) Make(long ourEtaMs, int riders = 0, CapacityMode mode = CapacityMode.NextTrip)
+    private static (ElevatorHandler Handler, Outbox Outbox) Make(long ourEtaMs, int riders = 0)
     {
-        var elevator = new Elevator(0, 10, ElevatorTiming.Default, TestPolicies.NearestCarCallThenOldestHallCall, 1, capacity: 5, bypassThreshold: 0.8, mode);
+        var elevator = new Elevator(0, 10, ElevatorTiming.Default, TestPolicies.NearestCarCallThenOldestHallCall, 1, capacity: 5, bypassThreshold: 0.8);
         for (var i = 0; i < riders; i++) elevator.Board(Request.Create(1, 2, SimTime.Zero, 10, id: 100 + i).Value!);
         return (new ElevatorHandler(elevator, new ElevatorHandlerOptions(StalenessToleranceMs: 10_000, AgingMs: 60_000), new FixedEta(ourEtaMs)), new Outbox());
     }
@@ -69,8 +69,9 @@ public class AssignmentAcceptanceTests
     [Fact]
     public void Capacity_and_maintenance_rejects_always_win()
     {
-        var (h, o) = Make(ourEtaMs: 0, riders: 4, mode: CapacityMode.Defer); // Defer: full now (4 ≥ 0.8 × 5) means no
-        h.Handle(new Assign(R(1, calledAtMs: 0), null, Forced: true), new SimTime(120_000), o); // forced and aged
+        var (h, o) = Make(ourEtaMs: 0, riders: 4);
+        var neverFits = Request.Create(5, 9, SimTime.Zero, 10, id: 1, load: 6).Value!; // load 6 > capacity 5
+        h.Handle(new Assign(neverFits, null, Forced: true), new SimTime(120_000), o); // forced and aged
         Assert.Equal(AssignmentReason.Capacity, Outcome(o));
 
         (h, o) = Make(ourEtaMs: 0);

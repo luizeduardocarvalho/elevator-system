@@ -29,25 +29,24 @@ public class RequestValidationTests
     [InlineData(11, Direction.Down)]
     [InlineData(1, Direction.Down)]
     [InlineData(10, Direction.Up)]
-    public void Controller_rejects_invalid_hall_calls_gracefully(int floor, Direction direction)
+    public void Elevator_refuses_invalid_hall_calls_and_stays_unchanged(int floor, Direction direction)
     {
+        // A precondition, not input handling: the shells validate requests before they reach an elevator (ADR-017).
         var h = new Harness();
-        var result = h.Hall(0, floor, direction);
-
-        Assert.False(result.Accepted);
-        var rejected = Assert.Single(h.Events.OfType<RequestRejected>());
-        Assert.Equal(("HallCall", floor), (rejected.Kind, rejected.Floor));
+        Assert.Throws<ArgumentOutOfRangeException>(() => h.Hall(0, floor, direction));
+        Assert.DoesNotContain(h.Events, e => e is HallCallRegistered);
         Assert.Equal(ElevatorState.Idle, h.Elevator.State);
     }
 
     [Theory]
     [InlineData(0)]
     [InlineData(11)]
-    public void Controller_rejects_invalid_car_calls_gracefully(int floor)
+    public void Elevator_refuses_invalid_car_calls_and_stays_unchanged(int floor)
     {
         var h = new Harness();
-        Assert.False(h.Car(0, floor).Accepted);
-        Assert.Single(h.Events.OfType<RequestRejected>());
+        Assert.Throws<ArgumentOutOfRangeException>(() => h.Car(0, floor));
+        Assert.DoesNotContain(h.Events, e => e is CarCallRegistered);
+        Assert.Empty(h.Elevator.TargetFloors);
     }
 
     [Fact]

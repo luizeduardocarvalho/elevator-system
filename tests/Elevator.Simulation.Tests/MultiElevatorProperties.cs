@@ -15,8 +15,7 @@ public class MultiElevatorProperties
 {
     public sealed record Case(Scenario Scenario, Strategy Strategy);
 
-    public static readonly string[] Schedulings = ["fifo", "look"];
-    public static readonly string[] Dispatches = ["roundrobin", "nearest", "cost"];
+    public static readonly string[] Dispatches = ["nearest", "cost"];
 
     internal static Gen<Case> CaseGen() =>
         from floors in Gen.Choose(3, 20)
@@ -27,25 +26,17 @@ public class MultiElevatorProperties
         from dispatchMs in Gen.Elements(0L, 0L, 500L)
         from count in Gen.Choose(1, 40)
         from specs in Gen.ArrayOf(PassengerGen(floors), count)
-        from scheduling in Gen.Elements(Schedulings)
         from dispatch in Gen.Elements(Dispatches)
-        from rebalance in Gen.Elements(false, true)
-        from mode in Gen.Elements(CapacityMode.NextTrip, CapacityMode.Defer)
         select new Case(
-            new Scenario("prop", 1, floors, ElevatorTiming.Default, scheduling, SimTime.FromSeconds(200_000), specs, null,
-                elevators, capacity, threshold, dispatch, null, new MessageLatency(snapshotMs, dispatchMs), mode),
-            new Strategy(scheduling, dispatch, rebalance));
+            new Scenario("prop", 1, floors, ElevatorTiming.Default, SimTime.FromSeconds(200_000), specs, null,
+                elevators, capacity, threshold, dispatch, null, new MessageLatency(snapshotMs, dispatchMs)),
+            new Strategy(dispatch));
 
     private static Gen<PassengerSpec> PassengerGen(int floors) =>
         from at in Gen.Choose(0, 240_000)
         from from_ in Gen.Choose(1, floors)
         from offset in Gen.Choose(1, floors - 1)
         select new PassengerSpec(new SimTime(at), from_, (from_ - 1 + offset) % floors + 1);
-
-    /// <summary>Regression: a rebalance hands passenger 4 to E1 as its doors open at floor 2, so 4 boards right after
-    /// the later caller 8 in the same batch (look+roundrobin+rebalance, 3 elevators, 17 floors).</summary>
-    [Property(Replay = "12939244975951197390,4127911998706265127,76", MaxTest = 1)]
-    public Property Same_batch_boarding_after_a_rebalance_is_not_a_skip() => System_invariants_hold();
 
     [Property(MaxTest = 120)]
     public Property System_invariants_hold() => Prop.ForAll(CaseGen().ToArbitrary(), c =>
@@ -87,7 +78,7 @@ public class MultiElevatorProperties
                     Assert.Equal(p.From, b.Floor);
                     // Arrival order per floor: nobody who called earlier, for the same floor, direction and elevator, is
                     // left waiting. One door opening is one batch: an earlier caller boarding at the same instant is not
-                    // skipped (a rebalance can hand them over as the doors open, so they board second in the batch).
+                    // skipped (a re-dispatched request can be handed over as the doors open, so it boards second in the batch).
                     Assert.DoesNotContain(waitingSince.Keys, id => id != p.Id
                         && passengers[id].From == p.From && passengers[id].Direction == p.Direction
                         && owner.GetValueOrDefault(id, -1) == b.ElevatorId && waitingSince[id] < waitingSince[p.Id]

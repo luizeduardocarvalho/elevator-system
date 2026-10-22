@@ -42,7 +42,7 @@ public sealed record Assignment(int RequestId, int ElevatorId, WallDuration Late
 /// submitters wait when it is full.</item>
 /// <item><c>assignRequest()</c> → <see cref="AssignRequest"/>: submit and await the accepted assignment.</item>
 /// <item><c>findBestElevator()</c> → the dispatch policy inside the dispatcher actor (<see cref="DispatchPolicy"/>).</item>
-/// <item><c>balanceLoad()</c> → the cost function's load terms, plus optional rebalancing (ADR-006).</item>
+/// <item><c>balanceLoad()</c> → the cost function's load term, applied to every decision (ADR-006).</item>
 /// </list>
 /// Elevators, the dispatcher and the passengers are actors running the same pure handlers as the simulator.
 /// This class only moves messages and time: it makes no decisions.
@@ -82,7 +82,7 @@ public sealed class ElevatorSystem : IAsyncDisposable
         }
 
         var timing = options.EffectiveTiming;
-        var scheduling = SchedulingPolicies.Create(options.Scheduling);
+        var scheduling = new LookScheduling(); // ADR-004
         var dispatch = DispatchPolicies.Create(options.Dispatch, scheduling, timing);
         DispatchPolicy = dispatch.Name;
         var latency = options.Latency ?? MessageLatency.None;
@@ -93,19 +93,18 @@ public sealed class ElevatorSystem : IAsyncDisposable
             throw new ArgumentException($"the fleet has {fleet.Count} elevators but the options say {options.Elevators}", nameof(options));
         for (var i = 0; i < options.Elevators; i++)
         {
-            var elevator = Building.CreateElevator(i, options.Floors, fleet[i], scheduling, options.BypassThreshold, options.CapacityMode);
+            var elevator = Building.CreateElevator(i, options.Floors, fleet[i], scheduling, options.BypassThreshold);
             var handlerOptions = new ElevatorHandlerOptions(SnapshotDelayMs: latency.SnapshotMs, ReportProgress: options.WatchdogTimeoutMs is not null);
             Add(new Actor(new ElevatorHandler(elevator, handlerOptions, estimator), this));
         }
-        var rebalance = options.Rebalance ? new HysteresisRebalance(scheduling, timing) : null;
         Add(new Actor(new DispatcherHandler(dispatch, options.Elevators, timing,
-            new DispatcherOptions(latency.DispatchMs, rebalance is null ? null : 5_000, options.OverloadThreshold)
+            new DispatcherOptions(latency.DispatchMs, options.OverloadThreshold)
             {
                 Access = Building.CreateAccess(options.Access),
                 WatchdogTimeoutMs = options.WatchdogTimeoutMs,
                 VipPriority = options.Access.VipPriority,
             },
-            rebalance, new NearestDispatch()),
+            new NearestDispatch()),
             this, _requests.Reader));
         Add(new Actor(new PassengersHandler([.. fleet.Select(t => t.Capacity)]), this));
 
@@ -300,11 +299,13 @@ public sealed class ElevatorSystem : IAsyncDisposable
     }
 
     /// <summary>
-    /// Spec's <c>balanceLoad()</c>. Load balancing is built into the cost function (predicted load, ADR-006); this
-    /// additionally asks the dispatcher for a rebalancing pass now, which moves requests only when rebalancing is
-    /// enabled (<see cref="RuntimeOptions.Rebalance"/>).
+    /// Spec's <c>balanceLoad()</c>. Deliberately does nothing: load is balanced on every assignment, by the cost
+    /// function's predicted-load term (ADR-006), so there is never a separate pass to run. A periodic rebalancer was
+    /// measured and did not pay off (m4), so it was removed (ADR-018).
     /// </summary>
-    public void BalanceLoad() => _actors[Address.Dispatcher].Mailbox.Writer.TryWrite(new RebalanceNow());
+    public void BalanceLoad()
+    {
+    }
 
     /// <summary>
     /// Delivers <paramref name="message"/> to the actor at <paramref name="to"/> (shared v3 contract: the injection seam

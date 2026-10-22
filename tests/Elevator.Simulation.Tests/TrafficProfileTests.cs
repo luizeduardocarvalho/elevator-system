@@ -42,7 +42,7 @@ public class TrafficProfileTests
     public void Same_seed_same_traffic_regardless_of_strategy()
     {
         var scenario = Repo.Load("up-peak.yaml");
-        Assert.Equal(ScenarioRunner.BuildPassengers(scenario), ScenarioRunner.BuildPassengers(scenario with { Dispatch = "roundrobin", Scheduling = "fifo" }));
+        Assert.Equal(ScenarioRunner.BuildPassengers(scenario), ScenarioRunner.BuildPassengers(scenario with { Dispatch = "nearest" }));
         Assert.NotEqual(ScenarioRunner.BuildPassengers(scenario), ScenarioRunner.BuildPassengers(scenario with { Seed = 2 }));
     }
 

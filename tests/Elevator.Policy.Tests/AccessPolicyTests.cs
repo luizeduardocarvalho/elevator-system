@@ -22,7 +22,7 @@ public class AccessPolicyTests
     ];
 
     private static ElevatorSnapshot Make(int id, string type, ulong served, int capacity) =>
-        new ElevatorUnit(id, Floors, ElevatorTiming.Default, new LookScheduling(), 1, capacity, 0.8, CapacityMode.NextTrip, served, type).Snapshot();
+        new ElevatorUnit(id, Floors, ElevatorTiming.Default, new LookScheduling(), 1, capacity, 0.8, served, type).Snapshot();
 
     private static readonly IAccessPolicy[] Standard =
     [

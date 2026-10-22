@@ -21,9 +21,6 @@ public class FastDecideEquivalenceTests
     [Property(MaxTest = 3000)]
     public Property Look_bitmask_decide_equals_list_decide() => Same(new LookScheduling());
 
-    [Property(MaxTest = 3000)]
-    public Property Fifo_bitmask_decide_equals_list_decide() => Same(new FifoScheduling());
-
     private static Property Same(IFastSchedulingPolicy policy) => Prop.ForAll(States.ToArbitrary(), st =>
     {
         var carCalls = st.CarCalls.Distinct().Order().ToArray();

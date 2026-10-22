@@ -14,18 +14,17 @@ public class CostBasedDispatchTests
     private static Request Req(int id, int from, int to) => Request.Create(from, to, SimTime.Zero, 20, id: id).Value!;
 
     private static ElevatorSnapshot Car(int id, int floor, Direction? dir = null, int[]? carCalls = null, Request[]? riders = null, HallCall[]? pickups = null,
-        ElevatorState state = ElevatorState.Idle, CapacityMode mode = CapacityMode.NextTrip) =>
+        ElevatorState state = ElevatorState.Idle) =>
         ElevatorSnapshot.ForPolicy(floor, state, dir, carCalls ?? [], pickups ?? [], 20, id) with
         {
             Capacity = 10,
             BypassThreshold = 0.8,
             Riders = riders ?? [],
-            CapacityMode = mode,
         };
 
     private static CostBasedDispatch Cost(double lambda = 1.0, double mu = 10.0) => new(Look, ElevatorTiming.Default, new CostWeights(lambda, mu));
 
-    private static DispatchContext Ctx(Request r, params ElevatorSnapshot[] cars) => new(r, cars, SimTime.Zero, ElevatorTiming.Default, 0);
+    private static DispatchContext Ctx(Request r, params ElevatorSnapshot[] cars) => new(r, cars, SimTime.Zero, ElevatorTiming.Default);
 
     [Fact]
     public void Idle_elevators_cost_is_the_pickup_eta()
@@ -99,36 +98,14 @@ public class CostBasedDispatchTests
         var eval = Cost().Evaluate(e0, r, SimTime.Zero);
         Assert.Equal((12.0, 0.0, 0), (eval.EtaS, eval.AddedDelayS, eval.LoadAtPickup));
         Assert.Equal(0, Cost().Choose(Ctx(r, e0, e1))!.ElevatorId); // next trip of E0 (12 s) beats E1 (37 s)
-
-        // In Defer mode a full elevator cannot be chosen: only E1.
-        Assert.Equal(1, Cost().Choose(Ctx(r, e0 with { CapacityMode = CapacityMode.Defer }, e1 with { CapacityMode = CapacityMode.Defer }))!.ElevatorId);
     }
 
     [Fact]
-    public void Defer_predicted_load_at_pickup_makes_an_elevator_ineligible()
+    public void Maintenance_elevators_are_ineligible_and_none_left_means_null()
     {
-        // Threshold 0.8 × 10 = 8. E0 at 1 carries 6 riders to 15 and has 2 more people to pick up at 3 (up):
-        // they board at 3, the load reaches 8 = threshold, so it bypasses and hands R back: predicted load 8 ≥ 8
-        // → ineligible (∞), although it is the closest elevator.
-        var riders = Enumerable.Range(100, 6).Select(i => Req(i, 1, 15)).ToArray();
-        var pickups = new[] { new HallCall(3, Direction.Up, SimTime.Zero, [Req(200, 3, 9), Req(201, 3, 10)]) };
-        var e0 = Car(0, 1, Direction.Up, [15], riders, pickups, mode: CapacityMode.Defer);
-        var r = Req(1, 5, 12);
-
-        var eval = Cost().Evaluate(e0, r, SimTime.Zero);
-        Assert.Equal(8, eval.LoadAtPickup);
-        Assert.True(double.IsPositiveInfinity(eval.Cost));
-        Assert.Equal(1, Cost().Choose(Ctx(r, e0, Car(1, 20, mode: CapacityMode.Defer)))!.ElevatorId);
-    }
-
-    [Fact]
-    public void Defer_full_or_maintenance_elevators_are_ineligible_and_none_left_means_null()
-    {
-        var full = Car(0, 5, riders: Enumerable.Range(100, 8).Select(i => Req(i, 5, 15)).ToArray(), mode: CapacityMode.Defer);
-        var maintenance = Car(1, 5, state: ElevatorState.Maintenance, mode: CapacityMode.Defer);
-        Assert.True(double.IsPositiveInfinity(Cost().Evaluate(full, Req(1, 6, 9), SimTime.Zero).Cost));
+        var maintenance = Car(1, 5, state: ElevatorState.Maintenance);
         Assert.True(double.IsPositiveInfinity(Cost().Evaluate(maintenance, Req(1, 6, 9), SimTime.Zero).Cost));
-        Assert.Null(Cost().Choose(Ctx(Req(1, 6, 9), full, maintenance)));
+        Assert.Null(Cost().Choose(Ctx(Req(1, 6, 9), maintenance)));
     }
 
     [Fact]

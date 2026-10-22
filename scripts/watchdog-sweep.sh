@@ -19,10 +19,10 @@ for t in 5 10 30 60; do variant chaos "$t"; done
 for s in up-peak down-peak fleet; do for t in 5 10 30; do variant "$s" "$t"; done; done
 
 "$E" bench --scenarios "$DIR/chaos-t5.yaml,$DIR/chaos-t10.yaml,$DIR/chaos-t30.yaml,$DIR/chaos-t60.yaml" \
-  --strategies look+cost --faults on,off --baseline look+cost/no-faults --seeds 20 --first-seed 21 \
+  --strategies cost --faults on,off --baseline cost/no-faults --seeds 20 --first-seed 21 \
   --out docs/results/h3-watchdog-timeout.md --title "H3: watchdog timeout T on the chaos schedule (held-out seeds 21-40)" >/dev/null
 
 "$E" bench --scenarios "$(for s in up-peak down-peak fleet; do for t in 5 10 30; do printf '%s,' "$DIR/$s-t$t.yaml"; done; done | sed 's/,$//')" \
-  --strategies fifo+nearest,look+nearest,look+cost --baseline look+cost --seeds 20 --first-seed 21 \
+  --strategies nearest,cost --baseline cost --seeds 20 --first-seed 21 \
   --out docs/results/h4-watchdog-false-positives.md --title "H4: watchdog false positives on fault-free runs vs T (held-out seeds 21-40)" >/dev/null
 echo "written docs/results/h3-watchdog-timeout.md docs/results/h4-watchdog-false-positives.md"

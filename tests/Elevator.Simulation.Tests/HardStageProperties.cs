@@ -27,7 +27,7 @@ public class HardStageProperties
         public override string ToString()
         {
             var s = Scenario;
-            return $"{Strategy} floors {s.Floors} cap {s.Capacity}×{s.BypassThreshold} {s.CapacityMode} latency {s.Latency}\n" +
+            return $"{Strategy} floors {s.Floors} cap {s.Capacity}×{s.BypassThreshold} latency {s.Latency}\n" +
                    $"fleet: {string.Join("; ", s.EffectiveFleet.Select((t, i) => $"E{i} {t.Name} cap {t.Capacity} serves {FloorMask.Describe(t.ServedFloors, s.Floors)}"))}\n" +
                    $"restricted: {string.Join(", ", s.Access.RestrictedFloors.Select(kv => $"{kv.Key}≥{kv.Value}"))}; vip elevators: {string.Join(",", s.Access.VipElevators)}; vip priority {s.Access.VipPriority}\n" +
                    $"faults: {string.Join("; ", s.FaultSchedule.Select(f => $"{f.At.Ms} E{f.ElevatorId} {f.Kind} {f.DurationMs}"))}\n" +
@@ -89,18 +89,15 @@ public class HardStageProperties
         from dedicated in Gen.Elements(-1, -1, 0, elevators - 1)
         from vipPriority in Gen.Elements(false, true)
         from faults in FaultsGen(elevators)
-        from scheduling in Gen.Elements("fifo", "look")
-        from dispatch in Gen.Elements("roundrobin", "nearest", "cost")
-        from rebalance in Gen.Elements(false, true)
-        from mode in Gen.Elements(CapacityMode.NextTrip, CapacityMode.Defer)
+        from dispatch in Gen.Elements("nearest", "cost")
         select new Case(
-            new Scenario("hard-prop", 1, floors, ElevatorTiming.Default, scheduling, SimTime.FromSeconds(200_000), specs, null,
-                elevators, capacity, threshold, dispatch, null, new MessageLatency(snapshotMs, 0), mode, faults)
+            new Scenario("hard-prop", 1, floors, ElevatorTiming.Default, SimTime.FromSeconds(200_000), specs, null,
+                elevators, capacity, threshold, dispatch, null, new MessageLatency(snapshotMs, 0), faults)
             {
                 Fleet = fleet,
                 Access = new AccessConfig(restricted.DistinctBy(r => r.f).ToDictionary(r => r.f, r => r.l), dedicated < 0 ? [] : [dedicated], vipPriority),
             },
-            new Strategy(scheduling, dispatch, rebalance));
+            new Strategy(dispatch));
 
     [Property(MaxTest = 150)]
     public Property Invariants_hold_under_types_access_policies_and_faults() => Prop.ForAll(CaseGen().ToArbitrary(), c =>

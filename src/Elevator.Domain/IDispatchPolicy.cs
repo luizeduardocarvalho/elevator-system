@@ -1,8 +1,7 @@
 namespace Elevator.Domain;
 
 /// <summary>Everything a dispatch policy may look at. <see cref="Candidates"/> already excludes elevators that rejected this request.</summary>
-/// <param name="Sequence">Ordinal of this dispatch decision (deterministic); round-robin uses it.</param>
-public sealed record DispatchContext(Request Request, IReadOnlyList<ElevatorSnapshot> Candidates, SimTime Now, ElevatorTiming Timing, long Sequence)
+public sealed record DispatchContext(Request Request, IReadOnlyList<ElevatorSnapshot> Candidates, SimTime Now, ElevatorTiming Timing)
 {
     /// <summary>Also report every candidate's cost in <see cref="DispatchChoice.Candidates"/> (shared v3 contract).</summary>
     public bool Explain { get; init; }
@@ -21,7 +20,7 @@ public sealed record DispatchChoice(int ElevatorId, double Cost, SimTime? Eta = 
 
 /// <summary>
 /// A dispatch strategy: which elevator should serve this request? Pure function over snapshots
-/// (Elevator.Policy implements RoundRobin, Nearest, CostBased). Null means no candidate is eligible.
+/// (Elevator.Policy implements Nearest and CostBased). Null means no candidate is eligible.
 /// </summary>
 public interface IDispatchPolicy
 {

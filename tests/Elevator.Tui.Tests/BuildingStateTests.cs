@@ -160,7 +160,7 @@ public class BuildingStateTests
 
     public static TheoryData<string, string> Runs => new()
     {
-        { "lunch.yaml", "cost" }, { "up-peak.yaml", "nearest" }, { "down-peak.yaml", "roundrobin" }, { "v1-basic.yaml", "cost" }, { "demo.yaml", "cost" },
+        { "lunch.yaml", "cost" }, { "up-peak.yaml", "nearest" }, { "down-peak.yaml", "nearest" }, { "v1-basic.yaml", "cost" }, { "demo.yaml", "cost" },
         { "fleet.yaml", "cost" }, // typed fleet with freight loads (v3.1: load units, per-elevator capacity and type)
     };
 

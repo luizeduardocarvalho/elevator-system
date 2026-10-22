@@ -22,9 +22,6 @@ internal sealed class PerfCommand : AsyncCommand<PerfCommand.Settings>
         [CommandOption("--requests-each <N>")]
         public int RequestsEach { get; init; } = 1;
 
-        [CommandOption("--scheduling <NAME>")]
-        public string Scheduling { get; init; } = "look";
-
         [CommandOption("--dispatch <NAME>")]
         public string Dispatch { get; init; } = "cost";
 
@@ -96,7 +93,7 @@ internal sealed class PerfCommand : AsyncCommand<PerfCommand.Settings>
     {
         if (s.Ramp) return await PerfRamp.Run(context, s).ConfigureAwait(false);
         int? overload = s.OverloadThreshold == "none" ? null : int.Parse(s.OverloadThreshold, CultureInfo.InvariantCulture);
-        var options = new RuntimeOptions(s.Floors, s.Elevators, s.Capacity, Scheduling: s.Scheduling, Dispatch: s.Dispatch, Speed: 1,
+        var options = new RuntimeOptions(s.Floors, s.Elevators, s.Capacity, Dispatch: s.Dispatch, Speed: 1,
             OverloadThreshold: overload);
         var levels = ScenarioPaths.List(s.Levels).Select(l => int.Parse(l, CultureInfo.InvariantCulture)).ToList();
         var bursts = new List<BurstResult>();
@@ -126,7 +123,7 @@ internal sealed class PerfCommand : AsyncCommand<PerfCommand.Settings>
             soak = await PerfRunner.Soak(options with { Speed = s.SoakSpeed }, s.SoakRate, TimeSpan.FromSeconds(s.SoakSeconds), TimeSpan.FromSeconds(Math.Min(10, s.SoakSeconds / 4.0)));
         }
 
-        var latency = new Table().Title($"Assignment latency (wall clock) · {s.Scheduling}+{s.Dispatch} · {s.Elevators} elevators, {s.Floors} floors")
+        var latency = new Table().Title($"Assignment latency (wall clock) · look+{s.Dispatch} · {s.Elevators} elevators, {s.Floors} floors")
             .AddColumns("Submitters", "Requests", "Assigned", "Lost", "Dup", "p50 ms", "p95 ms", "p99 ms", "max ms", "req/s", "by fallback");
         foreach (var b in bursts)
             latency.AddRow(I(b.Submitters), I(b.Submitted), I(b.Assigned), I(b.Lost), I(b.Duplicated),
@@ -172,7 +169,7 @@ internal sealed class PerfCommand : AsyncCommand<PerfCommand.Settings>
         var sb = new StringBuilder()
             .AppendLine("# Perf: real clock, real threads").AppendLine()
             .AppendLine($"- **Command:** `elevator {string.Join(' ', context.Arguments)}`")
-            .AppendLine($"- **System:** {s.Scheduling}+{s.Dispatch}, {s.Elevators} elevators, {s.Floors} floors, capacity {s.Capacity}")
+            .AppendLine($"- **System:** look+{s.Dispatch}, {s.Elevators} elevators, {s.Floors} floors, capacity {s.Capacity}")
             .AppendLine($"- **Machine:** {Environment.ProcessorCount} logical cores, .NET {Environment.Version}, {System.Runtime.InteropServices.RuntimeInformation.OSDescription}")
             .AppendLine("- **Latency:** wall clock from `AssignRequest` to the accepted assignment (queueing in the bounded request channel included).")
             .AppendLine($"- **Overload fallback:** {(s.OverloadThreshold == "none" ? "disabled" : $"Nearest above {s.OverloadThreshold} requests in flight")}")

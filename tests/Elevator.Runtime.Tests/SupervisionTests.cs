@@ -69,7 +69,7 @@ public class SupervisionTests
         }
     }
 
-    private static Scenario Scenario() => new("supervision", 1, 10, ElevatorTiming.Default, "look", SimTime.FromSeconds(600),
+    private static Scenario Scenario() => new("supervision", 1, 10, ElevatorTiming.Default, SimTime.FromSeconds(600),
         [new PassengerSpec(SimTime.Zero, 1, 5)], null);
 
     /// <summary>A handler bug on demand: delegates to <paramref name="inner"/> and throws when one request arrives.</summary>

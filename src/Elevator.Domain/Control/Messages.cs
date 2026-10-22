@@ -45,8 +45,6 @@ public sealed record WakeUp : Message;
 /// <param name="Forced">Every eligible elevator rejected as stale: accept unless full or in maintenance.</param>
 public sealed record Assign(Request Request, SimTime? EtaEstimate, bool Forced) : Message;
 
-public sealed record Unassign(int RequestId) : Message;
-
 public sealed record Boarded(Request Rider) : Message;
 
 public sealed record Alighted(int RequestId) : Message;
@@ -74,8 +72,6 @@ public sealed record ReRegister(int RequestId, AssignmentReason Reason) : Messag
 
 public sealed record RequestPickedUp(int RequestId, int ElevatorId) : Message;
 
-public sealed record RebalanceTimer : Message;
-
 /// <summary>The watchdog's check is due (ADR-013). Scheduled only while some elevator has work.</summary>
 public sealed record WatchdogTimer : Message;
 
@@ -88,9 +84,6 @@ public sealed record ProgressReported(int ElevatorId, int Floor, SimTime At) : M
 
 /// <summary>Spec's findBestElevator(): which elevator would the dispatcher choose now? Answered, nothing assigned.</summary>
 public sealed record FindBestQuery(int QueryId, Request Request) : Message;
-
-/// <summary>Spec's balanceLoad(): run a rebalancing pass now (no-op when rebalancing is off).</summary>
-public sealed record RebalanceNow : Message;
 
 /// <summary>
 /// Every elevator's access policies refused this request (ADR-012): it is not dispatched, the passenger is told and

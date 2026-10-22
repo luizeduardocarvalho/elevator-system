@@ -12,7 +12,6 @@ building:
   elevators: 4
   capacity: 10
   bypassThreshold: 0.8
-scheduling: look
 dispatch: cost
 maxSimTimeS: 46800          # 13 h: traffic stops at 19:00, the last hour lets everyone arrive
 traffic:

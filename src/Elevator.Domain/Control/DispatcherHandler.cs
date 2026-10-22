@@ -3,13 +3,11 @@ using Elevator.Domain.Events;
 namespace Elevator.Domain.Control;
 
 /// <param name="DispatchDelayMs">Delay of an Assign message reaching the elevator (dispatcher cycle / network).</param>
-/// <param name="RebalanceIntervalMs">Optional rebalancing period; null = sticky assignments only (ADR-006).</param>
 /// <param name="OverloadThreshold">Requests in flight above which the dispatcher switches to its cheap fallback policy
 /// (defense in depth, ADR-006); null = never.</param>
 /// <param name="EmitDispatchEvaluations">Log every candidate's cost before each proposal (shared v3 contract; the TUI's
 /// ASSIGN line). Off by default, so normal logs are unchanged.</param>
-public sealed record DispatcherOptions(long DispatchDelayMs = 0, long? RebalanceIntervalMs = null, int? OverloadThreshold = null,
-    bool EmitDispatchEvaluations = false)
+public sealed record DispatcherOptions(long DispatchDelayMs = 0, int? OverloadThreshold = null, bool EmitDispatchEvaluations = false)
 {
     public static DispatcherOptions Default { get; } = new();
 
@@ -26,13 +24,6 @@ public sealed record DispatcherOptions(long DispatchDelayMs = 0, long? Rebalance
     public bool VipPriority { get; init; }
 }
 
-/// <summary>Decides, for an assigned request, whether moving it elsewhere is worth it (optional, ADR-006).</summary>
-public interface IRebalancePolicy
-{
-    /// <summary>Elevator to move the request to, or null to keep it where it is.</summary>
-    int? BetterElevator(Request request, int currentElevator, int reassignmentsSoFar, IReadOnlyList<ElevatorSnapshot> snapshots, SimTime now);
-}
-
 /// <summary>
 /// The single dispatcher: owns every in-flight request and assigns each to exactly one elevator.
 ///
@@ -41,7 +32,7 @@ public interface IRebalancePolicy
 /// <item>Submissions are idempotent by request id while the request is in flight.</item>
 /// <item>A reject excludes that elevator for this request until its next snapshot, then the request is
 /// re-dispatched. If every eligible elevator rejected it as stale, the next proposal is forced.</item>
-/// <item>A release (full-load bypass, rebalance) or a re-registration (left behind) puts it back to Pending,
+/// <item>A release (maintenance, emergency, fault) or a re-registration (left behind) puts it back to Pending,
 /// keeping its id and t_call.</item>
 /// <item>Pending requests are retried oldest-first, by (t_call, id), whenever an elevator publishes a new snapshot
 /// (aging order). Nothing reorders them: urgency (VIP) is a cost term and eligibility, not a queue position (ADR-015).</item>
@@ -57,7 +48,6 @@ public sealed class DispatcherHandler(
     int elevatorCount,
     ElevatorTiming timing,
     DispatcherOptions? options = null,
-    IRebalancePolicy? rebalance = null,
     IDispatchPolicy? overloadFallback = null) : IHandler
 {
     private enum Status { Pending, Proposed, Assigned }
@@ -73,7 +63,6 @@ public sealed class DispatcherHandler(
         public HashSet<int> Excluded { get; } = [];
         public bool OnlyStaleRejections { get; set; } = true;
         public bool Deferred { get; set; }
-        public int Reassignments { get; set; }
     }
 
     private readonly DispatcherOptions _options = options ?? DispatcherOptions.Default;
@@ -104,8 +93,6 @@ public sealed class DispatcherHandler(
 
     private readonly Dictionary<int, Watch> _watch = [];
     private bool _watchdogScheduled;
-    private long _sequence;
-    private bool _rebalanceScheduled;
     private bool _overloaded;
 
     public Address Address => Address.Dispatcher;
@@ -138,7 +125,6 @@ public sealed class DispatcherHandler(
                     foreach (var id in excluded) Find(id)?.Excluded.Remove(published.Snapshot.ElevatorId);
                 Observe(published.Snapshot, now, outbox);
                 RetryPending(now, outbox);
-                ScheduleRebalance(outbox);
                 break;
             case WatchdogTimer:
                 _watchdogScheduled = false;
@@ -179,20 +165,12 @@ public sealed class DispatcherHandler(
             case RequestPickedUp picked:
                 if (_requests.Remove(picked.RequestId, out var done)) _pending.Remove(done.Key);
                 break;
-            case RebalanceTimer:
-                _rebalanceScheduled = false;
-                Rebalance(now, outbox);
-                ScheduleRebalance(outbox);
-                break;
-            case RebalanceNow:
-                Rebalance(now, outbox);
-                break;
             case FindBestQuery query:
                 var best = _snapshots.Count < elevatorCount
                     ? null
                     : policy.Choose(new DispatchContext(query.Request,
                         [.. _snapshots.Values.Where(s => InService(s) && _options.Access.Check(query.Request, s) is null).Select(WithOverlay)],
-                        now, timing, _sequence) { VipPriority = _options.VipPriority });
+                        now, timing) { VipPriority = _options.VipPriority });
                 outbox.Send(Address.Client, new BestElevatorAnswer(query.QueryId, best?.ElevatorId, best?.Cost ?? double.NaN));
                 break;
         }
@@ -258,13 +236,13 @@ public sealed class DispatcherHandler(
         // Eligible = allowed by access and in service; candidates = eligible minus those that rejected this request.
         var candidates = _snapshots.Values.Where(s => !t.Excluded.Contains(s.ElevatorId) && Available(t, s)).Select(view).ToList();
         var explain = _options.EmitDispatchEvaluations;
-        var choice = active.Choose(new DispatchContext(t.Request, candidates, now, timing, _sequence) { Explain = explain, VipPriority = _options.VipPriority });
+        var choice = active.Choose(new DispatchContext(t.Request, candidates, now, timing) { Explain = explain, VipPriority = _options.VipPriority });
         var forced = false;
 
         if (choice is null && t.Excluded.Count > 0 && t.OnlyStaleRejections)
         {
             // Everyone eligible said "stale": stop bouncing and force the best one (ADR-006).
-            choice = active.Choose(new DispatchContext(t.Request, [.. _snapshots.Values.Where(s => Available(t, s)).Select(view)], now, timing, _sequence)
+            choice = active.Choose(new DispatchContext(t.Request, [.. _snapshots.Values.Where(s => Available(t, s)).Select(view)], now, timing)
                 { Explain = explain, VipPriority = _options.VipPriority });
             forced = choice is not null;
         }
@@ -281,7 +259,6 @@ public sealed class DispatcherHandler(
             return;
         }
 
-        _sequence++;
         SetStatus(t, Status.Proposed);
         t.Elevator = choice.ElevatorId;
         if (!overloaded)
@@ -434,26 +411,5 @@ public sealed class DispatcherHandler(
                 Totals = DestinationTotals.Empty.Add(r),
             }),
         };
-    }
-
-    private void ScheduleRebalance(Outbox outbox)
-    {
-        if (rebalance is null || _options.RebalanceIntervalMs is not { } interval || _rebalanceScheduled || _requests.Count == 0) return;
-        _rebalanceScheduled = true;
-        outbox.Send(Address.Dispatcher, new RebalanceTimer(), interval);
-    }
-
-    private void Rebalance(SimTime now, Outbox outbox)
-    {
-        if (rebalance is null) return;
-        var snapshots = _snapshots.Values.ToList();
-        foreach (var t in _requests.Values.Where(t => t.Status == Status.Assigned).OrderBy(t => t.Request.Timestamp).ThenBy(t => t.Request.Id).ToList())
-        {
-            // Only to elevators this request may use (access, in service); its current one stays for comparison.
-            var allowed = snapshots.All(s => Available(t, s)) ? snapshots : snapshots.Where(s => s.ElevatorId == t.Elevator || Available(t, s)).ToList();
-            if (rebalance.BetterElevator(t.Request, t.Elevator!.Value, t.Reassignments, allowed, now) is not { } better) continue;
-            t.Reassignments++;
-            outbox.Send(Address.Elevator(t.Elevator.Value), new Unassign(t.Request.Id)); // it confirms with a Released(Rebalance)
-        }
     }
 }

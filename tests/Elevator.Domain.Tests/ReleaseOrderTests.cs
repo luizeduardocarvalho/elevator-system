@@ -5,7 +5,7 @@ namespace Elevator.Domain.Tests;
 
 /// <summary>
 /// Causality (ADR-013, ADR-015): before the dispatcher hears that a pickup was handed back, it must already have the
-/// snapshot that explains why (out of service, full, or the pickup removed). Otherwise it re-dispatches against the
+/// snapshot that explains why (maintenance, emergency stop, or fault). Otherwise it re-dispatches against the
 /// old view and can propose the pickup straight back. Checked on every release path, with and without link latency:
 /// the snapshot is sent first, and no release travels faster than it.
 /// </summary>
@@ -13,10 +13,10 @@ public class ReleaseOrderTests
 {
     private static Request R(int id, int from) => Request.Create(from, from + 2, SimTime.Zero, 12, id: id).Value!;
 
-    private static ElevatorHandler Make(long latencyMs, int capacity = 10, CapacityMode mode = CapacityMode.NextTrip)
+    private static ElevatorHandler Make(long latencyMs, int capacity = 10)
     {
         var elevator = new Elevator(0, 12, ElevatorTiming.Default, TestPolicies.NearestCarCallThenOldestHallCall,
-            capacity: capacity, bypassThreshold: 1.0, capacityMode: mode);
+            capacity: capacity, bypassThreshold: 1.0);
         var h = new ElevatorHandler(elevator, new ElevatorHandlerOptions(SnapshotDelayMs: latencyMs));
         var o = new Outbox();
         h.Handle(new Start(), SimTime.Zero, o);
@@ -37,30 +37,6 @@ public class ReleaseOrderTests
             Assert.True(snapshot.i < index, $"release of {((AssignmentReleasedMsg)release.Message).RequestId} sent before the snapshot");
             Assert.True(release.DelayMs >= snapshot.m.DelayMs, $"release delay {release.DelayMs} ms < snapshot delay {snapshot.m.DelayMs} ms");
         }
-    }
-
-    [Theory]
-    [InlineData(0)]
-    [InlineData(1_500)]
-    public void Rebalance_unassign(long latency)
-    {
-        var h = Make(latency);
-        var o = new Outbox();
-        h.Handle(new Unassign(1), SimTime.Zero, o);
-        AssertSnapshotTravelsFirst(o, 1);
-    }
-
-    [Theory]
-    [InlineData(0)]
-    [InlineData(1_500)]
-    public void Defer_mode_full_load_bypass(long latency)
-    {
-        var h = Make(latency, capacity: 2, mode: CapacityMode.Defer);
-        var o = new Outbox();
-        h.Handle(new Boarded(R(10, 1)), SimTime.Zero, o);
-        o.Clear();
-        h.Handle(new Boarded(R(11, 1)), SimTime.Zero, o); // full: both pickups handed back
-        AssertSnapshotTravelsFirst(o, 2);
     }
 
     [Theory]

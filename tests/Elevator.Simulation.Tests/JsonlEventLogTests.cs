@@ -11,7 +11,7 @@ public class JsonlEventLogTests
         var t = new SimTime(1_234);
         DomainEvent[] events =
         [
-            new SimulationStarted(t, "s", 7, 10, "fifo", 3),
+            new SimulationStarted(t, "s", 7, 10, "look", 3),
             new PassengerArrived(t, 1, 2, 3),
             new HallCallRegistered(t, 2, Direction.Up),
             new HallCallAnswered(t, 0, 2, Direction.Up),
@@ -28,7 +28,7 @@ public class JsonlEventLogTests
             new AssignmentProposed(t, 5, 2, 12.5, 30_000, false),
             new AssignmentAccepted(t, 5, 2),
             new AssignmentRejected(t, 5, 1, AssignmentReason.Stale),
-            new AssignmentReleased(t, 5, 2, AssignmentReason.BypassedFull),
+            new AssignmentReleased(t, 5, 2, AssignmentReason.Fault),
             new DispatchDeferred(t, 5),
             new DuplicateSubmission(t, 5),
             new PassengerLeftBehind(t, 5, 2, 1),

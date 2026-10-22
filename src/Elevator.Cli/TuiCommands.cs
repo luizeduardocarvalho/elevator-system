@@ -86,7 +86,7 @@ internal sealed class TuiCommand : AsyncCommand<TuiCommand.Settings>
         public int? Seed { get; init; }
 
         [CommandOption("--dispatch <NAME>")]
-        [Description("Override the scenario's dispatch policy (cost, nearest, roundrobin...).")]
+        [Description("Override the scenario's dispatch policy (cost or nearest).")]
         public string? Dispatch { get; init; }
 
         [CommandOption("--log <PATH>")]

@@ -123,9 +123,8 @@ public class ElevatorMechanicsTests
         var h = new Harness();
         h.Hall(0, 1, Direction.Up);
         h.At(2_000); // doors open
-        var result = h.Car(2_000, 1);
+        h.Car(2_000, 1);
 
-        Assert.True(result.Accepted);
         Assert.Empty(h.Events.OfType<CarCallRegistered>());
         Assert.Empty(h.Elevator.TargetFloors);
     }

@@ -45,7 +45,7 @@ public static class ProjectionAnatomy
                 elevator.Tick(new SimTime(3_000));
                 snapshots.Add(elevator.Snapshot());
             }
-            var context = new DispatchContext(Random(rng, ++id), snapshots, new SimTime(3_000), ElevatorTiming.Default, 0);
+            var context = new DispatchContext(Random(rng, ++id), snapshots, new SimTime(3_000), ElevatorTiming.Default);
 
             // The oracle (per passenger), counted through the policy calls it makes for one decision (with + without, 4 elevators).
             var oracle = new RouteProjection(counting, ElevatorTiming.Default);

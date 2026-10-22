@@ -9,11 +9,11 @@ public enum WaitBucket
 {
     /// <summary>Not yet assigned for the first time.</summary>
     Dispatch,
-    /// <summary>Unassigned after a stale reject or a rebalance move: the dispatcher's view was wrong or improved.</summary>
+    /// <summary>Unassigned after a stale reject or a release: the dispatcher's view was wrong.</summary>
     Reassignment,
     /// <summary>
     /// Waiting because of a full elevator: the assigned elevator is full and bypassing pickups until its next trip
-    /// (NextTrip mode), or it handed the pickup back / rejected it for capacity (Defer mode).
+    /// (ADR-010), or it rejected the request for capacity.
     /// </summary>
     BypassedFull,
     /// <summary>Left behind at an open door because the elevator was full (and still waiting for room); or the
@@ -157,7 +157,7 @@ public static class PassengerLifecycle
                     p.Elevator = null;
                     break;
                 case AssignmentReleased rel when passengers.GetValueOrDefault(rel.RequestId) is { BoardedAt: null } p && p.Elevator == rel.ElevatorId:
-                    p.Status = rel.Reason == AssignmentReason.BypassedFull ? Status.BypassedFull : Status.Reassignment;
+                    p.Status = Status.Reassignment;
                     p.Elevator = null;
                     break;
                 case PassengerLeftBehind left when passengers.GetValueOrDefault(left.PassengerId) is { } p:

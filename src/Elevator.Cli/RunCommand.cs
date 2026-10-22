@@ -21,25 +21,13 @@ internal sealed class RunCommand : Command<RunCommand.Settings>
         [Description("Override the scenario's seed.")]
         public int? Seed { get; init; }
 
-        [CommandOption("--scheduling <NAME>")]
-        [Description("Override the scenario's scheduling policy (fifo).")]
-        public string? Scheduling { get; init; }
-
         [CommandOption("--dispatch <NAME>")]
-        [Description("Override the scenario's dispatch policy (roundrobin, nearest...).")]
+        [Description("Override the scenario's dispatch policy (cost or nearest).")]
         public string? Dispatch { get; init; }
-
-        [CommandOption("--capacity-mode <MODE>")]
-        [Description("next-trip (default) or defer (ADR-010).")]
-        public string? CapacityMode { get; init; }
 
         [CommandOption("--no-faults")]
         [Description("Ignore the scenario's fault schedule (ADR-013).")]
         public bool NoFaults { get; init; }
-
-        [CommandOption("--rebalance")]
-        [Description("Enable optional rebalancing of sticky assignments (ADR-006).")]
-        public bool Rebalance { get; init; }
 
         [CommandOption("--passengers <PATH>")]
         [Description("Write one CSV row per passenger: lifecycle timestamps and wait attribution.")]
@@ -66,16 +54,6 @@ internal sealed class RunCommand : Command<RunCommand.Settings>
 
         var scenario = loaded.Scenario!;
         if (settings.Seed is { } seed) scenario = scenario with { Seed = seed };
-        if (settings.Scheduling is { } scheduling)
-        {
-            if (!SchedulingPolicies.Names.Contains(scheduling, StringComparer.OrdinalIgnoreCase))
-            {
-                AnsiConsole.MarkupLineInterpolated($"[red]Unknown scheduling '{scheduling}'[/] (known: {string.Join(", ", SchedulingPolicies.Names)})");
-                return 2;
-            }
-            scenario = scenario with { Scheduling = scheduling.ToLowerInvariant() };
-        }
-
         if (settings.Dispatch is { } dispatch)
         {
             if (!DispatchPolicies.IsKnown(dispatch))
@@ -86,18 +64,8 @@ internal sealed class RunCommand : Command<RunCommand.Settings>
             scenario = scenario with { Dispatch = dispatch.ToLowerInvariant() };
         }
 
-        if (settings.CapacityMode is { } modeText)
-        {
-            try { scenario = scenario with { CapacityMode = CapacityModes.Parse(modeText) }; }
-            catch (FormatException ex)
-            {
-                AnsiConsole.MarkupLineInterpolated($"[red]{ex.Message}[/]");
-                return 2;
-            }
-        }
-
         if (settings.NoFaults) scenario = scenario with { Faults = [] };
-        var result = ScenarioRunner.Run(scenario, new Strategy(scenario.Scheduling, scenario.Dispatch, settings.Rebalance));
+        var result = ScenarioRunner.Run(scenario);
 
         var logPath = settings.Log ?? Path.Combine("out", $"{scenario.Name}-seed{scenario.Seed}.jsonl");
         JsonlEventLog.WriteFile(logPath, result.Events);

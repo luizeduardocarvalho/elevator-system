@@ -15,7 +15,6 @@ building:
 access:
   restrictedFloors: { 20: 1 }      # the penthouse needs access level 1
   vip: { priority: true, dedicated: [] }
-scheduling: look
 dispatch: cost
 maxSimTimeS: 5400
 traffic:

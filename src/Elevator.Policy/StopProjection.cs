@@ -132,7 +132,6 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
         private readonly ulong _served;
         private readonly int _floors, _capacity, _id;
         private readonly double _threshold;
-        private readonly bool _nextTrip;
         private bool _viewBypassing;
         private long _viewRoom = long.MinValue; // room left when the policy view was built (pickups that do not fit are hidden)
         private readonly Request? _extra;
@@ -173,7 +172,6 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
             _floors = s.Floors;
             _capacity = s.Capacity;
             _threshold = s.BypassThreshold;
-            _nextTrip = s.CapacityMode == CapacityMode.NextTrip;
             _id = s.ElevatorId;
             _extra = extra;
             _floor = s.CurrentFloor;
@@ -287,7 +285,7 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
         }
 
         /// <summary>NextTrip mode and full: pickups are bypassed until riders make room (ADR-010).</summary>
-        private bool Bypassing => _nextTrip && _load >= _threshold * _capacity;
+        private bool Bypassing => _load >= _threshold * _capacity;
 
         private void Changed()
         {
@@ -367,7 +365,7 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
                 groups.Clear();
             }
             // As Elevator.Alight: room made while the doors are open answers a bypassed pickup here.
-            if (_nextTrip && _state == ElevatorState.DoorOpen && AnswerHere()) _deadline = _now + _t.DoorDwellMs;
+            if (_state == ElevatorState.DoorOpen && AnswerHere()) _deadline = _now + _t.DoorDwellMs;
         }
 
         private bool AnswerHere()
@@ -407,8 +405,7 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
                 if (!blocked && stop.Extra is { } x && _load + x.Load <= _capacity) BoardExtra(x);
             }
 
-            if (!_nextTrip && _load >= _threshold * _capacity) ReleaseAll(); // Defer mode: hand pickups back
-            else if (Bypassing) Changed();                                    // NextTrip: the policy stops seeing pickups
+            if (Bypassing) Changed(); // full: the policy stops seeing pickups until riders get off (ADR-010)
             return true;
         }
 
@@ -438,14 +435,6 @@ public sealed class StopProjection(ISchedulingPolicy scheduling, ElevatorTiming 
             if (floor == _floor && _level) return;
             if (!_carCalls[floor]) Changed();
             SetCarCall(floor, true);
-        }
-
-        /// <summary>Full-load bypass: every pending pickup that has requests is handed back.</summary>
-        private void ReleaseAll()
-        {
-            if (_pickups.FirstOrDefault(p => p.Extra is not null) is not null) Result.LoadAtPickup = _load;
-            _pickups.RemoveAll(p => p.HasRequests);
-            Changed();
         }
 
         public void Insert(Request r)

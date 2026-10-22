@@ -11,16 +11,13 @@ public sealed record RuntimeOptions(
     int Elevators = 4,
     int Capacity = 10,
     double BypassThreshold = 0.8,
-    string Scheduling = "look",
     string Dispatch = "cost",
-    bool Rebalance = false,
     double Speed = 1.0,
     int RequestQueueCapacity = 1_024,
     bool KeepEvents = true,
     ElevatorTiming? Timing = null,
     MessageLatency? Latency = null,
-    int? OverloadThreshold = SimEngine.OverloadThreshold,
-    CapacityMode CapacityMode = CapacityMode.NextTrip)
+    int? OverloadThreshold = SimEngine.OverloadThreshold)
 {
     public ElevatorTiming EffectiveTiming => Timing ?? ElevatorTiming.Default;
 
@@ -49,8 +46,7 @@ public sealed record RuntimeOptions(
     public long? WatchdogTimeoutMs { get; init; } = Scenario.DefaultWatchdogTimeoutMs;
 
     public static RuntimeOptions From(Scenario s, double speed) =>
-        new(s.Floors, s.Elevators, s.Capacity, s.BypassThreshold, s.Scheduling, s.Dispatch, Speed: speed, Timing: s.Timing, Latency: s.Latency,
-            CapacityMode: s.CapacityMode)
+        new(s.Floors, s.Elevators, s.Capacity, s.BypassThreshold, s.Dispatch, Speed: speed, Timing: s.Timing, Latency: s.Latency)
         {
             Fleet = s.Fleet,
             Access = s.Access,

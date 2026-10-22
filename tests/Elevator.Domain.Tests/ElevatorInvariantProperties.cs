@@ -16,7 +16,8 @@ public class ElevatorInvariantProperties
     public sealed record CarOp(int Floor) : Op;
     public sealed record AdvanceOp(int Ms) : Op;
 
-    // Floors 0 and 11 are included on purpose: invalid input must be rejected without breaking anything.
+    // Floors 0 and 11 are included on purpose: an invalid call must be refused (a precondition the shells check first,
+    // ADR-017) without breaking anything.
     private static readonly Gen<Op> OpGen = Gen.OneOf(
         from f in Gen.Choose(0, Harness.Floors + 1)
         from d in Gen.Elements(Direction.Up, Direction.Down)
@@ -33,12 +34,8 @@ public class ElevatorInvariantProperties
         long now = 0;
         foreach (var op in ops)
         {
-            switch (op)
-            {
-                case HallOp hall: h.Hall(now, hall.Floor, hall.Direction); break;
-                case CarOp car: h.Car(now, car.Floor); break;
-                case AdvanceOp adv: now += adv.Ms; h.At(now); break;
-            }
+            if (op is AdvanceOp adv) h.At(now += adv.Ms);
+            else Call(h, now, op);
             CheckInvariants(h);
         }
     });
@@ -50,9 +47,8 @@ public class ElevatorInvariantProperties
         long now = 0;
         foreach (var op in ops)
         {
-            if (op is HallOp hall) h.Hall(now, hall.Floor, hall.Direction);
-            else if (op is CarOp car) h.Car(now, car.Floor);
-            else if (op is AdvanceOp adv) h.At(now += adv.Ms);
+            if (op is AdvanceOp adv) h.At(now += adv.Ms);
+            else Call(h, now, op);
         }
 
         // With no new input, a finite amount of work must drain: ≤ 2 hall calls + 1 car call per floor,
@@ -62,6 +58,25 @@ public class ElevatorInvariantProperties
         Assert.Empty(h.Elevator.CarCalls);
         Assert.Equal(ElevatorState.Idle, h.Elevator.State);
     });
+
+    /// <summary>Registers a call; an invalid one must throw and leave the elevator as it was.</summary>
+    private static void Call(Harness h, long now, Op op)
+    {
+        var (valid, register) = op switch
+        {
+            HallOp hall => (Floors.CheckHallButton(hall.Floor, hall.Direction, Harness.Floors) is null, () => h.Hall(now, hall.Floor, hall.Direction)),
+            CarOp car => (Floors.Check(car.Floor, Harness.Floors) is null, (Action)(() => h.Car(now, car.Floor))),
+            _ => throw new ArgumentOutOfRangeException(nameof(op)),
+        };
+        if (valid)
+        {
+            register();
+            return;
+        }
+        var targets = h.Elevator.TargetFloors;
+        Assert.Throws<ArgumentOutOfRangeException>(register);
+        Assert.Equal(targets, h.Elevator.TargetFloors);
+    }
 
     private static void CheckInvariants(Harness h)
     {

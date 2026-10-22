@@ -21,7 +21,7 @@ internal static class TestPolicies
         : null);
 }
 
-/// <summary>Wraps a controller and records every event it produces.</summary>
+/// <summary>Drives one elevator the way a shell does (register calls, tick) and records every event it produces.</summary>
 internal sealed class Harness
 {
     public const int Floors = 10;
@@ -29,31 +29,30 @@ internal sealed class Harness
     public Harness(ISchedulingPolicy? policy = null, int startFloor = 1, ElevatorTiming? timing = null)
     {
         Elevator = new Elevator(0, Floors, timing ?? ElevatorTiming.Default, policy ?? TestPolicies.NearestCarCallThenOldestHallCall, startFloor);
-        Controller = new ElevatorController(Elevator);
     }
 
     public Elevator Elevator { get; }
 
-    public ElevatorController Controller { get; }
-
     public List<DomainEvent> Events { get; } = [];
 
-    public void At(long ms) => Events.AddRange(Controller.ProcessRequests(new SimTime(ms)));
-
-    public RequestResult Hall(long ms, int floor, Direction direction)
+    public void At(long ms)
     {
-        At(ms);
-        var result = Controller.RequestElevator(floor, direction);
-        At(ms);
-        return result;
+        Elevator.Tick(new SimTime(ms));
+        Events.AddRange(Elevator.DrainEvents());
     }
 
-    public RequestResult Car(long ms, int floor)
+    public void Hall(long ms, int floor, Direction direction)
     {
         At(ms);
-        var result = Controller.SelectFloor(floor);
+        Elevator.AddHallCall(floor, direction);
         At(ms);
-        return result;
+    }
+
+    public void Car(long ms, int floor)
+    {
+        At(ms);
+        Elevator.AddRequest(floor);
+        At(ms);
     }
 
     public IEnumerable<StateChanged> States => Events.OfType<StateChanged>();

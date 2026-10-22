@@ -10,7 +10,7 @@ public class ScenarioLoaderTests
     public void Minimal_scenario_gets_defaults()
     {
         var s = ScenarioLoader.Load("passengers:\n  - { at: 1.5, from: 1, to: 4 }").Scenario!;
-        Assert.Equal((10, "look", 3_600_000L), (s.Floors, s.Scheduling, s.MaxSimTime.Ms));
+        Assert.Equal((10, "cost", 3_600_000L), (s.Floors, s.Dispatch, s.MaxSimTime.Ms));
         Assert.Equal(ElevatorTiming.Default, s.Timing);
         Assert.Equal(new PassengerSpec(new SimTime(1_500), 1, 4), Assert.Single(s.Passengers));
     }
@@ -28,7 +28,7 @@ public class ScenarioLoaderTests
 
     [Fact]
     public void All_errors_are_reported_at_once() =>
-        Assert.Equal(3, Errors("scheduling: magic\npassengers:\n  - { at: 0, from: 1, to: 1 }\n  - { at: 0, from: 1, to: 99 }").Count);
+        Assert.Equal(3, Errors("dispatch: magic\npassengers:\n  - { at: 0, from: 1, to: 1 }\n  - { at: 0, from: 1, to: 99 }").Count);
 
     [Fact]
     public void Unknown_key_is_an_error_not_silently_ignored() =>
@@ -47,7 +47,7 @@ public class ScenarioLoaderTests
     {
         var s = ScenarioLoader.Load("""
             building: { floors: 20, elevators: 4, capacity: 12, bypassThreshold: 0.75 }
-            dispatch: roundrobin
+            dispatch: nearest
             latency: { snapshotMs: 500, dispatchMs: 100 }
             traffic:
               profile:
@@ -55,7 +55,7 @@ public class ScenarioLoaderTests
                 mix: { fromLobby: 0.85, toLobby: 0.05, interfloor: 0.10 }
                 rate: [ { atS: 0, perMinute: 4 }, { atS: 600, perMinute: 12 } ]
             """).Scenario!;
-        Assert.Equal((20, 4, 12, 0.75, "roundrobin"), (s.Floors, s.Elevators, s.Capacity, s.BypassThreshold, s.Dispatch));
+        Assert.Equal((20, 4, 12, 0.75, "nearest"), (s.Floors, s.Elevators, s.Capacity, s.BypassThreshold, s.Dispatch));
         Assert.Equal(new MessageLatency(500, 100), s.Latency);
         Assert.Equal(2, s.Profile!.Rate.Count);
     }

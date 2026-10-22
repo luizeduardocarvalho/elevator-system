@@ -18,8 +18,8 @@ public class StopProjectionEquivalenceTests
     /// <param name="Timing">The elevator type's timing (ADR-012); the projections are built with the default and must
     /// take the snapshot's own.</param>
     /// <param name="Served">The floors the elevator's type serves; every trip starts and ends on one of them.</param>
-    public sealed record Case(string Policy, int Capacity, double Threshold, int Start, (int From, int To, long AtMs)[] Assigned,
-        int Boarded, long SnapshotAtMs, long NowDelayMs, (int From, int To) Extra, CapacityMode Mode, ElevatorTiming Timing, int[] Served,
+    public sealed record Case(int Capacity, double Threshold, int Start, (int From, int To, long AtMs)[] Assigned,
+        int Boarded, long SnapshotAtMs, long NowDelayMs, (int From, int To) Extra, ElevatorTiming Timing, int[] Served,
         int[] Loads, int ExtraLoad);
 
     private const int Floors = 12;
@@ -46,7 +46,6 @@ public class StopProjectionEquivalenceTests
         select (floors[i], floors[(i + o) % floors.Length]);
 
     private static Gen<Case> Cases =>
-        from policy in Gen.Elements("look", "fifo")
         from capacity in Gen.Elements(1, 2, 4, 10, 1000)
         from threshold in Gen.Elements(0.5, 0.8, 1.0)
         from served in Gen.Elements(ServedSets)
@@ -58,16 +57,15 @@ public class StopProjectionEquivalenceTests
         from at in Gen.Choose(0, 90_000)
         from delay in Gen.Elements(0L, 0L, 1_500L, 9_000L)
         from extra in TripIn(served)
-        from mode in Gen.Elements(CapacityMode.NextTrip, CapacityMode.Defer)
         from heavy in Gen.Elements(false, false, true) // loads above one unit (freight, ADR-012)
         from loads in Gen.ArrayOf(heavy ? Gen.Elements(1, 1, 2, 3, 6) : Gen.Constant(1), n)
         from extraLoad in heavy ? Gen.Elements(1, 2, 4) : Gen.Constant(1)
-        select new Case(policy, capacity, threshold, start, assigned, boarded, at, delay, extra, mode, timing, served, loads, extraLoad);
+        select new Case(capacity, threshold, start, assigned, boarded, at, delay, extra, timing, served, loads, extraLoad);
 
     [Property(MaxTest = 1500)]
     public Property Per_stop_projection_equals_the_per_passenger_oracle() => Prop.ForAll(Cases.ToArbitrary(), c =>
     {
-        var policy = SchedulingPolicies.Create(c.Policy);
+        var policy = new LookScheduling();
         var snapshot = BuildSnapshot(c, policy);
         var now = snapshot.At.AddMs(c.NowDelayMs);
         var extra = Request.Create(c.Extra.From, c.Extra.To, now, Floors, id: 99_999, load: c.ExtraLoad).Value!;
@@ -106,13 +104,13 @@ public class StopProjectionEquivalenceTests
     /// <summary>A real elevator driven to a random state: assignments over time, some riders boarding, mid-route.</summary>
     private static ElevatorSnapshot BuildSnapshot(Case c, ISchedulingPolicy policy)
     {
-        var e = new ElevatorUnit(0, Floors, c.Timing, policy, c.Start, c.Capacity, c.Threshold, c.Mode, FloorMask.Of(c.Served), "typed");
+        var e = new ElevatorUnit(0, Floors, c.Timing, policy, c.Start, c.Capacity, c.Threshold, FloorMask.Of(c.Served), "typed");
         var id = 0;
         var boardedSoFar = 0;
         foreach (var (from, to, at, load) in c.Assigned.Zip(c.Loads, (a, l) => (a.From, a.To, a.AtMs, l)).OrderBy(a => a.AtMs))
         {
             if (at > e.Now.Ms) Advance(e, at, c.Boarded, ref boardedSoFar);
-            if ((c.Mode == CapacityMode.Defer && e.IsFull) || e.State == ElevatorState.Maintenance) continue;
+            if (e.State == ElevatorState.Maintenance) continue;
             e.AssignPickup(Request.Create(from, to, new SimTime(at), Floors, id: ++id, load: load).Value!);
             e.DrainEvents();
         }

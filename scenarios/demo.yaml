@@ -5,7 +5,6 @@
 name: demo
 seed: 2026
 floors: 10
-scheduling: fifo
 maxSimTimeS: 1800
 
 timing:

@@ -48,8 +48,6 @@ public sealed record ElevatorSnapshot(
 
     public int Load => RiderTotals.TotalLoad;
 
-    public CapacityMode CapacityMode { get; init; } = CapacityMode.NextTrip;
-
     /// <summary>
     /// The elevator's own timing (its type's speed and door times, ADR-012). Null in hand-built snapshots: projections
     /// then use the building's default timing.

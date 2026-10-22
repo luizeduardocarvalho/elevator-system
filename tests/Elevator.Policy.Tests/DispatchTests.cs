@@ -7,22 +7,20 @@ public class DispatchTests
 {
     private static Request Req(int from, int to, int id = 1) => Request.Create(from, to, SimTime.Zero, 20, id: id).Value!;
 
-    private static ElevatorSnapshot Car(int id, int floor, Direction? dir = null, int[]? carCalls = null, ElevatorState state = ElevatorState.Idle, int load = 0,
-        CapacityMode mode = CapacityMode.NextTrip) =>
+    private static ElevatorSnapshot Car(int id, int floor, Direction? dir = null, int[]? carCalls = null, ElevatorState state = ElevatorState.Idle, int load = 0) =>
         ElevatorSnapshot.ForPolicy(floor, state, dir, carCalls ?? [], [], 20, id) with
         {
             Capacity = 10,
             BypassThreshold = 0.8,
             Riders = Enumerable.Range(100, load).Select(i => Req(1, 2, i)).ToArray(),
-            CapacityMode = mode,
         };
 
-    private static DispatchContext Ctx(Request r, long seq = 0, params ElevatorSnapshot[] cars) =>
-        new(r, cars, SimTime.Zero, ElevatorTiming.Default, seq);
+    private static DispatchContext Ctx(Request r, params ElevatorSnapshot[] cars) =>
+        new(r, cars, SimTime.Zero, ElevatorTiming.Default);
 
     [Fact]
     public void Nearest_idle_elevator_wins() =>
-        Assert.Equal(1, new NearestDispatch().Choose(Ctx(Req(8, 1), 0, Car(0, 1), Car(1, 10)))!.ElevatorId);
+        Assert.Equal(1, new NearestDispatch().Choose(Ctx(Req(8, 1), Car(0, 1), Car(1, 10)))!.ElevatorId);
 
     [Fact]
     public void Same_direction_ahead_counts_plain_distance()
@@ -39,7 +37,7 @@ public class DispatchTests
         var e0 = Car(0, 3, Direction.Up, [12], ElevatorState.MovingUp);
         Assert.Equal(13, NearestDispatch.EffectiveDistance(e0, Req(8, 1)));
         // An idle elevator at 14 (distance 6) therefore beats it.
-        Assert.Equal(1, new NearestDispatch().Choose(Ctx(Req(8, 1), 0, e0, Car(1, 14)))!.ElevatorId);
+        Assert.Equal(1, new NearestDispatch().Choose(Ctx(Req(8, 1), e0, Car(1, 14)))!.ElevatorId);
     }
 
     [Fact]
@@ -51,7 +49,7 @@ public class DispatchTests
 
     [Fact]
     public void Ties_go_to_the_lowest_id() =>
-        Assert.Equal(0, new NearestDispatch().Choose(Ctx(Req(5, 9), 0, Car(1, 3), Car(0, 7)))!.ElevatorId);
+        Assert.Equal(0, new NearestDispatch().Choose(Ctx(Req(5, 9), Car(1, 3), Car(0, 7)))!.ElevatorId);
 
     [Fact]
     public void Elevators_with_room_are_preferred_and_maintenance_is_never_chosen()
@@ -59,7 +57,7 @@ public class DispatchTests
         var full = Car(0, 5, load: 8);           // 8 ≥ 0.8 × 10
         var maintenance = Car(1, 5, state: ElevatorState.Maintenance);
         var far = Car(2, 20);
-        Assert.Equal(2, new NearestDispatch().Choose(Ctx(Req(5, 9), 0, full, maintenance, far))!.ElevatorId);
+        Assert.Equal(2, new NearestDispatch().Choose(Ctx(Req(5, 9), full, maintenance, far))!.ElevatorId);
     }
 
     [Fact]
@@ -67,31 +65,14 @@ public class DispatchTests
     {
         var full = Car(0, 5, load: 8);
         var maintenance = Car(1, 5, state: ElevatorState.Maintenance);
-        Assert.Equal(0, new NearestDispatch().Choose(Ctx(Req(5, 9), 0, full, maintenance))!.ElevatorId);
-        Assert.Equal(0, new RoundRobinDispatch().Choose(Ctx(Req(5, 9), 0, full, maintenance))!.ElevatorId);
-    }
-
-    [Fact]
-    public void Defer_when_every_elevator_is_full_the_request_waits()
-    {
-        var full = Car(0, 5, load: 8, mode: CapacityMode.Defer);
-        var maintenance = Car(1, 5, state: ElevatorState.Maintenance, mode: CapacityMode.Defer);
-        Assert.Null(new NearestDispatch().Choose(Ctx(Req(5, 9), 0, full, maintenance)));
-        Assert.Null(new RoundRobinDispatch().Choose(Ctx(Req(5, 9), 0, full, maintenance)));
-    }
-
-    [Fact]
-    public void Round_robin_rotates_over_eligible_elevators_by_sequence()
-    {
-        ElevatorSnapshot[] cars = [Car(0, 1), Car(1, 1, load: 9), Car(2, 1), Car(3, 1)];
-        Assert.Equal([0, 2, 3, 0, 2], Enumerable.Range(0, 5).Select(seq => new RoundRobinDispatch().Choose(Ctx(Req(5, 9), seq, cars))!.ElevatorId));
+        Assert.Equal(0, new NearestDispatch().Choose(Ctx(Req(5, 9), full, maintenance))!.ElevatorId);
     }
 
     [Fact]
     public void Dispatch_policies_are_registered_by_name()
     {
-        Assert.IsType<NearestDispatch>(DispatchPolicies.Create("nearest", new FifoScheduling(), ElevatorTiming.Default));
-        Assert.IsType<RoundRobinDispatch>(DispatchPolicies.Create("RoundRobin", new FifoScheduling(), ElevatorTiming.Default));
-        Assert.Throws<ArgumentException>(() => DispatchPolicies.Create("psychic", new FifoScheduling(), ElevatorTiming.Default));
+        Assert.IsType<NearestDispatch>(DispatchPolicies.Create("Nearest", new LookScheduling(), ElevatorTiming.Default));
+        Assert.IsType<CostBasedDispatch>(DispatchPolicies.Create("cost", new LookScheduling(), ElevatorTiming.Default));
+        Assert.Throws<ArgumentException>(() => DispatchPolicies.Create("roundrobin", new LookScheduling(), ElevatorTiming.Default)); // removed (ADR-018)
     }
 }

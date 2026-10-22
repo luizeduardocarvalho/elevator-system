@@ -67,7 +67,4 @@ public class LookSchedulingTests
         Expect(At(15, Direction.Down, [3, 10], (12, Direction.Down), (13, Direction.Up)), 12, Direction.Down);
         Expect(At(15, Direction.Down, [], (13, Direction.Up), (4, Direction.Up)), 4, Direction.Up);
     }
-
-    [Fact]
-    public void Is_registered_under_its_name() => Assert.IsType<LookScheduling>(SchedulingPolicies.Create("look"));
 }

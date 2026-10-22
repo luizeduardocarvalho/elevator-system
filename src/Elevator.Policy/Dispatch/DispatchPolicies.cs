@@ -2,13 +2,15 @@ using Elevator.Domain;
 
 namespace Elevator.Policy.Dispatch;
 
-/// <summary>Every dispatch strategy stays selectable by name forever (<c>--dispatch</c>).</summary>
+/// <summary>
+/// Dispatch strategies by name (<c>--dispatch</c>): cost-based (the default, ADR-006) and nearest (the overload fallback
+/// and the baseline it is measured against). Superseded strategies were removed (ADR-018); they live at the stage tags.
+/// </summary>
 public static class DispatchPolicies
 {
     private static readonly Dictionary<string, Func<ISchedulingPolicy, ElevatorTiming, IDispatchPolicy>> Factories =
         new(StringComparer.OrdinalIgnoreCase)
         {
-            ["roundrobin"] = (_, _) => new RoundRobinDispatch(),
             ["nearest"] = (_, _) => new NearestDispatch(),
             ["cost"] = (scheduling, timing) => new CostBasedDispatch(scheduling, timing),
         };
@@ -19,7 +21,7 @@ public static class DispatchPolicies
     {
         try
         {
-            Create(name, new FifoScheduling(), ElevatorTiming.Default);
+            Create(name, new LookScheduling(), ElevatorTiming.Default);
             return true;
         }
         catch (ArgumentException)

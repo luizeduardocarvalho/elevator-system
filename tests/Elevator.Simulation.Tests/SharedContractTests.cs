@@ -112,7 +112,6 @@ public class SharedContractTests
     [Theory]
     [InlineData("cost")]
     [InlineData("nearest")]
-    [InlineData("roundrobin")]
     public void Dispatch_evaluations_list_every_candidate_and_match_each_proposal(string dispatch)
     {
         var scenario = Repo.Load("lunch.yaml") with { Dispatch = dispatch };

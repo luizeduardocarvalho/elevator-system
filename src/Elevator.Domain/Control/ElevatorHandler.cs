@@ -22,8 +22,8 @@ public sealed record ElevatorHandlerOptions(long SnapshotDelayMs = 0, long Stale
 /// <list type="number">
 /// <item>Out of service (draining or parked for maintenance, emergency stop, fault; ADR-013) → reject with that reason
 /// (always wins).</item>
-/// <item>Capacity → reject (always wins): in Defer mode when full now; in NextTrip mode only if the request can never
-/// fit (its load exceeds the capacity), since a full elevator serves it on a later trip (ADR-010).</item>
+/// <item>Capacity → reject (always wins) only if the request can never fit (its load exceeds the capacity): a full
+/// elevator serves it on a later trip (ADR-010).</item>
 /// <item>Stale: our own ETA exceeds the dispatcher's estimate by more than the tolerance → reject, unless the
 /// assignment is forced or the request is aged (waiting ≥ AgingMs). Aging stops a request bouncing forever.</item>
 /// <item>Otherwise accept.</item>
@@ -64,10 +64,6 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
                 break;
             case Assign assign:
                 OnAssign(assign, now, outbox);
-                break;
-            case Unassign unassign:
-                if (Elevator.Unassign(unassign.RequestId))
-                    Release(unassign.RequestId, AssignmentReason.Rebalance, now, outbox);
                 break;
             case PassengerRetired retired:
                 Elevator.Unassign(retired.RequestId); // no release: a released pickup would be re-dispatched (perf only, ADR-015)
@@ -155,8 +151,8 @@ public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? o
             case ElevatorMode.Fault: return AssignmentReason.Fault;
         }
         if (Elevator.State == ElevatorState.Maintenance) return AssignmentReason.Maintenance;
-        // Defer mode: full now means no. NextTrip mode: a full elevator takes it for a later trip, unless it can never fit.
-        if (Elevator.CapacityMode == CapacityMode.Defer ? Elevator.IsFull : assign.Request.Load > Elevator.Capacity)
+        // A full elevator takes it for a later trip, unless it can never fit.
+        if (assign.Request.Load > Elevator.Capacity)
             return AssignmentReason.Capacity;
         if (assign.Forced || estimator is null || assign.EtaEstimate is not { } estimate) return null;
 

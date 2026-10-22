@@ -6,19 +6,18 @@ namespace Elevator.Simulation.Tests;
 public class DeterministicScenarioTests
 {
     /// <summary>
-    /// scenarios/v1-basic.yaml traced by hand (2 s/floor, doors 1 s open + 3 s dwell + 1 s close, start at floor 1):
+    /// scenarios/v1-basic.yaml traced by hand under LOOK (2 s/floor, doors 1 s open + 3 s dwell + 1 s close, start at 1):
     ///
-    ///  t=0   P1 calls 5↑. Idle at 1, goal 5 → moves up.            t=1 P2 calls 3↓; t=2 P3 calls 7↑ (queued).
-    ///  t=8   reaches 5 (4 floors), lantern ↑, doors open at 9     → P1 boards (wait 9), presses 9.
-    ///  t=13  doors closed; car call 9 ahead → up. Passes 7 at t=17 without stopping (FIFO: H7↑ is not the goal).
-    ///  t=21  reaches 9; next goal = oldest hall call 3 → lantern ↓; open at 22 → P1 alights (ride 13).
-    ///  t=26  closed → down. Passes 7 again at t=30. Reaches 3 at t=38; open at 39 → P2 boards (wait 38), presses 1.
-    ///  t=43  closed → down. Reaches 1 at t=47; open at 48 → P2 alights (ride 9). Next goal 7, lantern ↑.
-    ///  t=52  closed → up. Reaches 7 at t=64; open at 65 → P3 boards (wait 63), presses 8.
-    ///  t=69  closed → up. Reaches 8 at t=71; open at 72 → P3 alights (ride 7). No work: lantern off.
-    ///  t=76  doors closed, idle, everyone delivered → run ends.
+    ///  t=0  P1 calls 5↑ → up. t=1 P2 calls 3↓ and t=2 P3 calls 7↑. Passes 3 at t=4 (a down call, wrong direction).
+    ///  t=8  stops at 5, open 9 → P1 boards (wait 9), presses 9. Closed 13; lowest up stop ahead = 7 (P3's call).
+    ///  t=17 stops at 7, open 18 → P3 boards (wait 16), presses 8. Closed 22 → 8 at 24, open 25 → P3 off (ride 7).
+    ///  t=29 closed → 9 at 31; nothing above, reverse: lantern ↓; open 32 → P1 off (ride 23).
+    ///  t=36 closed → down 9→3 (12 s) → 48, open 49 → P2 boards (wait 48), presses 1.
+    ///  t=53 closed → 1 at 57, open 58 → P2 off (ride 9). Closed 62 → done.
     ///
-    ///  Floors travelled 4+4+6+2+6+1 = 23; stops at 5, 9, 3, 1, 7, 8 = 6.
+    ///  Floors travelled 4+2+1+1+6+2 = 16; stops at 5, 7, 8, 9, 3, 1 = 6.
+    ///  FIFO on the same passengers (v1-easy) waited 9/38/63 s and ended at 76 s: LOOK cuts the mean wait (36.7 → 24.3 s)
+    ///  and the max (63 → 48 s), at the cost of P1's ride (13 → 23 s). See ADR-004.
     /// </summary>
     [Fact]
     public void Basic_scenario_matches_hand_computed_trace()
@@ -26,19 +25,19 @@ public class DeterministicScenarioTests
         var result = ScenarioRunner.Run(Repo.Load("v1-basic.yaml"));
 
         Assert.Equal(
-            [(1, 9_000L), (2, 39_000L), (3, 65_000L)],
+            [(1, 9_000L), (3, 18_000L), (2, 49_000L)],
             result.Events.OfType<PassengerBoarded>().Select(e => (e.PassengerId, e.At.Ms)));
         Assert.Equal(
-            [(1, 22_000L, 9), (2, 48_000L, 1), (3, 72_000L, 8)],
+            [(3, 25_000L, 8), (1, 32_000L, 9), (2, 58_000L, 1)],
             result.Events.OfType<PassengerAlighted>().Select(e => (e.PassengerId, e.At.Ms, e.Floor)));
-        Assert.Equal([5, 9, 3, 1, 7, 8], result.Events.OfType<DoorsOpened>().Select(e => e.Floor));
-        Assert.Equal(76_000, result.EndedAt.Ms);
+        Assert.Equal([5, 7, 8, 9, 3, 1], result.Events.OfType<DoorsOpened>().Select(e => e.Floor));
+        Assert.Equal(62_000, result.EndedAt.Ms);
 
         var report = ReportBuilder.Build(result.Events);
         Assert.Equal((3, 3, 0), (report.Passengers, report.Delivered, report.Unserved));
-        Assert.Equal((110.0 / 3, 63.0, 63.0), (report.Wait.Avg!.Value, report.Wait.P95!.Value, report.Wait.Max!.Value));
-        Assert.Equal((29.0 / 3, 13.0), (report.Ride.Avg!.Value, report.Ride.Max!.Value));
-        Assert.Equal((23, 6, 76.0), (report.FloorsTravelled, report.Stops, report.SimTimeS));
+        Assert.Equal((73.0 / 3, 48.0), (report.Wait.Avg!.Value, report.Wait.Max!.Value));
+        Assert.Equal((39.0 / 3, 23.0), (report.Ride.Avg!.Value, report.Ride.Max!.Value));
+        Assert.Equal((16, 6, 62.0), (report.FloorsTravelled, report.Stops, report.SimTimeS));
     }
 
     [Theory]

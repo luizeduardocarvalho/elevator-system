@@ -25,7 +25,7 @@ public class EndToEndProperties
     [Property(MaxTest = 150)]
     public Property Every_request_is_served_exactly_once_and_correctly() => Prop.ForAll(RunGen.ToArbitrary(), input =>
     {
-        var scenario = new Scenario("prop", 1, FloorCount, ElevatorTiming.Default, "fifo",
+        var scenario = new Scenario("prop", 1, FloorCount, ElevatorTiming.Default,
             SimTime.FromSeconds(100_000), input.Passengers, null);
         var result = ScenarioRunner.Run(scenario, tickMs: input.Tick);
         var passengers = ScenarioRunner.BuildPassengers(scenario).ToDictionary(p => p.Id);

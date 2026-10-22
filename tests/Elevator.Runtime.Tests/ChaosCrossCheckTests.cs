@@ -14,7 +14,7 @@ namespace Elevator.Runtime.Tests;
 public class ChaosCrossCheckTests
 {
     private static Scenario LightChaos() => new(
-        "light-chaos", 7, 20, ElevatorTiming.Default, "look", SimTime.FromSeconds(3_600), [], null,
+        "light-chaos", 7, 20, ElevatorTiming.Default, SimTime.FromSeconds(3_600), [], null,
         Elevators: 4, Capacity: 10, BypassThreshold: 0.8, Dispatch: "cost",
         Profile: new TrafficProfile([new RatePoint(0, 6), new RatePoint(600, 6)], new TrafficMix(0.4, 0.4, 0.2)),
         Faults:

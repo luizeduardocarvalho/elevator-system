@@ -46,7 +46,7 @@ public class StuckScenarioTests
 
     [Fact]
     public void A_quiet_run_never_trips_the_watchdog() =>
-        Assert.DoesNotContain(SimEngine.Run(Repo.Load("down-peak.yaml") with { Scheduling = "fifo", Dispatch = "roundrobin" }).Events,
+        Assert.DoesNotContain(SimEngine.Run(Repo.Load("down-peak.yaml") with { Dispatch = "nearest" }).Events,
             e => e is FaultDetected);
 
     [Theory]
