@@ -1,0 +1,23 @@
+# Tower lunch: a 40-floor office tower with a 20-elevator fleet, the lunch shape of lunch.yaml at tower scale.
+# 30 minutes of traffic; the run continues until everyone is delivered (or 90 min). Peak 90/min, trough 45/min:
+# busy but not saturated (wait avg 12.0 s, p95 38.2 s at seed 1). In the TUI, a fleet wider than the terminal shows
+# a window of shafts around the selected elevator; ←/→ move it.
+name: tower
+seed: 1
+building:
+  floors: 40
+  elevators: 20
+  capacity: 13
+  bypassThreshold: 0.8
+dispatch: cost
+maxSimTimeS: 5400
+traffic:
+  profile:
+    lobby: 1
+    mix: { fromLobby: 0.40, toLobby: 0.40, interfloor: 0.20 }
+    rate:
+      - { atS: 0,    perMinute: 30 }
+      - { atS: 450,  perMinute: 90 }
+      - { atS: 900,  perMinute: 45 }
+      - { atS: 1350, perMinute: 90 }
+      - { atS: 1800, perMinute: 30 }

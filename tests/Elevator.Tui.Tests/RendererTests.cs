@@ -8,9 +8,10 @@ namespace Elevator.Tui.Tests;
 
 public class RendererTests
 {
-    private static BuildingState MidLunch()
+    private static BuildingState MidLunch(int elevators = 4)
     {
-        var engine = SimEngine.Create(Repo.Load("lunch.yaml"), options: new SimEngineOptions(EmitDispatchEvaluations: true));
+        var lunch = Repo.Load("lunch.yaml") with { Elevators = elevators };
+        var engine = SimEngine.Create(lunch, options: new SimEngineOptions(EmitDispatchEvaluations: true));
         engine.AdvanceTo(new Instant(600_000));
         var state = new BuildingState();
         foreach (var e in engine.Log) state.Apply(e);
@@ -30,6 +31,29 @@ public class RendererTests
         var text = SpectreRenderer.RenderToString(model, width, height);
         Assert.Contains("LIVE", text, StringComparison.Ordinal);
         Assert.All(text.Split('\n'), line => Assert.True(line.TrimEnd('\r').Length <= width, $"line wider than {width}: '{line}'"));
+    }
+
+    /// <summary>
+    /// Wide fleets used to throw: the side panels listed every elevator and outgrew the rows beside the building, and
+    /// the shafts were squeezed past readability. Every fleet size must now render, at every terminal size.
+    /// </summary>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(8)]
+    [InlineData(16)]
+    [InlineData(20)]
+    [InlineData(40)]
+    public void Any_fleet_size_renders_at_any_terminal_size(int elevators)
+    {
+        var state = MidLunch(elevators);
+        foreach (var (width, height) in new[] { (200, 60), (160, 50), (120, 40), (120, 20), (80, 24), (40, 12) })
+            foreach (var selected in new[] { 0, elevators / 2, elevators - 1 })
+            {
+                var model = ViewModel.Build(state, new ViewOptions(width, height, selected, new StatusInfo("LIVE", "10×", 9.9)));
+                var text = SpectreRenderer.RenderToString(model, width, height);
+                Assert.Contains("LIVE", text, StringComparison.Ordinal);
+                Assert.All(text.Split('\n'), line => Assert.True(line.TrimEnd('\r').Length <= width, $"{elevators} elevators at {width}×{height}: line wider than {width}"));
+            }
     }
 
     [Fact]

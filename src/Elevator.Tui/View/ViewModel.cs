@@ -20,6 +20,8 @@ public static class ViewModel
     public const int MinWidth = 40, MinHeight = 12;
 
     private const int ShaftCellWidth = 11;
+    private const int CompactShaftCellWidth = 6; // 3 columns of glyph, padding and the border
+    private const int SidePanelChromeRows = 7;  // per side panel: borders, summary or totals, table header
     private const int FloorAndWaitingWidth = 16;
     private const int FixedRows = 2;
     private const int GridChromeRows = 4;
@@ -35,21 +37,40 @@ public static class ViewModel
 
         var maxFloorRows = Math.Max(1, options.Height - FixedRows - (MinTailLines + TailChromeRows) - GridChromeRows);
         var floorRows = Math.Min(state.Floors, maxFloorRows);
-        var tailLines = Math.Max(0, options.Height - FixedRows - TailChromeRows - GridChromeRows - floorRows);
 
-        var compact = options.Width < FloorAndWaitingWidth + state.Elevators.Count * ShaftCellWidth + (showSide ? SidePanelWidth : 0);
+        // A wide fleet works like a tall building: what does not fit is a window around the selected elevator, which
+        // ←/→ move. Shafts first go compact; past that, the window keeps a column at each edge for the ◀n / n▶ counts.
+        // The side panels list one row per elevator each, so they get the window that fits beside the building.
+        var n = state.Elevators.Count;
+        var shaftsWidth = options.Width - FloorAndWaitingWidth - (showSide ? SidePanelWidth : 0);
+        var compact = shaftsWidth < n * ShaftCellWidth;
+        var shafts = compact && shaftsWidth < n * CompactShaftCellWidth
+            ? Window(n, (shaftsWidth - 2 * CompactShaftCellWidth) / CompactShaftCellWidth, options.Selected)
+            : (First: 0, Count: n);
+        var sideBudget = options.Height - FixedRows - (MinTailLines + TailChromeRows);
+        var listed = Window(n, (sideBudget - 2 * SidePanelChromeRows) / 2, options.Selected);
+        var range = listed.Count == n ? null
+            : listed.Count == 1 ? $"E{listed.First} of {n}"
+            : $"E{listed.First}–E{listed.First + listed.Count - 1} of {n}";
+        var gridRows = floorRows + GridChromeRows;
+        var sideRows = showSide ? 2 * (listed.Count + SidePanelChromeRows) : 0;
+        var mainRows = Math.Min(Math.Max(gridRows, sideRows), Math.Max(gridRows, options.Height - FixedRows - TailChromeRows));
+        var tailLines = Math.Max(0, options.Height - FixedRows - TailChromeRows - mainRows);
 
         return new ScreenModel(
             BuildStatus(state, status, options.Selected),
-            BuildGrid(state, options.Selected, floorRows, compact),
-            BuildMetrics(state, options.Selected),
-            BuildOps(state),
+            BuildGrid(state, options.Selected, floorRows, compact, shafts),
+            BuildMetrics(state, options.Selected, listed) with { Range = range },
+            BuildOps(state, listed) with { Range = range },
             BuildTail(state, tailLines),
             status.ReadOnly
                 ? "space pause · n step · +/- speed · [ ] seek ∓60 s · 0 restart · ←/→ select · q quit"
                 : "space pause · n step · +/- speed · ←/→ select · m maint · e emergency · s stuck 60 s · [ ] seek ∓60 s · q quit",
             showSide,
-            options.Width < MinWidth || options.Height < MinHeight);
+            options.Width < MinWidth || options.Height < MinHeight)
+        {
+            MainRows = mainRows,
+        };
     }
 
     private static StatusBar BuildStatus(BuildingState s, StatusInfo info, int selected) => new(
@@ -71,7 +92,14 @@ public static class ViewModel
         return string.Create(Inv, $"{ms / 3_600_000}:{ms / 60_000 % 60:00}:{ms / 1000 % 60:00}.{ms / 100 % 10}");
     }
 
-    private static BuildingGrid BuildGrid(BuildingState s, int selected, int floorRows, bool compact)
+    /// <summary>At most <paramref name="size"/> (at least 1) of <paramref name="n"/> elevators, centred on <paramref name="selected"/>.</summary>
+    private static (int First, int Count) Window(int n, int size, int selected)
+    {
+        var count = Math.Clamp(size, Math.Min(1, n), n);
+        return (Math.Clamp(selected - count / 2, 0, n - count), count);
+    }
+
+    private static BuildingGrid BuildGrid(BuildingState s, int selected, int floorRows, bool compact, (int First, int Count) shown)
     {
         var focus = selected < s.Elevators.Count ? s.Elevators[selected].Floor : Floors.Lowest;
         var top = Math.Clamp(focus + floorRows / 2, Math.Min(s.Floors, floorRows), s.Floors);
@@ -80,18 +108,20 @@ public static class ViewModel
         var rows = new List<FloorRow>(floorRows);
         for (var floor = top; floor >= bottom; floor--)
         {
-            var shafts = new ShaftCell[s.Elevators.Count];
-            for (var i = 0; i < shafts.Length; i++)
+            var shafts = new ShaftCell[shown.Count];
+            for (var j = 0; j < shafts.Length; j++)
             {
+                var i = shown.First + j;
                 var e = s.Elevators[i];
-                shafts[i] = e.Floor == floor ? Cell(e, e.Capacity ?? s.Capacity, compact, i == selected) : ShaftCell.Empty;
+                shafts[j] = e.Floor == floor ? Cell(e, e.Capacity ?? s.Capacity, compact, i == selected) : ShaftCell.Empty;
             }
             rows.Add(new FloorRow(floor,
                 s.Waiting.GetValueOrDefault((floor, Direction.Up)),
                 s.Waiting.GetValueOrDefault((floor, Direction.Down)),
                 shafts));
         }
-        return new BuildingGrid([.. s.Elevators.Select(e => $"E{e.Id}")], rows, compact, s.Floors - top, bottom - Floors.Lowest);
+        return new BuildingGrid([.. s.Elevators.Skip(shown.First).Take(shown.Count).Select(e => $"E{e.Id}")], rows, compact,
+            s.Floors - top, bottom - Floors.Lowest, shown.First, s.Elevators.Count - shown.First - shown.Count);
     }
 
     private static ShaftCell Cell(ElevatorView e, int capacity, bool compact, bool selected)
@@ -138,7 +168,7 @@ public static class ViewModel
         _ => "",
     };
 
-    private static MetricsPanel BuildMetrics(BuildingState s, int selected)
+    private static MetricsPanel BuildMetrics(BuildingState s, int selected, (int First, int Count) listed)
     {
         var waits = s.Waits;
         string avg = "–", p95 = "–", max = "–", longWaits = "–";
@@ -160,7 +190,7 @@ public static class ViewModel
 
         var waiting = s.Waiting.Values.Sum();
         var active = s.Arrived - s.Delivered;
-        var rows = s.Elevators.Select(e => new ElevatorRow(
+        var rows = s.Elevators.Skip(listed.First).Take(listed.Count).Select(e => new ElevatorRow(
             e.TypeName == "standard" ? $"E{e.Id}" : $"E{e.Id} {e.TypeName}",
             JsonNamingPolicy.SnakeCaseUpper.ConvertName(e.State.ToString()),
             Load(e.Riders, e.Capacity ?? s.Capacity),
@@ -174,19 +204,21 @@ public static class ViewModel
             rows);
     }
 
-    private static OpsPanel BuildOps(BuildingState s)
+    private static OpsPanel BuildOps(BuildingState s, (int First, int Count) listed)
     {
         long emergencyMs = 0, faultMs = 0;
         int stops = 0, faults = 0;
-        var rows = new List<OpsRow>(s.Elevators.Count);
-        foreach (var e in s.Elevators)
+        var rows = new List<OpsRow>(listed.Count);
+        for (var i = 0; i < s.Elevators.Count; i++)
         {
+            var e = s.Elevators[i];
             var em = e.ModeMs(ElevatorMode.Emergency, s.Now);
             var fm = e.ModeMs(ElevatorMode.Fault, s.Now);
             emergencyMs += em;
             faultMs += fm;
             stops += e.EmergencyStops;
             faults += e.Faults;
+            if (i < listed.First || i >= listed.First + listed.Count) continue;
             rows.Add(new OpsRow($"E{e.Id}", Seconds0(e.ModeMs(ElevatorMode.Maintenance, s.Now)),
                 string.Create(Inv, $"{e.EmergencyStops} ({Seconds0(em)})"),
                 string.Create(Inv, $"{e.Faults} ({Seconds0(fm)})")));

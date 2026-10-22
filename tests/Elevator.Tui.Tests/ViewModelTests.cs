@@ -226,5 +226,52 @@ public class ViewModelTests
         Assert.Equal(Json(Build(state)), Json(Build(state)));
     }
 
+    private static BuildingState Fleet(int elevators)
+    {
+        var state = new BuildingState();
+        state.Apply(new RunStarted(Instant.Zero, "wide", 1, 20, "look", 0, elevators, "cost", 10));
+        return state;
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(10)]
+    [InlineData(19)]
+    public void A_fleet_too_wide_for_the_terminal_shows_a_window_of_shafts_around_the_selected_elevator(int selected)
+    {
+        var grid = Build(Fleet(20), new ViewOptions(120, 40, selected)).Building;
+
+        var shown = grid.ShaftHeaders.Select(h => int.Parse(h[1..], System.Globalization.CultureInfo.InvariantCulture)).ToList();
+        Assert.InRange(shown.Count, 1, 19);
+        Assert.Contains(selected, shown);
+        Assert.Equal(Enumerable.Range(shown[0], shown.Count), shown);
+        Assert.Equal((shown[0], 20 - 1 - shown[^1]), (grid.HiddenLeft, grid.HiddenRight));
+        Assert.All(grid.Rows, r => Assert.Equal(shown.Count, r.Shafts.Count));
+        Assert.True(grid.Compact);
+    }
+
+    [Fact]
+    public void Side_panels_list_only_the_elevators_that_fit_around_the_selected_one()
+    {
+        var m = Build(Fleet(20), new ViewOptions(120, 40, 12));
+
+        Assert.InRange(m.Metrics.Elevators.Count, 1, 19);
+        Assert.Equal(m.Metrics.Elevators.Select(e => e.Name), m.Ops.Elevators.Select(e => e.Name));
+        Assert.Contains(m.Metrics.Elevators, e => e is { Name: "E12", Selected: true });
+        Assert.Matches(@"^E\d+(–E\d+)? of 20$", m.Metrics.Range);
+        Assert.Equal(m.Metrics.Range, m.Ops.Range);
+    }
+
+    [Fact]
+    public void A_fleet_that_fits_is_shown_whole_with_no_range()
+    {
+        var m = Build(Fold(), new ViewOptions(120, 40));
+
+        Assert.Equal(["E0", "E1", "E2"], m.Building.ShaftHeaders);
+        Assert.Equal((0, 0), (m.Building.HiddenLeft, m.Building.HiddenRight));
+        Assert.Equal(3, m.Metrics.Elevators.Count);
+        Assert.Null(m.Metrics.Range);
+    }
+
     internal static string Json(ScreenModel m) => System.Text.Json.JsonSerializer.Serialize(m);
 }

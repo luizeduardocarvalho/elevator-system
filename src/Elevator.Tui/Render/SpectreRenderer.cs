@@ -15,10 +15,11 @@ public static class SpectreRenderer
         if (m.TooSmall)
             return new Rows(Status(m.Status), new Markup($"[yellow]terminal too small: need {ViewModel.MinWidth}×{ViewModel.MinHeight}[/]") { Overflow = Overflow.Ellipsis });
 
-        var buildingRows = m.Building.Rows.Count + 4; // rounded table: top border, header, separator, bottom border
+        // Rounded table: top border, header, separator, bottom border. The side panels may make the band taller.
+        var buildingRows = Math.Max(m.Building.Rows.Count + 4, m.MainRows);
         var side = new Layout("side").Size(ViewModel.SidePanelWidth).SplitRows(
             new Layout("metrics").Update(Metrics(m.Metrics)),
-            new Layout("ops").Size(m.Ops.Elevators.Count + 7).Update(Ops(m.Ops)));
+            new Layout("ops").Size(Math.Min(m.Ops.Elevators.Count + 7, buildingRows - 2)).Update(Ops(m.Ops))); // metrics keeps its borders
         if (!m.ShowSidePanel) side.Invisible();
 
         return new Layout("root").SplitRows(
@@ -68,7 +69,9 @@ public static class SpectreRenderer
         var table = new Table().Border(TableBorder.Rounded).BorderColor(Color.Grey);
         table.AddColumn(new TableColumn(floorHeader).RightAligned().NoWrap());
         table.AddColumn(new TableColumn("Waiting").NoWrap());
+        if (g.HiddenLeft > 0) table.AddColumn(new TableColumn($"[grey]◀{g.HiddenLeft}[/]").NoWrap());
         foreach (var h in g.ShaftHeaders) table.AddColumn(new TableColumn(Markup.Escape(h)).Centered().NoWrap().Width(g.Compact ? 3 : 9));
+        if (g.HiddenRight > 0) table.AddColumn(new TableColumn($"[grey]{g.HiddenRight}▶[/]").NoWrap());
 
         foreach (var row in g.Rows)
         {
@@ -77,7 +80,9 @@ public static class SpectreRenderer
                 new Markup($"[grey]{row.Floor}[/]"),
                 new Markup(Waiting(row)),
             };
+            if (g.HiddenLeft > 0) cells.Add(Text.Empty);
             foreach (var c in row.Shafts) cells.Add(new Markup(Cell(c)) { Overflow = Overflow.Crop });
+            if (g.HiddenRight > 0) cells.Add(Text.Empty);
             table.AddRow(cells);
         }
         return table;
@@ -125,7 +130,7 @@ public static class SpectreRenderer
             var name = Markup.Escape(e.Name + (e.Marker == ModeMarker.None ? "" : " " + ViewModel.MarkerLetter(e.Marker)));
             table.AddRow(e.Selected ? $"[bold underline]{name}[/]" : name, Markup.Escape(e.State), Markup.Escape(e.Load), Markup.Escape(e.Utilization));
         }
-        return new Panel(new Rows(grid, table)).Header("Metrics [grey](sim time)[/]").BorderColor(Color.Grey).Expand();
+        return new Panel(new Rows(grid, table)).Header($"Metrics [grey](sim time){RangeSuffix(m.Range)}[/]").BorderColor(Color.Grey).Expand();
     }
 
     private static Panel Ops(OpsPanel o)
@@ -137,8 +142,10 @@ public static class SpectreRenderer
         var totals = new Grid().AddColumn(new GridColumn().NoWrap()).AddColumn(new GridColumn().NoWrap());
         totals.AddRow("[grey]reassignments[/]", Markup.Escape(o.Reassignments));
         totals.AddRow("[grey]commands / denials[/]", Markup.Escape($"{o.Commands} / {o.Denials}"));
-        return new Panel(new Rows(grid, totals)).Header("Ops").BorderColor(Color.Grey).Expand();
+        return new Panel(new Rows(grid, totals)).Header($"Ops[grey]{RangeSuffix(o.Range)}[/]").BorderColor(Color.Grey).Expand();
     }
+
+    private static string RangeSuffix(string? range) => range is null ? "" : " · " + Markup.Escape(range);
 
     private static Panel Tail(IReadOnlyList<TailLine> lines)
     {

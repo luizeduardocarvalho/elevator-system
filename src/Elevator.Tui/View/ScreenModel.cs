@@ -12,7 +12,12 @@ public sealed record ScreenModel(
     IReadOnlyList<TailLine> Tail,
     string Help,
     bool ShowSidePanel,
-    bool TooSmall = false);
+    bool TooSmall = false)
+{
+    /// <summary>Height of the band holding the building and the side panels: the taller of the two, so the side panels
+    /// may take rows from the event tail below. 0 = just the building.</summary>
+    public int MainRows { get; init; }
+}
 
 /// <summary>Colour intent; the renderer maps it to a style.</summary>
 public enum Tone { Normal, Dim, Accent, Good, Warn, Bad }
@@ -36,7 +41,10 @@ public sealed record StatusBar(
 
 /// <param name="Rows">Top floor first. May be a window of the building when the terminal is short.</param>
 /// <param name="Compact">Cells show the glyph only (narrow terminal).</param>
-public sealed record BuildingGrid(IReadOnlyList<string> ShaftHeaders, IReadOnlyList<FloorRow> Rows, bool Compact, int HiddenAbove, int HiddenBelow);
+/// <param name="HiddenLeft">Elevators left of the visible shafts (a fleet too wide for the terminal shows a window
+/// around the selected elevator; ←/→ move it).</param>
+public sealed record BuildingGrid(IReadOnlyList<string> ShaftHeaders, IReadOnlyList<FloorRow> Rows, bool Compact, int HiddenAbove, int HiddenBelow,
+    int HiddenLeft = 0, int HiddenRight = 0);
 
 public sealed record FloorRow(int Floor, int WaitingUp, int WaitingDown, IReadOnlyList<ShaftCell> Shafts);
 
@@ -53,7 +61,8 @@ public sealed record MetricsPanel(
     string LongWaits,
     string Served,
     string Active,
-    IReadOnlyList<ElevatorRow> Elevators);
+    IReadOnlyList<ElevatorRow> Elevators,
+    string? Range = null);
 
 public sealed record ElevatorRow(string Name, string State, string Load, string Utilization, ModeMarker Marker, bool Selected);
 
@@ -64,7 +73,8 @@ public sealed record OpsPanel(
     string Faults,
     string Reassignments,
     string Commands,
-    string Denials);
+    string Denials,
+    string? Range = null);
 
 public sealed record OpsRow(string Name, string MaintenanceTime, string Emergency, string Faults);
 
