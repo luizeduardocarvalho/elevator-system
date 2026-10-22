@@ -4,7 +4,7 @@
 - **Seeds:** 21..40 (20 per strategy)
 - **Baseline:** look+cost
 - **Scenarios:** up-peak-t5 (4 elevators, 20 floors, capacity 10, next-trip), up-peak-t10 (4 elevators, 20 floors, capacity 10, next-trip), up-peak-t30 (4 elevators, 20 floors, capacity 10, next-trip), down-peak-t5 (4 elevators, 20 floors, capacity 10, next-trip), down-peak-t10 (4 elevators, 20 floors, capacity 10, next-trip), down-peak-t30 (4 elevators, 20 floors, capacity 10, next-trip), fleet-t5 (4 elevators, 20 floors, capacity 10, next-trip), fleet-t10 (4 elevators, 20 floors, capacity 10, next-trip), fleet-t30 (4 elevators, 20 floors, capacity 10, next-trip)
-- **Runs:** 540, 3.1 s wall
+- **Runs:** 540, 3.8 s wall
 
 All times are sim seconds. Each cell is the mean over seeds ± the 95% CI half-width (Student t).
 Δ columns are **paired per-seed differences** against the baseline (common random numbers: every
@@ -110,9 +110,9 @@ Where the average wait goes (mean seconds per passenger; sums to the mean wait):
 
 | Strategy | Wait avg | Wait p95 | Wait max | Journey avg | Left behind | Served % | Δ wait avg | Δ wait p95 | Δ journey |
 |---|---|---|---|---|---|---|---|---|---|
-| fifo+nearest | 94.1 ± 12.0 | 370.2 ± 45.8 | 492.4 ± 58.1 | 118.0 ± 12.1 | 0.0 ± 0.0 | 93.4 ± 0.7 | 79.4 ± 11.3 ✱ | 325.6 ± 43.7 ✱ | 79.2 ± 11.3 ✱ |
-| look+nearest | 21.3 ± 1.5 | 76.0 ± 5.0 | 128.3 ± 12.3 | 48.0 ± 2.0 | 0.0 ± 0.0 | 93.4 ± 0.7 | 6.7 ± 1.1 ✱ | 31.4 ± 4.6 ✱ | 9.2 ± 1.3 ✱ |
-| look+cost (baseline) | 14.6 ± 0.8 | 44.6 ± 3.2 | 82.3 ± 7.3 | 38.8 ± 1.1 | 0.0 ± 0.0 | 93.4 ± 0.7 | – | – | – |
+| fifo+nearest | 94.1 ± 12.0 | 370.2 ± 45.8 | 492.4 ± 58.1 | 118.0 ± 12.1 | 0.0 ± 0.0 | 93.4 ± 0.7 | 79.5 ± 11.3 ✱ | 325.6 ± 43.7 ✱ | 79.2 ± 11.3 ✱ |
+| look+nearest | 21.3 ± 1.5 | 76.0 ± 5.0 | 128.3 ± 12.3 | 48.0 ± 2.0 | 0.0 ± 0.0 | 93.4 ± 0.7 | 6.7 ± 1.0 ✱ | 31.4 ± 4.6 ✱ | 9.2 ± 1.3 ✱ |
+| look+cost (baseline) | 14.6 ± 0.8 | 44.6 ± 3.2 | 82.3 ± 7.3 | 38.7 ± 1.1 | 0.0 ± 0.0 | 93.4 ± 0.7 | – | – | – |
 
 Where the average wait goes (mean seconds per passenger; sums to the mean wait):
 
@@ -128,15 +128,15 @@ Operations (mean per run; penalty = reassignment + blocked wait seconds, summed 
 |---|---|---|---|---|---|---|---|---|---|
 | fifo+nearest | 0.0 | 0.0 | 0.0 | 61.3 | 5.0 | 1.0 | 43.8 | 2.6 | 16.9 |
 | look+nearest | 0.0 | 0.0 | 0.0 | 62.3 | 5.0 | 1.0 | 35.3 | 2.6 | 16.9 |
-| look+cost | 0.0 | 0.0 | 0.0 | 64.6 | 5.0 | 1.0 | 19.1 | 2.6 | 16.9 |
+| look+cost | 0.0 | 0.0 | 0.0 | 64.8 | 5.0 | 1.0 | 19.4 | 2.7 | 16.9 |
 
 ## fleet-t10
 
 | Strategy | Wait avg | Wait p95 | Wait max | Journey avg | Left behind | Served % | Δ wait avg | Δ wait p95 | Δ journey |
 |---|---|---|---|---|---|---|---|---|---|
-| fifo+nearest | 95.4 ± 10.4 | 360.5 ± 42.3 | 526.9 ± 60.3 | 120.3 ± 10.5 | 0.0 ± 0.0 | 93.4 ± 0.7 | 81.5 ± 10.0 ✱ | 320.7 ± 40.3 ✱ | 81.8 ± 9.9 ✱ |
-| look+nearest | 22.8 ± 1.3 | 81.9 ± 4.0 | 158.8 ± 12.8 | 51.3 ± 2.1 | 0.0 ± 0.0 | 93.4 ± 0.7 | 8.8 ± 1.0 ✱ | 42.1 ± 3.0 ✱ | 12.8 ± 1.5 ✱ |
-| look+cost (baseline) | 14.0 ± 0.8 | 39.8 ± 3.2 | 80.8 ± 8.2 | 38.5 ± 1.0 | 0.0 ± 0.0 | 93.4 ± 0.7 | – | – | – |
+| fifo+nearest | 95.4 ± 10.4 | 360.5 ± 42.3 | 526.9 ± 60.3 | 120.3 ± 10.5 | 0.0 ± 0.0 | 93.4 ± 0.7 | 81.5 ± 10.0 ✱ | 320.8 ± 40.2 ✱ | 81.8 ± 9.9 ✱ |
+| look+nearest | 22.8 ± 1.3 | 81.9 ± 4.0 | 158.8 ± 12.8 | 51.3 ± 2.1 | 0.0 ± 0.0 | 93.4 ± 0.7 | 8.8 ± 1.0 ✱ | 42.3 ± 3.0 ✱ | 12.8 ± 1.5 ✱ |
+| look+cost (baseline) | 14.0 ± 0.8 | 39.7 ± 3.3 | 82.1 ± 8.9 | 38.5 ± 1.0 | 0.0 ± 0.0 | 93.4 ± 0.7 | – | – | – |
 
 Where the average wait goes (mean seconds per passenger; sums to the mean wait):
 
@@ -158,9 +158,9 @@ Operations (mean per run; penalty = reassignment + blocked wait seconds, summed 
 
 | Strategy | Wait avg | Wait p95 | Wait max | Journey avg | Left behind | Served % | Δ wait avg | Δ wait p95 | Δ journey |
 |---|---|---|---|---|---|---|---|---|---|
-| fifo+nearest | 95.4 ± 10.4 | 360.5 ± 42.3 | 526.9 ± 60.3 | 120.3 ± 10.5 | 0.0 ± 0.0 | 93.4 ± 0.7 | 81.5 ± 10.0 ✱ | 320.7 ± 40.3 ✱ | 81.8 ± 9.9 ✱ |
-| look+nearest | 22.8 ± 1.3 | 81.9 ± 4.0 | 158.8 ± 12.8 | 51.3 ± 2.1 | 0.0 ± 0.0 | 93.4 ± 0.7 | 8.8 ± 1.0 ✱ | 42.1 ± 3.0 ✱ | 12.8 ± 1.5 ✱ |
-| look+cost (baseline) | 14.0 ± 0.8 | 39.8 ± 3.2 | 80.8 ± 8.2 | 38.5 ± 1.0 | 0.0 ± 0.0 | 93.4 ± 0.7 | – | – | – |
+| fifo+nearest | 95.4 ± 10.4 | 360.5 ± 42.3 | 526.9 ± 60.3 | 120.3 ± 10.5 | 0.0 ± 0.0 | 93.4 ± 0.7 | 81.5 ± 10.0 ✱ | 320.8 ± 40.2 ✱ | 81.8 ± 9.9 ✱ |
+| look+nearest | 22.8 ± 1.3 | 81.9 ± 4.0 | 158.8 ± 12.8 | 51.3 ± 2.1 | 0.0 ± 0.0 | 93.4 ± 0.7 | 8.8 ± 1.0 ✱ | 42.3 ± 3.0 ✱ | 12.8 ± 1.5 ✱ |
+| look+cost (baseline) | 14.0 ± 0.8 | 39.7 ± 3.3 | 82.1 ± 8.9 | 38.5 ± 1.0 | 0.0 ± 0.0 | 93.4 ± 0.7 | – | – | – |
 
 Where the average wait goes (mean seconds per passenger; sums to the mean wait):
 

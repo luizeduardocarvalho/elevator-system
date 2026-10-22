@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (Stage 4, Hard; branch `stage4-hard`, 2026-10-21). Builds on ADR-006 (cost-based dispatch), ADR-009/010
+Accepted (Stage 4, Hard; branch `stage4-hard`, 2026-10-21). VIP priority superseded by ADR-015 (a cost term, not a queue position). Builds on ADR-006 (cost-based dispatch), ADR-009/010
 (capacity) and the shared v3 contract (`ElevatorSnapshot.TypeName`, `.ServedFloors`, `AccessDenied`,
 `DispatchEvaluated`).
 
@@ -62,8 +62,10 @@ true while adding variety:
     request and tells the passenger (who leaves) and the client (`AssignRequest` throws `RequestRefusedException`). The
     passenger is counted as **refused by policy**, never as unserved/lost. Without this, a request no elevator may take
     would wait forever.
-  - **VIP priority** orders the pending requests by (priority, t_call, id): a VIP waiting for an elevator to come back
-    into service gets it before anyone who called earlier. With no VIP the order is the old (t_call, id).
+  - ~~**VIP priority** orders the pending requests by (priority, t_call, id): a VIP waiting for an elevator to come back
+    into service gets it before anyone who called earlier. With no VIP the order is the old (t_call, id).~~
+    **Superseded by ADR-015:** pending requests are always served by (t_call, id); VIP priority is a cost term (a VIP
+    request is not charged for the delay it adds to others), not a queue position.
 
 ### Loads above one unit (found by the properties)
 The invariant properties, drawing freight loads, found three livelocks that one-unit loads can never produce:
@@ -93,7 +95,7 @@ They are mirrored in `StopProjection`; removing the mirror makes the equivalence
   |---|---|---|---|---|
   | LOOK + RoundRobin | 44.6 ± 1.9 | 117.4 ± 4.8 | +21.8 ± 1.8 | +35.4 ± 6.2 |
   | LOOK + Nearest | 22.8 ± 1.3 | 81.9 ± 4.0 | – | – |
-  | LOOK + Cost | **14.0 ± 0.8** | **39.8 ± 3.2** | −8.8 ± 1.0 | −42.1 ± 3.0 |
+  | LOOK + Cost | **14.0 ± 0.8** | **39.7 ± 3.3** | −8.8 ± 1.0 | −42.3 ± 3.0 |
 
   Nearest counts floors, so it treats the 1 s/floor express like the 2.5 s/floor freight. Cost dispatch projects each
   elevator with its own timing and served floors (ADR-006), so the gap to Nearest is wider than on a uniform building

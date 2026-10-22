@@ -182,4 +182,15 @@ public class CostBasedDispatchTests
         Assert.True(forVip.AddedDelayS > 0); // the delay is still there, and reported; it just isn't charged
         Assert.Equal(forVip.EtaS + 10.0 * forVip.LoadAtPickup / 10, forVip.Cost, 6);
     }
+
+    /// <summary>An exact cost tie goes to the lowest elevator id, an explicit rule, whatever the candidates' order (ADR-015).</summary>
+    [Fact]
+    public void Exact_cost_ties_go_to_the_lowest_id_whatever_the_candidate_order()
+    {
+        var r = Req(1, 8, 12);
+        var (e2, e5) = (Car(2, 4), Car(5, 12)); // both 4 floors away, idle and empty: identical cost
+        Assert.Equal(Cost().Evaluate(e2, r, SimTime.Zero).Cost, Cost().Evaluate(e5, r, SimTime.Zero).Cost, 9);
+        Assert.Equal(2, Cost().Choose(Ctx(r, e2, e5))!.ElevatorId);
+        Assert.Equal(2, Cost().Choose(Ctx(r, e5, e2))!.ElevatorId);
+    }
 }

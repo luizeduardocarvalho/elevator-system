@@ -4,7 +4,7 @@
 - **Seeds:** 21..40 (20 per strategy)
 - **Baseline:** look+nearest
 - **Scenarios:** fleet (4 elevators, 20 floors, capacity 10, next-trip)
-- **Runs:** 60, 0.6 s wall
+- **Runs:** 60, 5.2 s wall
 
 All times are sim seconds. Each cell is the mean over seeds ± the 95% CI half-width (Student t).
 Δ columns are **paired per-seed differences** against the baseline (common random numbers: every
@@ -16,7 +16,7 @@ strategy sees the same passengers for a given seed); negative is better. A Δ wh
 |---|---|---|---|---|---|---|---|---|---|
 | look+roundrobin (lower bound) | 44.6 ± 1.9 | 117.4 ± 4.8 | 177.3 ± 11.6 | 73.9 ± 2.4 | 0.0 ± 0.0 | 93.4 ± 0.7 | 21.8 ± 1.8 ✱ | 35.4 ± 6.2 ✱ | 22.6 ± 2.1 ✱ |
 | look+nearest (baseline) | 22.8 ± 1.3 | 81.9 ± 4.0 | 158.8 ± 12.8 | 51.3 ± 2.1 | 0.0 ± 0.0 | 93.4 ± 0.7 | – | – | – |
-| look+cost | 14.0 ± 0.8 | 39.8 ± 3.2 | 80.8 ± 8.2 | 38.5 ± 1.0 | 0.0 ± 0.0 | 93.4 ± 0.7 | -8.8 ± 1.0 ✱ | -42.1 ± 3.0 ✱ | -12.8 ± 1.5 ✱ |
+| look+cost | 14.0 ± 0.8 | 39.7 ± 3.3 | 82.1 ± 8.9 | 38.5 ± 1.0 | 0.0 ± 0.0 | 93.4 ± 0.7 | -8.8 ± 1.0 ✱ | -42.3 ± 3.0 ✱ | -12.8 ± 1.5 ✱ |
 
 Where the average wait goes (mean seconds per passenger; sums to the mean wait):
 

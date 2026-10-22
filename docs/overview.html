@@ -108,7 +108,7 @@ header { position: relative; }
   <h1>Elevator System</h1>
   <p>Easy → Medium → Hard, built as an experiment: build, simulate, measure, evolve. State at tag <code>v3-hard</code>.</p>
   <div class="badges">
-    <span class="badge">.NET 10</span><span class="badge">527 tests passing</span><span class="badge">14 ADRs</span>
+    <span class="badge">.NET 10</span><span class="badge">559 tests passing</span><span class="badge">15 ADRs</span>
     <span class="badge">deterministic sim + actor runtime</span><span class="badge">p99 12.2 ms @ 100 concurrent (perf run)</span>
   </div>
   <div class="theme-toggle"><button id="theme" type="button" aria-label="Toggle colour theme">Theme</button></div>
@@ -252,19 +252,19 @@ traffic:
   <h3>The experiment, step by step (avg / p95 wait, sim seconds)</h3>
   <div class="table-wrap"><table>
     <tr><th>Step</th><th class="n">Up-peak</th><th class="n">Down-peak</th><th class="n">Lunch</th></tr>
-    <tr><td>Baseline: FIFO + Nearest</td><td class="n">25.9 / 89.3</td><td class="n">255.6 / 592.5 <span class="legend">(saturated)</span></td><td class="n">99.1 / 353.5</td></tr>
-    <tr><td>+ LOOK</td><td class="n">19.2 / 47.1</td><td class="n">28.3 / 84.9</td><td class="n">20.7 / 73.9</td></tr>
+    <tr><td>Baseline: FIFO + Nearest</td><td class="n">26.1 / 89.8</td><td class="n">255.6 / 592.5 <span class="legend">(saturated)</span></td><td class="n">98.8 / 352.3</td></tr>
+    <tr><td>+ LOOK</td><td class="n">19.2 / 47.1</td><td class="n">28.2 / 84.5</td><td class="n">20.7 / 73.9</td></tr>
     <tr><td>+ cost-based dispatch (held-out)</td><td class="n">16.4 / 39.1</td><td class="n">20.8 / 53.3</td><td class="n">13.8 / 38.4</td></tr>
-    <tr><td>± rebalancing (held-out, paired vs sticky LOOK + Cost)</td><td class="n">−0.2 s (n.s.)</td><td class="n">−0.9 ± 0.5 s</td><td class="n">−0.4 ± 0.4 s</td></tr>
+    <tr><td>± rebalancing (held-out, paired vs sticky LOOK + Cost)</td><td class="n">−0.2 s (n.s.)</td><td class="n">−0.8 ± 0.5 s</td><td class="n">−0.4 s (n.s.)</td></tr>
     <tr><td><strong>Final default: LOOK + Cost, next-trip capacity, sticky (no rebalancing)</strong></td><td class="n"><strong>15.8 / 37.9</strong></td><td class="n"><strong>20.6 / 53.2</strong></td><td class="n"><strong>13.8 / 38.4</strong></td></tr>
   </table></div>
-  <div class="callout"><strong>Rebalancing was measured and left off.</strong> On top of cost dispatch it saves at most 0.9 ± 0.5 s on average (down-peak), is not significant at up-peak, and moves about one passenger in eight to a different elevator. Under destination dispatch the passenger has already been told which door to go to, so each move sends someone to the wrong door: a real cost that the simulation does not model. That doesn't justify it, so assignments stay sticky. Rebalancing remains selectable (<code>+rebalance</code>) for buildings that weigh it differently (ADR-006).</div>
+  <div class="callout"><strong>Rebalancing was measured and left off.</strong> On top of cost dispatch it saves at most 0.8 ± 0.5 s on average (down-peak), is not significant at up-peak or lunch, and moves about one passenger in eight to a different elevator. Under destination dispatch the passenger has already been told which door to go to, so each move sends someone to the wrong door: a real cost that the simulation does not model. That doesn't justify it, so assignments stay sticky. Rebalancing remains selectable (<code>+rebalance</code>) for buildings that weigh it differently (ADR-006).</div>
 
   <h3>Hard stage, same method</h3>
   <div class="table-wrap"><table>
     <tr><th>Question</th><th>LOOK + Cost</th><th>LOOK + Nearest</th></tr>
     <tr><td>Chaos schedule vs none, same passengers</td><td>13.8 / 38.4 → 19.6 / 58.9 (+5.8 ± 0.8 s ✱), 100% served</td><td>21.0 / 78.1 → 25.6 / 87.0</td></tr>
-    <tr><td>Typed fleet with access policies</td><td><strong>14.0 / 39.8</strong></td><td>22.8 / 81.9 (Cost −8.8 ± 1.0 s ✱)</td></tr>
+    <tr><td>Typed fleet with access policies</td><td><strong>14.0 / 39.7</strong></td><td>22.8 / 81.9 (Cost −8.8 ± 1.0 s ✱)</td></tr>
     <tr><td>Watchdog T = 5 / 10 / 30 / 60 s: time to detect</td><td>6.0 / 11.3 / 31.9 / 61.2 s</td><td>–</td></tr>
     <tr><td>Watchdog false positives on fault-free runs</td><td colspan="2">≈ 61–65 per run at T = 5 s (freight's 6 s dwell); none at 10 or 30 s → default T = 30 s</td></tr>
   </table></div>
@@ -455,12 +455,15 @@ flowchart LR
     <tr><td>Two callers' requests land on the same elevator at the same instant</td><td>Requests are serialised through the single dispatcher; elevators accept them one message at a time.</td></tr>
     <tr><td>The dispatcher decides on a stale snapshot</td><td><strong>The elevator has the final say</strong>: it accepts, or rejects (maintenance › capacity › stale &gt; 10 s off its own projection). A rejected request is re-dispatched oldest-first. Aging (≥ 60 s) and forced proposals guarantee progress. The cost is visible in the <code>reassignment</code> wait bucket.</td></tr>
     <tr><td>A burst of proposals before any snapshot returns</td><td>A <strong>pending-assignment overlay</strong>: the dispatcher adds its own in-flight proposals to each snapshot. Stale rejections at 100 simultaneous submitters dropped from 3.6 proposals per request to ≈ 1 per request and 0 rejections.</td></tr>
-    <tr><td>A notice about a request arrives before the passenger exists</td><td><strong>Causality, not locks</strong>: <code>AssignRequest</code> posts <code>PassengerWaiting</code> <em>before</em> writing to the request channel, so every later notice is caused by (and arrives after) the registration.</td></tr>
+    <tr><td>A request logged before its passenger exists</td><td><strong>Causality by construction</strong>: the caller waits for room in the bounded queue, then the passengers actor logs the arrival and submits the request in one handler call. (Found by the ordering audit: with a busy passengers actor, 277 of 800 requests were logged out of order; now 0.)</td></tr>
     <tr><td>A request owned by two elevators</td><td>Ownership changes only through accept / release messages handled by the dispatcher; asserted in every stress and property test.</td></tr>
-    <tr><td>An elevator handed pickups back while it still looked in service</td><td>The elevator publishes its new snapshot <em>before</em> the pickups it hands back, so the dispatcher never proposes them straight back.</td></tr>
-    <tr><td>An emergency stuck behind a queue of traffic</td><td>A <strong>priority control channel</strong> per actor (and a priority key in the sim queue): an emergency behind 50 queued commands takes effect first.</td></tr>
+    <tr><td>An elevator handed pickups back while it still looked in service</td><td>On <em>every</em> path the elevator publishes its new snapshot first, and the release travels with the same link delay, so the dispatcher never proposes a pickup straight back. Hand-backs go out oldest call first.</td></tr>
+    <tr><td>Two delayed messages from one sender cross in the runtime</td><td>One ordered delay loop per system, keyed (due time, sequence): equal delays keep their order. The dispatcher also ignores a snapshot older than the one it holds.</td></tr>
+    <tr><td>An emergency stuck behind a queue of traffic</td><td>A <strong>priority lane</strong> per actor (and a priority key in the sim queue) for emergency stop <em>and</em> clear, FIFO between them: an emergency behind 50 queued commands takes effect first, and a clear posted before a stop stays before it.</td></tr>
+    <tr><td>New requests vs control traffic at the dispatcher</td><td>The second and last priority rule: snapshots, acks and releases are handled before new submissions, so decisions use an up-to-date view. FIFO within each lane; pinned by a test (ADR-015).</td></tr>
     <tr><td>Log ordering across actors</td><td>One log-writer task assigns sequence numbers; consumers never depend on cross-actor order.</td></tr>
   </table></div>
+  <div class="callout">The rule behind all of these (ADR-015): <strong>FIFO where order is a correctness property, priority where urgency differs, fairness decided by the cost function, not queue position.</strong> An audit of every queue and ordered iteration found eight places that broke it; each was fixed with a test written first, and 19 deliberate ordering mutations are all caught by the suite.</div>
 
   <h3>Tests that prove it</h3>
   <div class="table-wrap"><table>
@@ -596,15 +599,15 @@ flowchart LR
 <!-- ============================== TESTS ============================== -->
 <section role="tabpanel" id="p-tests" aria-labelledby="t-tests">
   <h2>Test results</h2>
-  <p class="lede">Now: <code>dotnet build -warnaserror</code> clean, 527 tests passing (480 at the <code>v3-hard</code> merge, plus the working day, the heatmap and the difference map). Tests came first for the domain and the policies; no test uses <code>Thread.Sleep</code>.</p>
+  <p class="lede">Now: <code>dotnet build -warnaserror</code> clean, 559 tests passing (480 at the <code>v3-hard</code> merge, plus the working day, the heatmaps and the ordering audit). Tests came first for the domain and the policies; no test uses <code>Thread.Sleep</code>.</p>
 
   <div class="grid">
-    <div class="stat card good"><div class="num">175</div><div class="lbl">Domain: transition table, mechanics, handlers</div></div>
-    <div class="stat card good"><div class="num">84</div><div class="lbl">Policy: FIFO, LOOK, dispatch, projections</div></div>
-    <div class="stat card good"><div class="num">103</div><div class="lbl">Simulation: engine, scenarios, traffic, properties, contract</div></div>
+    <div class="stat card good"><div class="num">189</div><div class="lbl">Domain: transition table, mechanics, handlers</div></div>
+    <div class="stat card good"><div class="num">85</div><div class="lbl">Policy: FIFO, LOOK, dispatch, projections</div></div>
+    <div class="stat card good"><div class="num">111</div><div class="lbl">Simulation: engine, scenarios, traffic, properties, contract</div></div>
     <div class="stat card good"><div class="num">117</div><div class="lbl">TUI: fold, view model, pacer, replay, seek, heatmap views</div></div>
     <div class="stat card good"><div class="num">39</div><div class="lbl">Metrics: report, lifecycle, buckets, ops, heatmaps</div></div>
-    <div class="stat card good"><div class="num">9</div><div class="lbl">Runtime: stress, cross-check, preemption, perf gate</div></div>
+    <div class="stat card good"><div class="num">18</div><div class="lbl">Runtime: stress, cross-check, preemption, perf gate</div></div>
   </div>
 
   <h3>Kinds of evidence</h3>
@@ -622,7 +625,7 @@ flowchart LR
   <h3>Merge verification (v2 → TUI ∥ Hard → v3)</h3>
   <div class="table-wrap"><table>
     <tr><th>Check</th><th>Result</th></tr>
-    <tr><td>All tests with warnings as errors (at the merge; 527 / 527 now)</td><td class="pass">480 / 480</td></tr>
+    <tr><td>All tests with warnings as errors (at the merge; 559 / 559 now)</td><td class="pass">480 / 480</td></tr>
     <tr><td>Same seed across TUI speeds (0.5×, 10×, MAX, headless)</td><td class="pass">identical hash</td></tr>
     <tr><td>v2 results with faults off</td><td class="pass">12 / 12 byte-identical</td></tr>
     <tr><td>chaos.yaml in the TUI: maintenance / emergency / fault markers and the ops panel</td><td class="pass">live; 9 / 9 commands applied; 264 / 264 served</td></tr>

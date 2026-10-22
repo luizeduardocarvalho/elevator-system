@@ -12,10 +12,10 @@ Average wait / p95 wait for 20 seeds per cell, paired on common random numbers.
 
 | Step | File | Up-peak | Down-peak | Lunch |
 |---|---|---|---|---|
-| Baseline: FIFO + Nearest, measured before any change | [m1-baseline](results/m1-baseline.md) | 25.9 / 89.3 | 255.6 / 592.5 (saturated) | 99.1 / 353.5 |
-| + LOOK | [m2-look](results/m2-look.md) | 19.2 / 47.1 | 28.3 / 84.9 | 20.7 / 73.9 |
+| Baseline: FIFO + Nearest, measured before any change | [m1-baseline](results/m1-baseline.md) | 26.1 / 89.8 | 255.6 / 592.5 (saturated) | 98.8 / 352.3 |
+| + LOOK | [m2-look](results/m2-look.md) | 19.2 / 47.1 | 28.2 / 84.5 | 20.7 / 73.9 |
 | + cost-based dispatch (held-out) | [m3-cost](results/m3-cost.md) | 16.4 / 39.1 | 20.8 / 53.3 | 13.8 / 38.4 |
-| ± rebalancing (held-out) | [m4-rebalance](results/m4-rebalance.md) | −0.2 s (n.s.) | −0.9 ± 0.5 s | −0.4 ± 0.4 s |
+| ± rebalancing (held-out) | [m4-rebalance](results/m4-rebalance.md) | −0.2 s (n.s.) | −0.8 ± 0.5 s | −0.4 s (n.s.) |
 | next-trip capacity, final default (held-out) | [m5-next-trip](results/m5-next-trip.md) | **15.8 / 37.9** | **20.6 / 53.2** | **13.8 / 38.4** |
 
 Supporting files:
@@ -24,13 +24,16 @@ Supporting files:
 - [m5-capacity-modes](results/m5-capacity-modes.md): defer vs next-trip.
 
 M1–M4 were produced in capacity mode `defer` (ADR-010) and say so in their headers.
+They were regenerated after the ordering fixes (ADR-015), which change Defer-mode and rebalance runs only, within
+their CIs (e.g. the baseline 25.9 → 26.1 s at up-peak; rebalancing at down-peak −0.9 → −0.8 s, and its lunch saving is no
+longer significant). The default system (next-trip, no rebalancing) is byte-identical.
 
 ### Hard stage (types, access, faults; held-out seeds 21–40)
 
 | Question | File | Answer |
 |---|---|---|
 | What does the chaos schedule cost (same passengers, paired)? | [h1-chaos](results/h1-chaos.md) | LOOK + Cost: wait 13.8 → 19.6 s (+5.8 ± 0.8), p95 +20.5 ± 3.3 s, 100 % served; half the pickups handed back of LOOK + Nearest |
-| Does cost dispatch use elevator types? | [h2-fleet](results/h2-fleet.md) | typed fleet: Cost 14.0 / 39.8 vs Nearest 22.8 / 81.9 (Δ −8.8 ± 1.0 s avg) |
+| Does cost dispatch use elevator types? | [h2-fleet](results/h2-fleet.md) | typed fleet: Cost 14.0 / 39.7 vs Nearest 22.8 / 81.9 (Δ −8.8 ± 1.0 s avg) |
 | Watchdog timeout T: detection vs penalty | [h3-watchdog-timeout](results/h3-watchdog-timeout.md) | detection ≈ T; penalty 9.5 → 129 s per run from T = 5 to 60 s; average wait flat |
 | Watchdog false positives on fault-free runs | [h4-watchdog-false-positives](results/h4-watchdog-false-positives.md) | ≈ 61–65 per run at T = 5 s on the typed fleet (6 s freight dwell); none at 10 or 30 s |
 

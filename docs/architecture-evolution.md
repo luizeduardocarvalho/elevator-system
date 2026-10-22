@@ -224,7 +224,7 @@ So default logs are byte-identical. It closes three gaps:
 | Question | LOOK + Cost | LOOK + Nearest |
 |---|---|---|
 | chaos schedule vs none, same passengers ([h1](results/h1-chaos.md)) | 13.8 / 38.4 → 19.6 / 58.9 | 21.0 / 78.1 → 25.6 / 87.0 |
-| typed fleet with access policies ([h2](results/h2-fleet.md)) | **14.0 / 39.8** | 22.8 / 81.9 |
+| typed fleet with access policies ([h2](results/h2-fleet.md)) | **14.0 / 39.7** | 22.8 / 81.9 |
 | watchdog T = 5 / 10 / 30 / 60 s: detect ([h3](results/h3-watchdog-timeout.md)) | 6.0 / 11.3 / 31.9 / 61.2 s | – |
 | watchdog false positives, fault-free ([h4](results/h4-watchdog-false-positives.md)) | ≈ 61–65 per run at T = 5 s on the fleet; none at 10 or 30 s | |
 

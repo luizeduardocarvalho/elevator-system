@@ -126,9 +126,13 @@ acceptance goes to the `reassignment` bucket.
 
 | Profile | Δ wait avg | Δ wait p95 | Moves per run (seeds 21–25) |
 |---|---|---|---|
-| up-peak | −0.2 ± 0.4 s (n.s.) | +0.1 ± 0.8 s (n.s.) | ~5 of ~225 passengers |
-| down-peak | −0.9 ± 0.5 s | −4.2 ± 1.9 s | ~30 of ~225 (13%) |
-| lunch | −0.4 ± 0.4 s | −1.2 ± 1.7 s (n.s.) | ~9 of ~206 |
+| up-peak | −0.2 ± 0.4 s (n.s.) | 0.0 ± 0.8 s (n.s.) | ~5 of ~225 passengers |
+| down-peak | −0.8 ± 0.5 s | −3.5 ± 2.1 s | ~30 of ~225 (13%) |
+| lunch | −0.4 ± 0.4 s (n.s.) | −0.9 ± 1.8 s (n.s.) | ~9 of ~206 |
+
+*Regenerated after the ordering fixes (ADR-015):* a rebalance move now publishes the elevator's snapshot before the
+release, so the dispatcher re-dispatches against the current view. Down-peak −0.9 → −0.8 s, lunch no longer
+significant: the conclusion below only gets stronger.
 
 On top of Nearest, rebalancing recovers most of Nearest's gap. So rebalancing repairs poor initial decisions, and
 cost-based dispatch rarely makes them.
@@ -141,7 +145,7 @@ cache was keyed by snapshot identity:
 - every other results file is unchanged.
 The corrected numbers above differ from the first version by at most 1.9 s in p95, and the conclusion is unchanged.
 
-**Consequence: sticky stays the default.** At best rebalancing saves 0.9 s on average, at down-peak, while changing
+**Consequence: sticky stays the default.** At best rebalancing saves 0.8 s on average, at down-peak, while changing
 the displayed elevator for about one passenger in eight. Under destination dispatch that is a real usability cost the
 simulation does not model: people walking to the wrong door. Rebalancing stays selectable for buildings that
 weigh it differently.
@@ -207,3 +211,10 @@ dispatcher time per request in a 1k burst.
 - It is off by default, so bench logs are unchanged.
 - Eligibility policies added by Stage 4 (ADR-012) must keep reporting their candidates. Access refusals are logged
   separately as `AccessDenied`.
+
+## Amendment: re-dispatch order (ADR-015)
+
+Pending requests are served oldest first by (t_call, id), and nothing reorders them (VIP priority is a cost term, not
+a queue position). An elevator hands a batch of pickups back in (t_call, id) order, after publishing the snapshot that
+explains it, so requests already waiting are served before a hand-back and a hand-back keeps each passenger's place.
+

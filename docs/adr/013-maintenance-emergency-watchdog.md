@@ -184,3 +184,12 @@ stall from expected arrival times. The watchdog itself does not use it; it only 
   the `ActorKind.FaultScheduler` address, options with defaults and the queue's priority key are internals.
 - `SimEngineOptions.FaultInjector` still defaults to the no-op injector. The TUI must pass `SimFaultInjector.Factory`
   for its m / e / s keys to act.
+
+## Amendment: the emergency lane (ADR-015)
+
+Emergency stop **and clear** take the priority lane in both shells (runtime `Control` channel; sim priority 0), FIFO
+between themselves, so a clear posted before a stop stays before it. Before, only the stop jumped the queue: a clear
+posted just ahead of a stop was applied after it and left the elevator running. Every release now follows the
+snapshot that explains it on every path, including with link latency, and runtime fault commands apply in
+(At, injection order).
+
