@@ -550,6 +550,10 @@ public sealed class Elevator
             case ElevatorState.DoorOpening:
                 var openingLeft = _stuck ? _frozenMs ?? 0 : _deadline!.Value.Ms - Now.Ms;
                 var closing = (_timing.DoorOpeningMs - openingLeft) * _timing.DoorClosingMs / _timing.DoorOpeningMs;
+                // The stop was cut short before the doors opened, so its car call was never served (OpenDoor consumed
+                // it when they started opening). Like a real car call button, it stays lit, and the stop is served
+                // once the emergency is cleared, whether the doors have finished closing by then or not.
+                if (_riders.Any(r => r.DestinationFloor == CurrentFloor)) _carCalls = _carCalls.Add(CurrentFloor);
                 Fire(Trigger.EmergencyClose);
                 _closingStartedAt = Now.AddMs(closing - _timing.DoorClosingMs);
                 StartPhase(closing);

@@ -83,6 +83,28 @@ public class EmergencyTests
         Assert.Contains(e.DrainEvents(), ev => ev is DoorsOpened { Floor: 3, At.Ms: 31_000 });
     }
 
+    /// <summary>
+    /// Cleared while the reversed doors are still closing: the stop was never served (its car call was consumed when the
+    /// doors started opening), so when they finish closing the doors must open again here. Before the fix the elevator
+    /// went idle with the rider still on board, for good (found by HardStageProperties; see StrandedRiderTests).
+    /// </summary>
+    [Fact]
+    public void Opening_doors_reversed_and_cleared_before_they_close_reopen_for_the_riders_of_that_floor()
+    {
+        var e = Make();
+        e.Board(R(1, 1, 3));
+        e.Tick(new Instant(4_400));
+        e.EmergencyStop();
+        e.Tick(new Instant(4_600));
+        e.ClearEmergency();
+        e.DrainEvents();
+
+        e.Tick(new Instant(30_000));
+        var after = e.DrainEvents();
+        Assert.Contains(after, ev => ev is StateChanged { From: ElevatorState.DoorClosing, To: ElevatorState.Idle, At.Ms: 4_800 });
+        Assert.Contains(after, ev => ev is DoorsOpened { Floor: 3, At.Ms: 5_800 });
+    }
+
     [Fact]
     public void Halted_at_a_riders_floor_it_opens_there_first_when_cleared()
     {

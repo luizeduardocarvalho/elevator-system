@@ -193,3 +193,18 @@ posted just ahead of a stop was applied after it and left the elevator running. 
 snapshot that explains it on every path, including with link latency, and runtime fault commands apply in
 (At, injection order).
 
+
+## Amendment: a stop cut short keeps its car call (2026-10-22)
+
+An emergency stop while the doors are opening reverses them before anyone gets off. The car call for that floor had
+already been consumed when the doors started opening. If the emergency was cleared after the doors had closed, the
+clear opened them for the riders. If it was cleared while they were still closing, nothing did: the elevator went idle
+with those riders on board, permanently. FsCheck found this (`HardStageProperties`, replay
+`(14274801865919652370,16715946969894330217)`); a stuck drive had stretched the closing phase across the clear.
+
+Like a real car-call button, the call now stays lit until its stop is served: reversing opening doors in an emergency
+restores the car call for that floor if riders are headed there. The policy serves it once the emergency is cleared and
+the elevator is idle, whichever happens first. No event is added, because the log never showed the call being answered
+(there was no `DoorsOpened` at that floor). Tests: `EmergencyTests`
+(`…cleared_before_they_close_reopen_for_the_riders_of_that_floor`) and `StrandedRiderTests` (the found case). The
+event logs of every committed scenario are byte-identical before and after the fix.
