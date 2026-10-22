@@ -137,6 +137,16 @@ The arithmetic:
 - *Scale note.* 10k simultaneous button presses is more than the population of a 20-floor office building (about
   1,500–2,000 people). The stretch level tests the software's limit, not a load the building can generate.
 
+### Sustained rate (open-loop ramp, ADR-016, [perf-ramp](results/perf-ramp.md))
+
+- **The default system sustains 40k req/s** with p99 7.7 ms. The building is frozen at lunch's busiest moment, so the
+  backlog stays at 15; every request is retired on acceptance.
+- **Achieved kept up with offered to 70k.** From 50k the overload fallback takes over (48 % of decisions at 60k), and
+  in flight settles at about 1.3k.
+- **The single generator thread stops being valid above 40k**, so the true knee is still unmeasured.
+- **The predictions were low.** They were written before the run and put the knee at 30–40k. They priced dispatcher
+  messages from the burst, which carries a far larger backlog.
+
 ### Where a request's time goes (Nearest, 10k burst, [perf-nearest](results/perf-nearest.md))
 
 | Actor | Messages per request | Handler µs / request | Delivery µs / request |
