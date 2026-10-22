@@ -23,6 +23,13 @@ public sealed class RequestRefusedException(int requestId, string policy, string
     public string Policy { get; } = policy;
 }
 
+/// <summary>
+/// An actor's handler threw, so the system stopped serving (ADR-017). Pending and later calls fail with it instead of
+/// waiting forever; <see cref="Exception.InnerException"/> is the handler's exception, also in <see cref="ElevatorSystem.Fault"/>.
+/// </summary>
+public sealed class ElevatorSystemFaultedException(Exception fault)
+    : InvalidOperationException($"the elevator system stopped after a handler failed: {fault.Message}", fault);
+
 /// <summary>An accepted assignment, as seen by whoever submitted the request.</summary>
 /// <param name="CompletedAt">Stopwatch timestamp when the acceptance reached the runtime (before any continuation runs),
 /// so an open-loop generator can measure from its own intended send time (ADR-015).</param>
@@ -146,8 +153,61 @@ public sealed class ElevatorSystem : IAsyncDisposable
     public void Resume()
     {
         if (Interlocked.Exchange(ref _started, 1) == 1) return;
-        foreach (var actor in _actors.Values) _loops.Add(actor.Start(_stop.Token));
-        _loops.Add(_delayed.Run(_stop.Token));
+        foreach (var actor in _actors.Values) _loops.Add(Supervise(actor.Start(_stop.Token)));
+        _loops.Add(Supervise(_delayed.Run(_stop.Token)));
+    }
+
+    /// <summary>
+    /// Fail-stop supervision (ADR-017). A handler that throws may have left its state half-updated, and the other actors
+    /// wait on its replies, so carrying on would serve requests from a broken building. Instead the first exception
+    /// stops the whole system: it becomes <see cref="Fault"/>, every pending call fails with it, later calls fail at once,
+    /// and the request queue is closed so submitters waiting for room are released too. Nothing hangs.
+    /// </summary>
+    private async Task Supervise(Task loop)
+    {
+        try
+        {
+            await loop.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (_stop.IsCancellationRequested)
+        {
+            // stopping
+        }
+        catch (Exception e)
+        {
+            OnFault(e);
+        }
+    }
+
+    private void OnFault(Exception e)
+    {
+        if (Interlocked.CompareExchange(ref _fault, e, null) is not null) return; // only the first fault is the cause
+        var error = new ElevatorSystemFaultedException(e);
+        _requests.Writer.TryComplete(error);
+        foreach (var id in _pending.Keys)
+            if (_pending.TryRemove(id, out var p))
+            {
+                Interlocked.Decrement(ref _inFlight);
+                p.Tcs.TrySetException(error);
+            }
+        foreach (var id in _queries.Keys)
+            if (_queries.TryRemove(id, out var q)) q.TrySetException(error);
+        _stop.Cancel();
+    }
+
+    private Exception? _fault;
+
+    private void ThrowIfFaulted()
+    {
+        if (Fault is { } fault) throw new ElevatorSystemFaultedException(fault);
+    }
+
+    /// <summary>Refuses a request this building cannot serve before it reaches any actor (ADR-017).</summary>
+    private void Validate(Request request, bool log)
+    {
+        if (request.Check(_options.Floors) is not { } error) return;
+        if (log) Record(new RequestRejected(Clock.Now, "Request", request.PickupFloor, request.Direction, error));
+        throw new ArgumentException($"request {request.Id}: {error}", nameof(request));
     }
 
     private int _started;
@@ -180,16 +240,27 @@ public sealed class ElevatorSystem : IAsyncDisposable
 
     /// <summary>
     /// Submits <paramref name="request"/> and completes when an elevator has accepted it. Thread-safe; any number of
-    /// callers. Waits (asynchronously) while the request queue is full. Throws <see cref="RequestRefusedException"/> when
-    /// no elevator may serve it (access policies, ADR-012).
+    /// callers. Waits (asynchronously) while the request queue is full. Throws <see cref="ArgumentException"/> (logged as
+    /// <see cref="RequestRejected"/>) when the request is invalid for this building, <see cref="RequestRefusedException"/>
+    /// when no elevator may serve it (access policies, ADR-012), and <see cref="ElevatorSystemFaultedException"/> when the
+    /// system has stopped after a handler failure (ADR-017).
     /// </summary>
     public async Task<Assignment> AssignRequest(Request request, CancellationToken ct = default)
     {
+        Validate(request, log: true);
+        ThrowIfFaulted();
         var started = Stopwatch.GetTimestamp();
         var tcs = new TaskCompletionSource<Assignment>(TaskCreationOptions.RunContinuationsAsynchronously);
         if (!_pending.TryAdd(request.Id, (tcs, started)))
             throw new InvalidOperationException($"request {request.Id} is already pending");
         Interlocked.Increment(ref _inFlight);
+        // A fault between the check above and TryAdd: OnFault sets the fault before sweeping, so either its sweep saw
+        // this entry or this read sees the fault. Both are full fences.
+        if (Fault is { } fault)
+        {
+            if (_pending.TryRemove(request.Id, out _)) Interlocked.Decrement(ref _inFlight);
+            throw new ElevatorSystemFaultedException(fault);
+        }
 
         // Backpressure stays with the caller (spec requestQueue): wait while the bounded request queue is full.
         try
@@ -217,9 +288,12 @@ public sealed class ElevatorSystem : IAsyncDisposable
     /// </summary>
     public async Task<int?> FindBestElevator(Request request, CancellationToken ct = default)
     {
+        Validate(request, log: false); // a query changes nothing, so it leaves nothing in the log
+        ThrowIfFaulted();
         var id = Interlocked.Increment(ref _nextQuery);
         var tcs = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
         _queries[id] = tcs;
+        if (Fault is { } fault && _queries.TryRemove(id, out _)) throw new ElevatorSystemFaultedException(fault); // faulted meanwhile
         _actors[Address.Dispatcher].Mailbox.Writer.TryWrite(new FindBestQuery(id, request));
         using (ct.Register(() => tcs.TrySetCanceled(ct)))
             return await tcs.Task.ConfigureAwait(false);
@@ -274,8 +348,8 @@ public sealed class ElevatorSystem : IAsyncDisposable
     /// <summary>Events recorded so far, in log order (only with <see cref="RuntimeOptions.KeepEvents"/>).</summary>
     public IReadOnlyList<DomainEvent> Events => [.. _events];
 
-    /// <summary>The first exception that killed an actor loop, if any (a handler bug).</summary>
-    public Exception? Fault => _loops.FirstOrDefault(t => t.IsFaulted)?.Exception?.InnerException;
+    /// <summary>The first exception that killed an actor loop, if any (a handler bug); the system has then stopped (ADR-017).</summary>
+    public Exception? Fault => Volatile.Read(ref _fault);
 
     public PassengersHandler PassengersForInspection => (PassengersHandler)_actors[Address.Passengers].Handler;
 

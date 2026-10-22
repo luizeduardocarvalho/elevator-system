@@ -17,6 +17,7 @@
 | [013](013-maintenance-emergency-watchdog.md) | Maintenance, emergency, watchdog and reassignment | Accepted (emergency lane amended by 015) |
 | [014](014-working-day-and-wait-heatmap.md) | A working-day scenario and the wait heatmap | Accepted |
 | [015](015-ordering-rules.md) | Ordering rules: FIFO for correctness, priority for urgency, fairness by cost | Accepted |
+| [017](017-request-validation-and-fail-stop.md) | Request validation at the runtime boundary and fail-stop supervision | Accepted |
 
 The interface between Stages 3 and 4 is the [shared v3 contract](../contract-v3.md). The ADRs it touches carry an
 amendment section: 002 (ElevatorMode), 003 (steppable engine), 005 (injection seam), 006 (explained decisions),

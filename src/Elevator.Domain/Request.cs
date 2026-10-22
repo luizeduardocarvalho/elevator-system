@@ -19,17 +19,23 @@ public sealed record Request(int PickupFloor, int DestinationFloor, Direction Di
     /// <param name="declared">Direction the caller claims (e.g. from an input file); must match pickup→destination.</param>
     public static Result<Request> Create(int pickup, int destination, SimTime timestamp, int floors, Direction? declared = null, int id = 0, int load = 1)
     {
-        if (Floors.Check(pickup, floors) is { } pickupError) return Result<Request>.Fail($"pickup: {pickupError}");
-        if (Floors.Check(destination, floors) is { } destError) return Result<Request>.Fail($"destination: {destError}");
-        if (pickup == destination) return Result<Request>.Fail($"pickup and destination are both floor {pickup}");
+        var request = new Request(pickup, destination, declared ?? Directions.Between(pickup, destination) ?? Direction.Up, timestamp, id, load);
+        return request.Check(floors) is { } error ? Result<Request>.Fail(error) : Result<Request>.Ok(request);
+    }
 
-        var direction = Directions.Between(pickup, destination)!.Value;
-        if (declared is { } d && d != direction)
-            return Result<Request>.Fail($"direction {d} is inconsistent with {pickup}→{destination}");
-
-        if (load <= 0) return Result<Request>.Fail($"load must be > 0 (got {load})");
-
-        return Result<Request>.Ok(new Request(pickup, destination, direction, timestamp, id, load));
+    /// <summary>
+    /// Null when this request is valid in a building of <paramref name="floors"/> floors, otherwise the reason. The record
+    /// constructor does not validate, so every entry point that accepts a <see cref="Request"/> checks it (ADR-017).
+    /// </summary>
+    public string? Check(int floors)
+    {
+        if (Floors.Check(PickupFloor, floors) is { } pickupError) return $"pickup: {pickupError}";
+        if (Floors.Check(DestinationFloor, floors) is { } destError) return $"destination: {destError}";
+        if (PickupFloor == DestinationFloor) return $"pickup and destination are both floor {PickupFloor}";
+        if (Direction != Directions.Between(PickupFloor, DestinationFloor))
+            return $"direction {Direction} is inconsistent with {PickupFloor}→{DestinationFloor}";
+        if (Load <= 0) return $"load must be > 0 (got {Load})";
+        return null;
     }
 }
 

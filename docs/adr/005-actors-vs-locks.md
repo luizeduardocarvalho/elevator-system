@@ -104,3 +104,9 @@ Both shells gained the same entry point for fault and operator commands:
 for both shells. Commands are still messages to the single owner of each handler, so there is no shared state and
 no lock. Whether an emergency stop needs to jump the mailbox queue (a priority channel or a flag) is Stage 4's
 decision, in ADR-013.
+
+## Amendment: validation and supervision (ADR-017)
+
+`AssignRequest` and `FindBestElevator` now validate requests before they reach an actor, and every actor loop runs
+under fail-stop supervision: the first handler exception becomes `ElevatorSystem.Fault` and fails every caller with
+`ElevatorSystemFaultedException` instead of leaving them waiting. See [ADR-017](017-request-validation-and-fail-stop.md).
