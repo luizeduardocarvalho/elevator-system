@@ -15,6 +15,7 @@
 | [011](011-tui.md) | TUI: choice, renderer decoupling, timestep and accumulator, seek by re-simulation | Accepted |
 | [012](012-eligibility-and-elevator-types.md) | Eligibility policies and elevator types | Accepted |
 | [013](013-maintenance-emergency-watchdog.md) | Maintenance, emergency, watchdog and reassignment | Accepted |
+| [014](014-working-day-and-wait-heatmap.md) | A working-day scenario and the wait heatmap | Accepted |
 
 The interface between Stages 3 and 4 is the [shared v3 contract](../contract-v3.md). The ADRs it touches carry an
 amendment section: 002 (ElevatorMode), 003 (steppable engine), 005 (injection seam), 006 (explained decisions),

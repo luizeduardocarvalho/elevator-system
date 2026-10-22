@@ -36,6 +36,13 @@ M1–M4 were produced in capacity mode `defer` (ADR-010) and say so in their hea
 
 The v2 results above regenerate byte-identically with the Hard stage in place (faults off, default config).
 
+### A working day (07:00–19:00, held-out seeds 21–40)
+
+| Question | File | Answer |
+|---|---|---|
+| How does each strategy cope with a whole day? | [d1-day](results/d1-day.md) | wait avg / p95: FIFO + Nearest 114.8 / 532.8 s, LOOK + Nearest 21.0 / 70.0 s, LOOK + Cost 15.7 / 41.5 s; nobody left behind under Cost |
+| Where and when do people wait? | [d1-day-heatmaps](results/d1-day-heatmaps.md) | evening down-peak and the lunch run strand the upper floors; the morning up-peak barely shows as wait (it costs ride time instead) |
+
 ## 2. The cost of a dispatch decision (BenchmarkDotNet)
 
 One cost-based decision for 4 elevators on 20 floors, each holding N requests not yet picked up. Every call builds a
