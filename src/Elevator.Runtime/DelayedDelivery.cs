@@ -19,8 +19,11 @@ internal sealed class DelayedDelivery(RealClock clock, Func<Envelope, Cancellati
     private long _seq;
 
     /// <summary>Thread-safe. Due at now + DelayMs on the system clock; delivered with DelayMs = 0.</summary>
-    public void Schedule(Envelope envelope) =>
-        _incoming.Writer.TryWrite((clock.Now.Ms + envelope.DelayMs, Interlocked.Increment(ref _seq), envelope with { DelayMs = 0 }));
+    public void Schedule(Envelope envelope) => ScheduleAt(clock.Now.AddMs(envelope.DelayMs), envelope);
+
+    /// <summary>Thread-safe. Due at <paramref name="due"/> (sim time; now or past = as soon as possible), in order of (due, call order).</summary>
+    public void ScheduleAt(SimTime due, Envelope envelope) =>
+        _incoming.Writer.TryWrite((due.Ms, Interlocked.Increment(ref _seq), envelope with { DelayMs = 0 }));
 
     public Task Run(CancellationToken ct) => Task.Run(() => Loop(ct), CancellationToken.None);
 

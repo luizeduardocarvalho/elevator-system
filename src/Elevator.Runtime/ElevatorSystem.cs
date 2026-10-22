@@ -186,11 +186,22 @@ public sealed class ElevatorSystem : IAsyncDisposable
     /// for fault and operator commands, as <c>SimEngine.Post</c> in the simulator). An emergency stop goes to the actor's
     /// priority control channel, ahead of its mailbox (ADR-013).
     /// </summary>
-    public void Post(Address to, Message message)
+    public void Post(Address to, Message message) => Route(to, message);
+
+    /// <summary>
+    /// Delivers <paramref name="message"/> to <paramref name="to"/> at sim time <paramref name="at"/> on this system's
+    /// clock, in order of (at, call order) with everything else scheduled (ADR-015). The fault injector uses it.
+    /// </summary>
+    internal void PostAt(SimTime at, Address to, Message message) => _delayed.ScheduleAt(at, new Envelope(to, message));
+
+    /// <summary>
+    /// The lane a message takes into an actor. Emergency commands preempt: the priority control channel is read before
+    /// the mailbox (ADR-013). Stop and clear share that lane, so they keep their order among themselves (ADR-015).
+    /// Everything else goes to the mailbox, FIFO.
+    /// </summary>
+    private void Route(Address to, Message message)
     {
         var actor = _actors[to];
-        // Emergency commands preempt: the priority control channel is read before the mailbox (ADR-013). Stop and clear
-        // share that lane, so they keep their posting order among themselves (ADR-015).
         var channel = message is ApplyFault { Command.Kind: FaultKind.EmergencyStop or FaultKind.EmergencyClear } ? actor.Control : actor.Mailbox;
         channel.Writer.TryWrite(message);
     }
@@ -253,7 +264,7 @@ public sealed class ElevatorSystem : IAsyncDisposable
                 await _requests.Writer.WriteAsync(submit, ct).ConfigureAwait(false); // passengers' submissions share the bounded queue
                 break;
             default:
-                _actors[envelope.To].Mailbox.Writer.TryWrite(envelope.Message);
+                Route(envelope.To, envelope.Message);
                 break;
         }
     }
