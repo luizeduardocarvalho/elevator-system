@@ -8,7 +8,6 @@ using Elevator.Domain.Faults;
 using Elevator.Metrics;
 using Elevator.Policy;
 using Elevator.Policy.Dispatch;
-using Elevator.Simulation;
 
 namespace Elevator.Runtime;
 
@@ -313,14 +312,17 @@ public sealed class ElevatorSystem : IAsyncDisposable
     /// <summary>Spec's <c>requestQueue</c>: submissions waiting in the bounded request channel.</summary>
     public int RequestQueueLength => _requests.Reader.Count;
 
-    /// <summary>Feeds scripted/generated passengers at their arrival times (sim time on this system's clock).</summary>
-    public Task PlayPassengers(IEnumerable<Passenger> passengers, CancellationToken ct = default) => Task.Run(async () =>
+    /// <summary>
+    /// Feeds passengers' requests as arrivals, each at its <see cref="Request.Timestamp"/> (sim time on this system's
+    /// clock), in order of (timestamp, id).
+    /// </summary>
+    public Task PlayPassengers(IEnumerable<Request> arrivals, CancellationToken ct = default) => Task.Run(async () =>
     {
-        foreach (var p in passengers.OrderBy(p => p.ArrivesAt).ThenBy(p => p.Id))
+        foreach (var r in arrivals.OrderBy(r => r.Timestamp).ThenBy(r => r.Id))
         {
-            var wait = Clock.WallUntil(p.ArrivesAt);
+            var wait = Clock.WallUntil(r.Timestamp);
             if (wait > TimeSpan.Zero) await Task.Delay(wait, ct).ConfigureAwait(false);
-            _actors[Address.Passengers].Mailbox.Writer.TryWrite(new PassengerArrives(p.ToRequest()));
+            _actors[Address.Passengers].Mailbox.Writer.TryWrite(new PassengerArrives(r));
         }
     }, ct);
 

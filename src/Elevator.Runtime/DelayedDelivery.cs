@@ -1,7 +1,6 @@
 using System.Threading.Channels;
 using Elevator.Domain;
 using Elevator.Domain.Control;
-using Elevator.Simulation;
 
 namespace Elevator.Runtime;
 

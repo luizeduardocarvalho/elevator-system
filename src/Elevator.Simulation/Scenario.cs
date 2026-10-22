@@ -2,6 +2,7 @@ using Elevator.Domain;
 using Elevator.Domain.Control;
 using Elevator.Domain.Faults;
 using Elevator.Policy.Access;
+using Elevator.Runtime;
 
 namespace Elevator.Simulation;
 
@@ -40,11 +41,8 @@ public sealed record Scenario(
     /// <summary>Floor restrictions and VIP service (ADR-012). Default: none.</summary>
     public AccessConfig Access { get; init; } = AccessConfig.None;
 
-    /// <summary>Default watchdog timeout T (ADR-013): 30 s of sim time without progress while having work.</summary>
-    public const long DefaultWatchdogTimeoutMs = 30_000;
-
-    /// <summary>Watchdog timeout in sim ms (YAML <c>watchdog.timeoutS</c>); null = no watchdog.</summary>
-    public long? WatchdogTimeoutMs { get; init; } = DefaultWatchdogTimeoutMs;
+    /// <summary>Watchdog timeout in sim ms (YAML <c>watchdog.timeoutS</c>); null = no watchdog. Default: the runtime's.</summary>
+    public long? WatchdogTimeoutMs { get; init; } = RuntimeOptions.DefaultWatchdogTimeoutMs;
 
     /// <summary>
     /// Time of day at sim time 0 (YAML <c>clockStart: "07:00"</c>), for display only (the heatmap's hour labels). It never

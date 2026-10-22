@@ -4,6 +4,7 @@ using Elevator.Domain.Faults;
 using Elevator.Policy;
 using Elevator.Policy.Access;
 using Elevator.Policy.Dispatch;
+using Elevator.Runtime;
 using YamlDotNet.Core;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
@@ -83,7 +84,7 @@ public static class ScenarioLoader
         var fleet = LoadFleet(dto.Building, floors, timing, capacity, errors);
 
         var access = LoadAccess(dto.Access, floors, elevators, errors);
-        var watchdogMs = Scenario.DefaultWatchdogTimeoutMs;
+        var watchdogMs = RuntimeOptions.DefaultWatchdogTimeoutMs;
         if (dto.Watchdog?.TimeoutS is { } timeoutS)
         {
             if (timeoutS <= 0) errors.Add($"watchdog.timeoutS must be > 0 (got {timeoutS})");

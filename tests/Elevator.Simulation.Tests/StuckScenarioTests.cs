@@ -1,6 +1,7 @@
 using Elevator.Domain;
 using Elevator.Domain.Events;
 using Elevator.Domain.Faults;
+using Elevator.Runtime;
 
 namespace Elevator.Simulation.Tests;
 
@@ -25,8 +26,8 @@ public class StuckScenarioTests
 
         var detected = events.OfType<FaultDetected>().Single();
         Assert.Equal(E, detected.ElevatorId);
-        Assert.InRange(detected.At.Ms - stuckAt.Ms, 1, Scenario.DefaultWatchdogTimeoutMs);
-        Assert.True(detected.SilentForMs >= Scenario.DefaultWatchdogTimeoutMs);
+        Assert.InRange(detected.At.Ms - stuckAt.Ms, 1, RuntimeOptions.DefaultWatchdogTimeoutMs);
+        Assert.True(detected.SilentForMs >= RuntimeOptions.DefaultWatchdogTimeoutMs);
 
         var released = events.OfType<AssignmentReleased>().Where(r => r.Reason == AssignmentReason.Fault).ToList();
         Assert.True(pickups.IsSubsetOf(released.Select(r => r.RequestId)));
@@ -54,6 +55,6 @@ public class StuckScenarioTests
     public void The_watchdog_timeout_is_configurable()
     {
         Assert.Equal(45_000, ScenarioLoader.Load("watchdog: { timeoutS: 45 }").Scenario!.WatchdogTimeoutMs);
-        Assert.Equal(Scenario.DefaultWatchdogTimeoutMs, ScenarioLoader.Load("name: x").Scenario!.WatchdogTimeoutMs);
+        Assert.Equal(RuntimeOptions.DefaultWatchdogTimeoutMs, ScenarioLoader.Load("name: x").Scenario!.WatchdogTimeoutMs);
     }
 }

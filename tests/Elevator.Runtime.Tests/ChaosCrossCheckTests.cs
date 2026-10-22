@@ -32,7 +32,7 @@ public class ChaosCrossCheckTests
 
         await using var system = ElevatorSystem.Start(scenario.ToRuntimeOptions(speed: 200));
         foreach (var f in scenario.FaultSchedule) system.FaultInjector.Inject(f);
-        await system.PlayPassengers(passengers);
+        await system.PlayPassengers(passengers.Select(p => p.ToRequest()));
         var deadline = DateTime.UtcNow.AddSeconds(40);
         while (system.PassengersForInspection.Delivered < passengers.Count && DateTime.UtcNow < deadline)
             await Task.Delay(50);

@@ -21,7 +21,7 @@ public class CrossCheckTests
         var sim = ReportBuilder.Build(SimEngine.Run(scenario).Events);
 
         await using var system = ElevatorSystem.Start(scenario.ToRuntimeOptions(speed: 200));
-        await system.PlayPassengers(passengers);
+        await system.PlayPassengers(passengers.Select(p => p.ToRequest()));
         var deadline = DateTime.UtcNow.AddSeconds(30);
         while (system.PassengersForInspection.Delivered < passengers.Count && DateTime.UtcNow < deadline)
             await Task.Delay(50);

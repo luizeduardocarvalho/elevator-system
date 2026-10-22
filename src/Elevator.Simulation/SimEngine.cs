@@ -4,6 +4,7 @@ using Elevator.Domain.Events;
 using Elevator.Domain.Faults;
 using Elevator.Policy;
 using Elevator.Policy.Dispatch;
+using Elevator.Runtime;
 
 namespace Elevator.Simulation;
 
@@ -26,11 +27,6 @@ public sealed record SimEngineOptions(bool EmitDispatchEvaluations = false, Func
 /// </summary>
 public sealed class SimEngine
 {
-    /// <summary>
-    /// Requests in flight above which the dispatcher falls back to Nearest (ADR-006).
-    /// </summary>
-    public const int OverloadThreshold = 200;
-
     private readonly PriorityQueue<Envelope, (long TimeMs, int Priority, long Seq)> _queue = new();
     private readonly Dictionary<Address, IHandler> _handlers = [];
     private readonly Dictionary<Address, SimTime> _scheduledWakeUps = [];
@@ -81,7 +77,7 @@ public sealed class SimEngine
             Register(handler);
         }
         Register(new DispatcherHandler(dispatch, scenario.Elevators, scenario.Timing,
-            new DispatcherOptions(latency.DispatchMs, OverloadThreshold: OverloadThreshold, EmitDispatchEvaluations: options.EmitDispatchEvaluations)
+            new DispatcherOptions(latency.DispatchMs, OverloadThreshold: RuntimeOptions.DefaultOverloadThreshold, EmitDispatchEvaluations: options.EmitDispatchEvaluations)
             {
                 Access = scenario.Access.CreatePipeline(),
                 WatchdogTimeoutMs = scenario.WatchdogTimeoutMs,
