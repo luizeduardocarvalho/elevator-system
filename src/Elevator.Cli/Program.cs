@@ -20,7 +20,8 @@ app.Configure(config =>
     config.AddCommand<HeatmapCommand>("heatmap")
         .WithDescription("The shape of a working day: wait by floor × time of day, as a coloured heatmap (from a scenario or a log).")
         .WithExample("heatmap", "day")
-        .WithExample("heatmap", "day", "--dispatch", "nearest");
+        .WithExample("heatmap", "day", "--dispatch", "nearest")
+        .WithExample("heatmap", "day", "--vs", "look+nearest");
     config.AddCommand<ReplayCommand>("replay")
         .WithDescription("The same view driven from a JSONL event log; seeking re-folds the log.")
         .WithExample("replay", "out/lunch-seed1.jsonl", "--speed", "50");

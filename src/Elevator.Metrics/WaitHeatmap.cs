@@ -9,6 +9,33 @@ public enum HeatStat
     P95,
 }
 
+/// <summary>A floors × time-bins grid of wait statistics in sim seconds, as drawn by the heatmap view.</summary>
+public interface IHeatGrid
+{
+    int Floors { get; }
+
+    int Bins { get; }
+
+    long BinMs { get; }
+
+    HeatStat Stat { get; }
+
+    /// <summary>The value for callers from <paramref name="floor"/> (1-based) in <paramref name="bin"/>; null when nobody called.</summary>
+    double? Cell(int floor, int bin);
+
+    int Count(int floor, int bin);
+
+    double? FloorStat(int floor);
+
+    double? BinStat(int bin);
+
+    double? RangeStat(int fromBin, int toBin);
+
+    double? RegionStat(int fromFloor, int toFloor, int fromBin, int toBin);
+
+    double? Overall { get; }
+}
+
 /// <summary>
 /// "The shape of a working day": wait (sim seconds) by origin floor × call-time bin, from the event log only.
 /// <list type="bullet">
@@ -21,7 +48,7 @@ public enum HeatStat
 /// busy bin weighs more than a quiet one, as in the report.</item>
 /// </list>
 /// </summary>
-public sealed class WaitHeatmap
+public sealed class WaitHeatmap : IHeatGrid
 {
     private readonly List<double>[,] _waits;
     private readonly HeatStat _stat;

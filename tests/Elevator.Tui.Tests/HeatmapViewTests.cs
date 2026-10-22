@@ -103,4 +103,68 @@ public class HeatmapViewTests
         Assert.Equal(map.Passengers, map.Boarded); // everyone served by the end of the day
         Assert.Equal(HeatmapView.Render(map, new HeatmapOptions("day", Plain: true)), HeatmapView.Render(map, new HeatmapOptions("day", Plain: true)));
     }
+
+    [Theory]
+    [InlineData(-45, 0)]
+    [InlineData(-30, 1)]
+    [InlineData(-15.1, 1)]
+    [InlineData(-5.1, 2)]
+    [InlineData(-5, 3)]
+    [InlineData(0, 3)]
+    [InlineData(4.9, 3)]
+    [InlineData(5, 4)]
+    [InlineData(29.9, 5)]
+    [InlineData(30, 6)]
+    public void The_difference_scale_diverges_around_a_5_second_neutral_band(double seconds, int level) =>
+        Assert.Equal(level, HeatScale.Difference.Level(seconds));
+
+    /// <summary>Same arrivals as <see cref="Small"/>; under B floor 3 waits 10 s (A: 70 s) and floor 1 waits 40 s (A: 20 s).</summary>
+    private static WaitDiffHeatmap SmallDifference()
+    {
+        DomainEvent[] arrivals =
+        [
+            new SimulationStarted(S(0), "small", 1, 3, "look", 2),
+            new PassengerArrived(S(0), 1, 3, 1),
+            new PassengerArrived(S(3600), 2, 1, 2),
+        ];
+        DomainEvent[] a = [.. arrivals, new PassengerBoarded(S(70), 1, 0, 3), new PassengerBoarded(S(3620), 2, 0, 1)];
+        DomainEvent[] b = [.. arrivals, new PassengerBoarded(S(10), 1, 0, 3), new PassengerBoarded(S(3640), 2, 0, 1)];
+        return WaitDiffHeatmap.FromEvents(a, b, binS: 600, spanS: 7200);
+    }
+
+    [Fact]
+    public void Difference_rows_use_the_diverging_glyphs_and_signed_margins()
+    {
+        var lines = HeatmapView.RenderDifference(SmallDifference(), "look+cost", "look+nearest", new HeatmapOptions("small", new TimeSpan(7, 0, 0), Plain: true));
+        var rows = lines.Where(l => l.Contains('│')).ToList();
+
+        Assert.Equal("   3│#           │ +60.0 s", rows[0]);
+        Assert.Equal("   2│            │ –", rows[1]);
+        Assert.Equal("   1│      =     │ -20.0 s", rows[2]);
+        Assert.Equal(" all│#     =     │ +20.0 s", rows[3]);
+        Assert.Contains("     +60s  -20s", lines);
+        Assert.Contains(lines, l => l.Contains("A = look+cost, B = look+nearest", StringComparison.Ordinal));
+        Assert.Contains(lines, l => l.StartsWith("2 passengers boarded in both runs · 0 left out", StringComparison.Ordinal)
+                                    && l.Contains("less in 1 cells, more in 1, within ±5 s in 0", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Difference_colour_lines_are_valid_markup()
+    {
+        foreach (var line in HeatmapView.RenderDifference(SmallDifference(), "a", "b", new HeatmapOptions("t")))
+            _ = new Spectre.Console.Markup(line);
+    }
+
+    /// <summary>On the working day, cost dispatch beats Nearest overall and where Nearest hurts most: the evening upper floors.</summary>
+    [Fact]
+    public void On_the_working_day_cost_waits_less_than_nearest_overall_and_in_the_evening()
+    {
+        var day = Repo.Load("day.yaml");
+        var map = WaitDiffHeatmap.FromEvents(SimEngine.Run(day).Events, SimEngine.Run(day with { Dispatch = "nearest" }).Events, binS: 600);
+        static int Bin(double hour) => (int)Math.Round((hour - 7) * 6);
+
+        Assert.Equal(map.Passengers, map.Paired);
+        Assert.True(map.Overall < -3, $"overall Δ {map.Overall:0.0} s");
+        Assert.True(map.RegionStat(2, 20, Bin(17.17), Bin(18)) < -5, $"evening upper floors Δ {map.RegionStat(2, 20, Bin(17.17), Bin(18)):0.0} s");
+    }
 }
