@@ -1,0 +1,42 @@
+# A working day, 07:00-19:00: morning up-peak, lunch (out, then back), evening down-peak, light interfloor
+# traffic in between. Same building and same peak rate (12/min) as up-peak, down-peak and lunch, so its bands
+# can be read against those runs. The mix on a rate point applies from that point until the next one that has a
+# mix (a step); the rate is linear between points. Sim time 0 is 07:00 (clockStart, display only).
+#   elevator heatmap day                 the shape of the day: wait by floor x time of day
+#   elevator heatmap day --dispatch nearest
+name: day
+seed: 1
+clockStart: "07:00"
+building:
+  floors: 20
+  elevators: 4
+  capacity: 10
+  bypassThreshold: 0.8
+scheduling: look
+dispatch: cost
+maxSimTimeS: 46800          # 13 h: traffic stops at 19:00, the last hour lets everyone arrive
+traffic:
+  profile:
+    lobby: 1
+    mix: { fromLobby: 0.30, toLobby: 0.30, interfloor: 0.40 }            # default: midday
+    rate:
+      # morning up-peak: people arrive at the lobby and go up
+      - { atS: 0,     perMinute: 1,  mix: { fromLobby: 0.85, toLobby: 0.05, interfloor: 0.10 } }   # 07:00
+      - { atS: 3000,  perMinute: 3 }                                                              # 07:50
+      - { atS: 4200,  perMinute: 12 }                                                             # 08:10
+      - { atS: 6600,  perMinute: 12 }                                                             # 08:50
+      - { atS: 8400,  perMinute: 3 }                                                              # 09:20
+      # mid-morning: light interfloor traffic (meetings)
+      - { atS: 9000,  perMinute: 2,  mix: { fromLobby: 0.30, toLobby: 0.30, interfloor: 0.40 } }  # 09:30
+      # lunch: first out to the lobby, then back up
+      - { atS: 17400, perMinute: 2,  mix: { fromLobby: 0.10, toLobby: 0.75, interfloor: 0.15 } }  # 11:50
+      - { atS: 18600, perMinute: 12 }                                                             # 12:10
+      - { atS: 19800, perMinute: 5,  mix: { fromLobby: 0.75, toLobby: 0.10, interfloor: 0.15 } }  # 12:30
+      - { atS: 21000, perMinute: 12 }                                                             # 12:50
+      - { atS: 22200, perMinute: 2,  mix: { fromLobby: 0.30, toLobby: 0.30, interfloor: 0.40 } }  # 13:10
+      # evening down-peak: everyone goes home
+      - { atS: 35400, perMinute: 2,  mix: { fromLobby: 0.05, toLobby: 0.85, interfloor: 0.10 } }  # 16:50
+      - { atS: 36600, perMinute: 12 }                                                             # 17:10
+      - { atS: 39000, perMinute: 12 }                                                             # 17:50
+      - { atS: 40800, perMinute: 3 }                                                              # 18:20
+      - { atS: 43200, perMinute: 0 }                                                              # 19:00

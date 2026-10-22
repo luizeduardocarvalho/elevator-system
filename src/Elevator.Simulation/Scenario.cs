@@ -45,6 +45,12 @@ public sealed record Scenario(
 
     /// <summary>Watchdog timeout in sim ms (YAML <c>watchdog.timeoutS</c>); null = no watchdog.</summary>
     public long? WatchdogTimeoutMs { get; init; } = DefaultWatchdogTimeoutMs;
+
+    /// <summary>
+    /// Time of day at sim time 0 (YAML <c>clockStart: "07:00"</c>), for display only (the heatmap's hour labels). It never
+    /// reaches the engine or the event log; null = label elapsed time.
+    /// </summary>
+    public TimeSpan? ClockStart { get; init; }
 }
 
 /// <summary>Access configuration of a building (ADR-012); YAML <c>access:</c>.</summary>

@@ -75,6 +75,13 @@ public static class ScenarioLoader
         var maxSimTimeS = dto.MaxSimTimeS ?? 3600;
         if (maxSimTimeS <= 0) errors.Add("maxSimTimeS must be > 0");
 
+        TimeSpan? clockStart = null;
+        if (dto.ClockStart is { } clockText)
+        {
+            if (TimeSpan.TryParseExact(clockText, @"hh\:mm", System.Globalization.CultureInfo.InvariantCulture, out var t)) clockStart = t;
+            else errors.Add($"clockStart must be a time of day as HH:MM (got '{clockText}')");
+        }
+
         var timing = new ElevatorTiming(
             dto.Timing?.FloorTravelMs ?? ElevatorTiming.Default.FloorTravelMs,
             dto.Timing?.DoorOpeningMs ?? ElevatorTiming.Default.DoorOpeningMs,
@@ -129,7 +136,8 @@ public static class ScenarioLoader
         if (dto.Traffic?.Profile is { } prof)
         {
             profile = new TrafficProfile(
-                (prof.Rate ?? []).Select(r => new RatePoint(r.AtS ?? -1, r.PerMinute ?? -1)).ToList(),
+                (prof.Rate ?? []).Select(r => new RatePoint(r.AtS ?? -1, r.PerMinute ?? -1,
+                    r.Mix is { } m ? new TrafficMix(m.FromLobby ?? 0, m.ToLobby ?? 0, m.Interfloor ?? 0) : null)).ToList(),
                 new TrafficMix(prof.Mix?.FromLobby ?? 0, prof.Mix?.ToLobby ?? 0, prof.Mix?.Interfloor ?? 0),
                 prof.Lobby ?? Floors.Lowest);
             errors.AddRange(profile.Validate(floors));
@@ -174,7 +182,7 @@ public static class ScenarioLoader
             profile,
             latency,
             capacityMode,
-            faults.OrderBy(f => f.At).ToList()) { Fleet = fleet, Access = access, WatchdogTimeoutMs = watchdogMs }, []);
+            faults.OrderBy(f => f.At).ToList()) { Fleet = fleet, Access = access, WatchdogTimeoutMs = watchdogMs, ClockStart = clockStart }, []);
     }
 
     /// <summary><c>access:</c> floor restrictions and VIP service (ADR-012).</summary>
@@ -245,6 +253,7 @@ public static class ScenarioLoader
         public BuildingDto? Building { get; set; }
         public LatencyDto? Latency { get; set; }
         public double? MaxSimTimeS { get; set; }
+        public string? ClockStart { get; set; }
         public TimingDto? Timing { get; set; }
         public List<PassengerDto>? Passengers { get; set; }
         public TrafficDto? Traffic { get; set; }
@@ -348,6 +357,7 @@ public static class ScenarioLoader
     {
         public double? AtS { get; set; }
         public double? PerMinute { get; set; }
+        public MixDto? Mix { get; set; }
     }
 
     private sealed class PoissonDto
