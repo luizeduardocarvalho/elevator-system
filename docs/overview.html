@@ -529,6 +529,7 @@ flowchart LR
     <div class="stat card good"><div class="num">12.2 ms</div><div class="lbl">assignment p99 at 100 concurrent, perf run (SLO &lt; 100 ms)</div></div>
     <div class="stat card good"><div class="num">53.6 ms</div><div class="lbl">assignment p99 at 1,000 concurrent, perf run</div></div>
     <div class="stat card"><div class="num">≈ 4.5k</div><div class="lbl">simultaneous requests within the SLO, from the curve (≈ 45× the spec's "100+")</div></div>
+    <div class="stat card good"><div class="num">40k/s</div><div class="lbl">sustained requests/s at p99 7.7 ms, open-loop ramp (highest valid step)</div></div>
     <div class="stat card good"><div class="num">0 / 0</div><div class="lbl">requests lost / duplicated, at every load</div></div>
     <div class="stat card good"><div class="num">+0.9%</div><div class="lbl">heap growth over a 60 s soak (1.06 → 1.10 MB)</div></div>
   </div>
@@ -573,6 +574,25 @@ flowchart LR
     <li>The default spends cost-function time on the first 200 in flight, so on the curve it crosses at ≈ 4.5k. 10k needs ≈ 175 ms at that rate, hence the stretch FAIL (182 ms on the curve, 202 ms in the perf run).</li>
     <li>For scale, 10k simultaneous presses is more than the population of a 20-floor office building (≈ 1,500–2,000 people).</li>
   </ol>
+
+  <h3>Sustained rate (open-loop ramp, ADR-016)</h3>
+  <p class="legend">Source: <strong>ramp</strong>, <code>elevator perf --ramp</code> (<code>docs/results/perf-ramp.md</code>), commit <code>72b5707</code>. The building is frozen at lunch's busiest moment, and every request is retired on acceptance, so the backlog stays at 15. Each request is sent at its scheduled time whatever happened to the previous ones, and latency runs from that scheduled time. Each step is 30 s, repeated 3 times; the row shows the median-p99 repeat. A step is invalid if the sender itself ran more than 1 ms late (p99).</p>
+  <div class="table-wrap"><table>
+    <tr><th class="n">Offered /s</th><th class="n">Achieved /s</th><th class="n">p99 ms</th><th class="n">In flight</th><th class="n">By fallback</th><th>Valid</th></tr>
+    <tr><td class="n">10k</td><td class="n">10,000</td><td class="n">0.90</td><td class="n">0.6</td><td class="n">0 %</td><td class="pass">yes</td></tr>
+    <tr><td class="n">20k</td><td class="n">20,000</td><td class="n">1.01</td><td class="n">1.7</td><td class="n">0 %</td><td class="pass">yes</td></tr>
+    <tr><td class="n">30k</td><td class="n">30,001</td><td class="n">2.13</td><td class="n">3.4</td><td class="n">0 %</td><td class="pass">yes</td></tr>
+    <tr><td class="n">40k</td><td class="n">40,000</td><td class="n">7.74</td><td class="n">12.4</td><td class="n">0.2 %</td><td class="pass">yes</td></tr>
+    <tr><td class="n">50k</td><td class="n">50,002</td><td class="n">27.84</td><td class="n">475</td><td class="n">5.8 %</td><td class="fail">no (sender lag)</td></tr>
+    <tr><td class="n">60k</td><td class="n">60,003</td><td class="n">46.09</td><td class="n">1,254</td><td class="n">48 %</td><td class="fail">no (sender lag)</td></tr>
+    <tr><td class="n">70k</td><td class="n">70,013</td><td class="n">27.80</td><td class="n">1,319</td><td class="n">66 %</td><td class="fail">no (sender lag)</td></tr>
+  </table></div>
+  <ul>
+    <li><strong>40k requests/s sustained</strong> at p99 7.7 ms. Achieved stayed within 1 % of offered up to 70k, so no breaking point was found. From 50k the single sender can't keep its schedule, so the real limit is still unmeasured.</li>
+    <li><strong>Above 50k the system settles instead of diverging.</strong> The overload fallback takes over (about half the decisions at 60k), in flight levels off at about 1.3k, and Little's law (in flight = rate × time in system) agrees within 1 %.</li>
+    <li><strong>The predictions, committed before the run, were low.</strong> They put the breaking point at 30–40k and cost-path saturation at ≈ 33k; it is ≈ 50k. They priced dispatcher messages from the 10k burst, whose backlog is far larger than the ramp's 15. Burst costs are an upper bound for steady state, not an estimate.</li>
+    <li><strong>Noise.</strong> Load average 2.8 at the start and 11.8 at the end (including the ramp's own spinning threads). A few low-rate steps had sender stalls, up to 6.7 s; they are flagged invalid.</li>
+  </ul>
 
   <h3>What got us there</h3>
   <div class="table-wrap"><table>
