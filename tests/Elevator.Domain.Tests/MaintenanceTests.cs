@@ -79,7 +79,7 @@ public class MaintenanceTests
     [Fact]
     public void Assignments_are_rejected_while_draining_and_while_parked()
     {
-        var h = new ElevatorHandler(Make());
+        var h = new ElevatorController(Make());
         var o = new Outbox();
         h.Handle(new Boarded(R(1, 1, 6)), Instant.Zero, o);
         h.Handle(new ApplyFault(new FaultCommand(Instant.Zero, 0, FaultKind.MaintenanceOn)), Instant.Zero, o);
@@ -99,7 +99,7 @@ public class MaintenanceTests
     [Fact]
     public void The_command_is_logged_first_and_the_snapshot_reaches_the_dispatcher_before_the_released_pickups()
     {
-        var h = new ElevatorHandler(Make());
+        var h = new ElevatorController(Make());
         var o = new Outbox();
         h.Handle(new Boarded(R(1, 1, 6)), Instant.Zero, o);
         h.Handle(new Assign(R(2, 3, 9), null, Forced: false), Instant.Zero, o);

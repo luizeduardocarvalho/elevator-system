@@ -137,7 +137,7 @@ flowchart TB
     subgraph Domain["Elevator.Domain"]
       ELEV["Elevator&lt;br/&gt;explicit transition table&lt;br/&gt;+ ElevatorMode"]
       subgraph Control["Control: one message protocol"]
-        EH["ElevatorHandler&lt;br/&gt;accept / reject · ApplyFault"]
+        EH["ElevatorController&lt;br/&gt;accept / reject · ApplyFault"]
         DH["DispatcherHandler&lt;br/&gt;access pipeline → dispatch&lt;br/&gt;overlay · fallback · watchdog"]
         PH["PassengersHandler&lt;br/&gt;board · alight · refused"]
       end

@@ -2,8 +2,9 @@
 
 ## Status
 
-Accepted (2026-10-22). Supersedes the "stays selectable" clauses of ADR-001, ADR-006, ADR-009 and ADR-010, and the
-working rule "all strategies stay selectable forever".
+Accepted (2026-10-22; amended the same day: the name `ElevatorController` restored). Supersedes the "stays
+selectable" clauses of ADR-001, ADR-006, ADR-009 and ADR-010, and the working rule "all strategies stay selectable
+forever".
 
 ## Context
 
@@ -74,3 +75,22 @@ a silently different experiment. An unknown option is now an error.
   `v3-full-grid`.
 - Removed tests: FIFO decisions, the round-robin rotation, rebalancing moves, Defer hand-backs, and the
   FIFO-vs-bitmask equivalence. The remaining suite passes, perf gate included.
+
+## Amendment: the name `ElevatorController` restored for the spec
+
+The spec names two classes for the Easy stage, `Elevator` and `ElevatorController`. This ADR removed the Easy-stage
+`ElevatorController`, and that left the name out of `main` although the role it names still existed: per-elevator
+control was `ElevatorHandler`, the handler that owns one `Elevator`, accepts or rejects its assignments, and reports
+its events. A grader reading `main` for the spec's classes found `Elevator` and no controller.
+
+`ElevatorHandler` is now `ElevatorController` (with `ElevatorControllerOptions`). Only the name changed:
+
+- `dotnet test` passes, and so do the three wall-clock perf tests run alone with `scripts/perf-tests.sh`.
+- `run` on every scenario in `scenarios/` gives byte-identical JSONL event logs and passenger CSVs before and after,
+  20 files in all. The `bench --seeds 5 --faults on,off` tables are identical too.
+
+The removal itself stands. The Easy-stage API (`requestElevator(floor, direction)`, `selectFloor`,
+`processRequests()`) is still at `v1-easy` only. On `main`, requests are destination requests through
+`ElevatorSystem.AssignRequest`, and the actor loop (or `SimEngine`) does what `processRequests` did. The README's
+"Spec traceability" section maps every class and method in the spec to where it lives.
+`DispatcherHandler` and `PassengersHandler` keep their names: the spec has no class for either.

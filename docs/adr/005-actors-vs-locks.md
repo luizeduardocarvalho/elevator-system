@@ -25,7 +25,7 @@ and stale information about them. The single loop would hide both.
 
 ## Decision
 
-**All decision logic lives in pure, single-threaded handlers** (`Elevator.Domain.Control`). `ElevatorHandler`,
+**All decision logic lives in pure, single-threaded handlers** (`Elevator.Domain.Control`). `ElevatorController`,
 `DispatcherHandler` and `PassengersHandler` implement `Handle(message, now, outbox)`. There is **one message
 protocol** (`Messages.cs`): Assign, accept, reject, release, snapshots, boarding, and so on.
 

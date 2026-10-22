@@ -7,11 +7,11 @@ public class ReleaseOrderTests
 {
     private static Request R(int id, int from) => Request.Create(from, from + 2, Instant.Zero, 12, id: id).Value!;
 
-    private static ElevatorHandler Make(long latencyMs, int capacity = 10)
+    private static ElevatorController Make(long latencyMs, int capacity = 10)
     {
         var elevator = new Elevator(0, 12, ElevatorTiming.Default, TestPolicies.NearestCarCallThenOldestHallCall,
             capacity: capacity, bypassThreshold: 1.0);
-        var h = new ElevatorHandler(elevator, new ElevatorHandlerOptions(SnapshotDelayMs: latencyMs));
+        var h = new ElevatorController(elevator, new ElevatorControllerOptions(SnapshotDelayMs: latencyMs));
         var o = new Outbox();
         h.Handle(new Start(), Instant.Zero, o);
         h.Handle(new Assign(R(1, 5), null, Forced: false), Instant.Zero, o);

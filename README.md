@@ -25,8 +25,62 @@ Where the spec's Easy and Medium items went in the final design:
 | Spec item | Final design | Earlier form |
 |---|---|---|
 | FIFO scheduling | LOOK, which cut the down-peak wait from 255.6 s to 28.2 s ([ADR-004](docs/adr/004-look-scheduling.md)) | `v1-easy`, `v2-medium` |
-| `ElevatorController` | `ElevatorSystem`, the threaded multi-elevator controller ([ADR-005](docs/adr/005-actors-vs-locks.md)) | `v1-easy` |
+| `ElevatorController` | `ElevatorController` controls one elevator; `ElevatorSystem` takes requests for the whole fleet ([ADR-005](docs/adr/005-actors-vs-locks.md)) | `v1-easy`, with `requestElevator` and `processRequests` |
 | `balanceLoad()` | The cost function's predicted-load term, applied on every assignment ([ADR-006](docs/adr/006-dispatch-cost-function.md)) | Periodic rebalancing at `v2-medium`, measured and dropped |
+
+## Spec traceability
+
+Every class, member and enum named in [the spec](docs/spec.md), and where it lives on `main`.
+
+**`Elevator`** is `Elevator.Domain.Elevator` ([`Elevator.cs`](src/Elevator.Domain/Elevator.cs)). Only `Tick(simTime)`
+advances it, so the movement and door methods are its own steps: `Tick` and the LOOK decision call them, and the
+transition table refuses anything illegal.
+
+| Spec | On `main` |
+|---|---|
+| `currentFloor` | `Elevator.CurrentFloor` |
+| `state: ElevatorState` | `Elevator.State` |
+| `targetFloors: List<int>` | `Elevator.TargetFloors`: car calls plus assigned pickups |
+| `moveUp()`, `moveDown()` | `Elevator.MoveUp()`, `Elevator.MoveDown()` |
+| `openDoor()`, `closeDoor()` | `Elevator.OpenDoor()`, `Elevator.CloseDoor()` |
+| `addRequest()` | `Elevator.AddRequest(floor)`: a car call. A hall call is `Elevator.AddHallCall(floor, direction)` |
+
+**`ElevatorController`** is `Elevator.Domain.Control.ElevatorController`
+([`ElevatorController.cs`](src/Elevator.Domain/Control/ElevatorController.cs)): per-elevator control. It owns one
+`Elevator`, accepts or rejects each assignment (out of service, capacity, stale estimate), and turns the elevator's
+events into notices for passengers and the dispatcher.
+
+| Spec | On `main` | At `v1-easy` |
+|---|---|---|
+| `elevator: Elevator` | `ElevatorController.Elevator` | Same |
+| `requestElevator(floor, direction)` | Requests are destination requests: `ElevatorSystem.AssignRequest(Request)` in the runtime. The direction comes from pickup and destination, and the dispatcher sends the request to an elevator's controller as an `Assign` message | `ElevatorController.RequestElevator(floor, direction)`, a hall call on the one elevator, with `SelectFloor(floor)` for the car call |
+| `processRequests()` | Nothing to call: each controller runs in its own actor loop (`Actor.Loop` in [`Actor.cs`](src/Elevator.Runtime/Actor.cs)), and in the simulator `SimEngine.AdvanceTo` delivers messages in time order | `ElevatorController.ProcessRequests(now)`: tick the elevator, return its events |
+
+The `v1-easy` API was removed from `main` because nothing called it ([ADR-018](docs/adr/018-prune-superseded-strategies.md)).
+Its input validation lives at the runtime boundary now ([ADR-017](docs/adr/017-request-validation-and-fail-stop.md)).
+The name `ElevatorController` returned for per-elevator control; that type was called `ElevatorHandler` until then.
+
+**`ElevatorSystem`** is `Elevator.Runtime.ElevatorSystem` ([`ElevatorSystem.cs`](src/Elevator.Runtime/ElevatorSystem.cs)).
+
+| Spec | On `main` |
+|---|---|
+| `elevators: List<Elevator>` | One actor per elevator, each running its own `ElevatorController`. `ElevatorCount` is how many. Nothing outside reads or shares them ([ADR-005](docs/adr/005-actors-vs-locks.md)) |
+| `requestQueue: Queue<Request>` | A bounded request channel that the dispatcher reads. `RequestQueueLength` is its current length; `RequestQueueCapacity` is its bound |
+| `assignRequest()` | `AssignRequest(request)`: thread-safe for any number of callers. It completes when an elevator has accepted the request |
+| `findBestElevator()` | `FindBestElevator(request)`: the dispatcher's choice right now, without assigning. The choice comes from `IDispatchPolicy`: `CostBasedDispatch`, with `NearestDispatch` as the overload fallback |
+| `balanceLoad()` | The load term `μ·L̂/C` in `CostBasedDispatch` (predicted load at pickup over capacity), applied on every assignment ([ADR-006](docs/adr/006-dispatch-cost-function.md)). `BalanceLoad()` exists and does nothing on purpose |
+
+**`Request`** is `Elevator.Domain.Request` ([`Request.cs`](src/Elevator.Domain/Request.cs)).
+
+| Spec | On `main` |
+|---|---|
+| `pickupFloor`, `destinationFloor` | `PickupFloor`, `DestinationFloor` |
+| `direction: Direction` | `Direction`. `Request.Check` refuses one that disagrees with pickup and destination, at every entry point ([ADR-017](docs/adr/017-request-validation-and-fail-stop.md)) |
+| `timestamp: long` | `Timestamp`, an `Instant`: milliseconds since the run started, when the passenger first pressed. A separate type, so it is never mixed with wall-clock time ([ADR-008](docs/adr/008-metrics-and-two-kinds-of-time.md)) |
+
+**Enums.** `ElevatorState` ([`ElevatorState.cs`](src/Elevator.Domain/ElevatorState.cs)) and `Direction`
+([`Direction.cs`](src/Elevator.Domain/Direction.cs)) have the spec's members, in the spec's order. The event log writes
+them in the spec's spelling, such as `MOVING_UP` ([ADR-002](docs/adr/002-explicit-state-machine.md)).
 
 ## Run it
 

@@ -12,11 +12,11 @@ public class AssignmentAcceptanceTests
 
     private static Request R(int id, long calledAtMs = 0) => Request.Create(5, 9, new Instant(calledAtMs), 10, id: id).Value!;
 
-    private static (ElevatorHandler Handler, Outbox Outbox) Make(long ourEtaMs, int riders = 0)
+    private static (ElevatorController Handler, Outbox Outbox) Make(long ourEtaMs, int riders = 0)
     {
         var elevator = new Elevator(0, 10, ElevatorTiming.Default, TestPolicies.NearestCarCallThenOldestHallCall, 1, capacity: 5, bypassThreshold: 0.8);
         for (var i = 0; i < riders; i++) elevator.Board(Request.Create(1, 2, Instant.Zero, 10, id: 100 + i).Value!);
-        return (new ElevatorHandler(elevator, new ElevatorHandlerOptions(StalenessToleranceMs: 10_000, AgingMs: 60_000), new FixedEta(ourEtaMs)), new Outbox());
+        return (new ElevatorController(elevator, new ElevatorControllerOptions(StalenessToleranceMs: 10_000, AgingMs: 60_000), new FixedEta(ourEtaMs)), new Outbox());
     }
 
     private static AssignmentReason? Outcome(Outbox outbox) =>

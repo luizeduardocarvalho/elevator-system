@@ -67,7 +67,7 @@ public class WatchdogTests
     public void Handler_rejects_assignments_while_faulty_and_publishes_before_releasing()
     {
         var e = Make();
-        var h = new ElevatorHandler(e);
+        var h = new ElevatorController(e);
         var o = new Outbox();
         h.Handle(new Boarded(R(1, 1, 6)), Instant.Zero, o);
         h.Handle(new Assign(R(2, 8, 2), null, Forced: false), Instant.Zero, o);

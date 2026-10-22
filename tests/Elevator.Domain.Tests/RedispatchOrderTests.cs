@@ -11,7 +11,7 @@ public class RedispatchOrderTests
     [Fact]
     public void A_hand_back_batch_is_emitted_oldest_call_first_whatever_the_stop_order()
     {
-        var h = new ElevatorHandler(new Elevator(0, 12, ElevatorTiming.Default, TestPolicies.NearestCarCallThenOldestHallCall));
+        var h = new ElevatorController(new Elevator(0, 12, ElevatorTiming.Default, TestPolicies.NearestCarCallThenOldestHallCall));
         var o = new Outbox();
         h.Handle(new Start(), Instant.Zero, o);
         h.Handle(new Assign(R(3, 9, calledAtMs: 30_000), null, Forced: false), new Instant(40_000), o);

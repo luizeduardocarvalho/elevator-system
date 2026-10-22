@@ -40,7 +40,7 @@ Applied:
 | Emergency lane (runtime `Control` channel; sim priority 0) | Ahead of everything; FIFO between stop and clear | Urgency: an emergency must not wait behind traffic. Stop and clear keep their order among themselves |
 | Dispatcher lanes (runtime): mailbox before new requests | Control traffic (snapshots, acks, releases, queries), then new submissions; FIFO within each | Urgency: the dispatcher updates its view before taking new work. This is the second and last priority rule; pinned by a test |
 | Simulator queue | (sim time, priority, seq); priority 0 only for emergency stop and clear | Determinism: same seed, same log, at any tick size |
-| Snapshot before release (`ElevatorHandler.SendRelease`) | The snapshot is published first and the release travels with the same link delay | Causality: the dispatcher must see why a pickup came back before reassigning it, or it proposes it straight back |
+| Snapshot before release (`ElevatorController.SendRelease`) | The snapshot is published first and the release travels with the same link delay | Causality: the dispatcher must see why a pickup came back before reassigning it, or it proposes it straight back |
 | Newest snapshot (`DispatcherHandler`) | An older version never replaces a newer one | Two delayed snapshots can cross in the runtime |
 | Pending requests (`DispatcherHandler._pending`) | (call time, id), served oldest first on every snapshot | Aging: whoever called first is served first. **Nothing reorders it**: urgency is not a queue position |
 | Hand-back batch (`Elevator.ReleaseAllPickups`) | (call time, id) | Re-dispatch keeps each passenger's place by call time, not by where the stop sat in one elevator's list |

@@ -8,14 +8,14 @@ namespace Elevator.Domain.Control;
 /// <param name="AgingMs">Requests waiting at least this long since t_call can no longer be rejected as stale.</param>
 /// <param name="ReportProgress">Tell the dispatcher about every floor reached (<see cref="ProgressReported"/>), for its
 /// watchdog (ADR-013).</param>
-public sealed record ElevatorHandlerOptions(long SnapshotDelayMs = 0, long StalenessToleranceMs = 10_000, long AgingMs = 60_000,
+public sealed record ElevatorControllerOptions(long SnapshotDelayMs = 0, long StalenessToleranceMs = 10_000, long AgingMs = 60_000,
     bool ReportProgress = false)
 {
-    public static ElevatorHandlerOptions Default { get; } = new();
+    public static ElevatorControllerOptions Default { get; } = new();
 }
 
 /// <summary>
-/// Owns one <see cref="Elevator"/>. Decides whether to accept an assignment, and translates the elevator's events
+/// The spec's <c>ElevatorController</c>: per-elevator control (ADR-018). Owns one <see cref="Elevator"/>. Decides whether to accept an assignment, and translates the elevator's events
 /// into notices for passengers and the dispatcher. Publishes a snapshot whenever the elevator changed.
 ///
 /// Accept/reject, in priority order:
@@ -29,9 +29,9 @@ public sealed record ElevatorHandlerOptions(long SnapshotDelayMs = 0, long Stale
 /// <item>Otherwise accept.</item>
 /// </list>
 /// </summary>
-public sealed class ElevatorHandler(Elevator elevator, ElevatorHandlerOptions? options = null, IEtaEstimator? estimator = null) : IHandler
+public sealed class ElevatorController(Elevator elevator, ElevatorControllerOptions? options = null, IEtaEstimator? estimator = null) : IHandler
 {
-    private readonly ElevatorHandlerOptions _options = options ?? ElevatorHandlerOptions.Default;
+    private readonly ElevatorControllerOptions _options = options ?? ElevatorControllerOptions.Default;
     private long _publishedVersion = -1;
     private Instant? _unstickAt;
 

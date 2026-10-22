@@ -64,7 +64,7 @@ public class StuckMechanicsTests
     public void Handler_applies_a_timed_stuck_and_unsticks_it_on_time()
     {
         var e = Make();
-        var h = new ElevatorHandler(e);
+        var h = new ElevatorController(e);
         var o = new Outbox();
         h.Handle(new Boarded(R(1, 1, 3)), Instant.Zero, o);
         o.Clear();
@@ -82,7 +82,7 @@ public class StuckMechanicsTests
     [Fact]
     public void Commands_that_change_nothing_are_not_logged()
     {
-        var h = new ElevatorHandler(Make());
+        var h = new ElevatorController(Make());
         var o = new Outbox();
         h.Handle(new ApplyFault(new FaultCommand(Instant.Zero, 0, FaultKind.Unstick)), Instant.Zero, o);
         Assert.Empty(o.Events.OfType<FaultCommandApplied>());

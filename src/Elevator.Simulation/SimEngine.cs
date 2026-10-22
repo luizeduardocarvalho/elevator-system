@@ -30,7 +30,7 @@ public sealed class SimEngine
     private readonly PriorityQueue<Envelope, (long TimeMs, int Priority, long Seq)> _queue = new();
     private readonly Dictionary<Address, IHandler> _handlers = [];
     private readonly Dictionary<Address, Instant> _scheduledWakeUps = [];
-    private readonly List<ElevatorHandler> _elevators = [];
+    private readonly List<ElevatorController> _elevators = [];
     private readonly PassengersHandler _passengers;
     private readonly Outbox _outbox = new();
     private readonly int _expectedPassengers;
@@ -71,8 +71,8 @@ public sealed class SimEngine
         for (var i = 0; i < scenario.Elevators; i++)
         {
             var elevator = fleet[i].CreateElevator(i, scenario.Floors, scheduling, scenario.BypassThreshold);
-            var handler = new ElevatorHandler(elevator,
-                new ElevatorHandlerOptions(SnapshotDelayMs: latency.SnapshotMs, ReportProgress: scenario.WatchdogTimeoutMs is not null), estimator);
+            var handler = new ElevatorController(elevator,
+                new ElevatorControllerOptions(SnapshotDelayMs: latency.SnapshotMs, ReportProgress: scenario.WatchdogTimeoutMs is not null), estimator);
             _elevators.Add(handler);
             Register(handler);
         }

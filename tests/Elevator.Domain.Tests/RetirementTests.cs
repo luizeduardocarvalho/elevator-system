@@ -20,9 +20,9 @@ public class RetirementTests
 
     private static Request R(int id, int from = 3, int to = 7) => Request.Create(from, to, Instant.Zero, 10, id: id).Value!;
 
-    private static ElevatorHandler Elevator0() => new(new Elevator(0, 10, ElevatorTiming.Default, TestPolicies.NearestCarCallThenOldestHallCall));
+    private static ElevatorController Elevator0() => new(new Elevator(0, 10, ElevatorTiming.Default, TestPolicies.NearestCarCallThenOldestHallCall));
 
-    private static void Accept(ElevatorHandler h, Request r, Outbox o) => h.Handle(new Assign(r, null, Forced: false), Instant.Zero, o);
+    private static void Accept(ElevatorController h, Request r, Outbox o) => h.Handle(new Assign(r, null, Forced: false), Instant.Zero, o);
 
     [Fact]
     public void Retiring_an_accepted_pickup_drops_it_without_releasing_it_and_publishes_a_snapshot()

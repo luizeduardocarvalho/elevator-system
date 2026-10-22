@@ -275,6 +275,8 @@ FIFO scheduling, round-robin dispatch, hysteresis rebalancing, the Defer capacit
 - **Dispatcher:** assign, retry, overlay, overload fallback, watchdog. No rebalance timer.
 - **Runtime boundary:** `AssignRequest` and `FindBestElevator` validate each request, and every actor loop runs under
   fail-stop supervision (ADR-017).
+- **Names:** the per-elevator handler drawn as `ElevatorHandler` above is now `ElevatorController`, the spec's name
+  for per-elevator control (ADR-018 amendment). Behaviour is unchanged.
 
 The golden event logs of `lunch.yaml` and `chaos.yaml` are byte-identical before and after the removal. Every
 comparison in `docs/results/` reproduces at tag `v3-full-grid`.

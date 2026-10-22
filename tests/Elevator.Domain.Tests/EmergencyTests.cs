@@ -149,7 +149,7 @@ public class EmergencyTests
     [Fact]
     public void Handler_rejects_assignments_with_reason_emergency_and_logs_commands()
     {
-        var h = new ElevatorHandler(Make());
+        var h = new ElevatorController(Make());
         var o = new Outbox();
         h.Handle(new ApplyFault(new FaultCommand(Instant.Zero, 0, FaultKind.EmergencyStop)), Instant.Zero, o);
         Assert.Equal([typeof(FaultCommandApplied), typeof(EmergencyStopped)], o.Events.Select(e => e.GetType()));

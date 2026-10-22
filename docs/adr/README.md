@@ -19,7 +19,7 @@
 | [015](015-ordering-rules.md) | Ordering rules: FIFO for correctness, priority for urgency, fairness by cost | Accepted |
 | [016](016-steady-state-throughput-ramp.md) | A steady-state, open-loop throughput ramp | Accepted |
 | [017](017-request-validation-and-fail-stop.md) | Request validation at the runtime boundary and fail-stop supervision | Accepted |
-| [018](018-prune-superseded-strategies.md) | Remove superseded strategies; `main` is the final design | Accepted |
+| [018](018-prune-superseded-strategies.md) | Remove superseded strategies; `main` is the final design | Accepted (amended: `ElevatorHandler` renamed `ElevatorController`) |
 | [019](019-system-and-lab.md) | The lab depends on the system, never the reverse | Accepted |
 
 The interface between Stages 3 and 4 is the [shared v3 contract](../contract-v3.md). The ADRs it touches carry an
