@@ -100,7 +100,7 @@ header { position: relative; }
   <p>Easy → Medium → Hard, built as an experiment: build, simulate, measure, evolve. State at tag <code>v3-hard</code>.</p>
   <div class="badges">
     <span class="badge">.NET 10</span><span class="badge">480 tests passing</span><span class="badge">13 ADRs</span>
-    <span class="badge">deterministic sim + actor runtime</span><span class="badge">p99 12.2 ms @ 100 concurrent</span>
+    <span class="badge">deterministic sim + actor runtime</span><span class="badge">p99 12.2 ms @ 100 concurrent (perf run)</span>
   </div>
   <div class="theme-toggle"><button id="theme" type="button" aria-label="Toggle colour theme">Theme</button></div>
 </header>
@@ -245,9 +245,10 @@ traffic:
     <tr><td>Baseline: FIFO + Nearest</td><td class="n">25.9 / 89.3</td><td class="n">255.6 / 592.5 <span class="legend">(saturated)</span></td><td class="n">99.1 / 353.5</td></tr>
     <tr><td>+ LOOK</td><td class="n">19.2 / 47.1</td><td class="n">28.3 / 84.9</td><td class="n">20.7 / 73.9</td></tr>
     <tr><td>+ cost-based dispatch (held-out)</td><td class="n">16.4 / 39.1</td><td class="n">20.8 / 53.3</td><td class="n">13.8 / 38.4</td></tr>
-    <tr><td>± rebalancing (held-out)</td><td class="n">−0.2 s (n.s.)</td><td class="n">−0.9 ± 0.5 s</td><td class="n">−0.4 ± 0.4 s</td></tr>
-    <tr><td><strong>next-trip capacity, final default</strong></td><td class="n"><strong>15.8 / 37.9</strong></td><td class="n"><strong>20.6 / 53.2</strong></td><td class="n"><strong>13.8 / 38.4</strong></td></tr>
+    <tr><td>± rebalancing (held-out, paired vs sticky LOOK + Cost)</td><td class="n">−0.2 s (n.s.)</td><td class="n">−0.9 ± 0.5 s</td><td class="n">−0.4 ± 0.4 s</td></tr>
+    <tr><td><strong>Final default: LOOK + Cost, next-trip capacity, sticky (no rebalancing)</strong></td><td class="n"><strong>15.8 / 37.9</strong></td><td class="n"><strong>20.6 / 53.2</strong></td><td class="n"><strong>13.8 / 38.4</strong></td></tr>
   </table></div>
+  <div class="callout"><strong>Rebalancing was measured and left off.</strong> On top of cost dispatch it saves at most 0.9 ± 0.5 s on average (down-peak), is not significant at up-peak, and moves about one passenger in eight to a different elevator. Under destination dispatch the passenger has already been told which door to go to, so each move sends someone to the wrong door: a real cost that the simulation does not model. That doesn't justify it, so assignments stay sticky. Rebalancing remains selectable (<code>+rebalance</code>) for buildings that weigh it differently (ADR-006).</div>
 
   <h3>Hard stage, same method</h3>
   <div class="table-wrap"><table>
@@ -331,14 +332,15 @@ flowchart LR
   <p class="lede">Real clock, real threads, Apple M2 Pro (10 cores, 16 GB), .NET 10, on a quiet machine. Default system: LOOK + cost dispatch, next-trip capacity, overload fallback to Nearest above 200 in flight.</p>
 
   <div class="grid">
-    <div class="stat card good"><div class="num">12.2 ms</div><div class="lbl">assignment p99 at 100 concurrent (SLO &lt; 100 ms)</div></div>
-    <div class="stat card good"><div class="num">53.6 ms</div><div class="lbl">assignment p99 at 1,000 concurrent</div></div>
-    <div class="stat card"><div class="num">≈ 4.5k</div><div class="lbl">simultaneous requests within the SLO (≈ 45× the spec's "100+")</div></div>
+    <div class="stat card good"><div class="num">12.2 ms</div><div class="lbl">assignment p99 at 100 concurrent, perf run (SLO &lt; 100 ms)</div></div>
+    <div class="stat card good"><div class="num">53.6 ms</div><div class="lbl">assignment p99 at 1,000 concurrent, perf run</div></div>
+    <div class="stat card"><div class="num">≈ 4.5k</div><div class="lbl">simultaneous requests within the SLO, from the curve (≈ 45× the spec's "100+")</div></div>
     <div class="stat card good"><div class="num">0 / 0</div><div class="lbl">requests lost / duplicated, at every load</div></div>
     <div class="stat card good"><div class="num">+0.9%</div><div class="lbl">heap growth over a 60 s soak (1.06 → 1.10 MB)</div></div>
   </div>
 
   <h3>Spec SLOs</h3>
+  <p class="legend">Source: <strong>perf run</strong>, one <code>elevator perf --levels 100,1000,10000 --soak-seconds 60</code> (<code>docs/results/perf.md</code>), each level measured once, in one process.</p>
   <div class="table-wrap"><table>
     <tr><th>SLO</th><th class="n">Measured</th><th>Result</th></tr>
     <tr><td>Assignment p99 &lt; 100 ms at 100 concurrent</td><td class="n">12.2 ms</td><td class="pass">PASS</td></tr>
@@ -349,12 +351,13 @@ flowchart LR
     <tr><td>Heap growth &lt; 10% over a 60 s soak</td><td class="n">+0.9%</td><td class="pass">PASS</td></tr>
   </table></div>
 
-  <h3>p99 vs burst size, default system</h3>
+  <h3>p99 vs burst size (curve)</h3>
+  <p class="legend">Source: <strong>curve</strong>, <code>scripts/perf-curves.sh 3</code> (<code>docs/results/perf-curves.md</code>), a fresh process per point, median p99 of 3 repeats. It is a separate run from the SLO table, so the same level reads slightly differently: 100 → 12.2 vs 12.7 ms, 1k → 53.6 vs 50.6 ms, 10k → 201.9 vs 181.6 ms. Both are below 100 ms up to 1k and both fail the 10k stretch.</p>
   <div class="bars" id="bars"></div>
-  <p class="legend">Bar scale 0–200 ms; the line marks the 100 ms SLO. Each point is a fresh process with warm-up, median p99 of 3 repeats.</p>
+  <p class="legend">Default system (cost + fallback). Bar scale 0–200 ms; the line marks the 100 ms SLO.</p>
 
   <div class="table-wrap"><table>
-    <tr><th>Simultaneous submitters</th><th class="n">100</th><th class="n">300</th><th class="n">1k</th><th class="n">3k</th><th class="n">5k</th><th class="n">6.5k</th><th class="n">8k</th><th class="n">10k</th></tr>
+    <tr><th>Curve: simultaneous submitters</th><th class="n">100</th><th class="n">300</th><th class="n">1k</th><th class="n">3k</th><th class="n">5k</th><th class="n">6.5k</th><th class="n">8k</th><th class="n">10k</th></tr>
     <tr><td>Default (cost + fallback), p99 ms</td><td class="n">12.7</td><td class="n">38.1</td><td class="n">50.6</td><td class="n">80.4</td><td class="n">103.3</td><td class="n">125.4</td><td class="n">158.8</td><td class="n">181.6</td></tr>
     <tr><td>Cost only, p99 ms</td><td class="n">11.6</td><td class="n">66.0</td><td class="n">309.7</td><td class="n">605.8</td><td class="n">852.8</td><td class="n">858.5</td><td class="n">989.6</td><td class="n">1,131.3</td></tr>
     <tr><td>Nearest only, p99 ms</td><td class="n">1.1</td><td class="n">3.2</td><td class="n">18.5</td><td class="n">49.5</td><td class="n">77.2</td><td class="n">101.9</td><td class="n">120.9</td><td class="n">158.0</td></tr>
@@ -373,7 +376,7 @@ flowchart LR
     <li>The dispatcher is the <strong>one serial stage</strong>. Per request it spends 16.6 µs (13.8 handler + 2.8 delivery) on protocol work: ingesting the snapshot from each accepted assignment, the pending set and overlay, events, and channel writes. The Nearest decision itself is ≈ 1.4 µs.</li>
     <li>1 / 16.6 µs ≈ <strong>60k requests/s</strong>; measured 55–59k from 3k up.</li>
     <li>A burst of N waits about N / 57k s for its last request, so 100 ms ↔ ≈ 5.7k. Fixed overheads bring the measured crossing to between 5k (77 ms) and 6.5k (102 ms) for Nearest, ≈ 6.4k.</li>
-    <li>The default spends cost-function time on the first 200 in flight, so it crosses at ≈ 4.5k. 10k needs ≈ 175 ms at that rate, hence the stretch FAIL.</li>
+    <li>The default spends cost-function time on the first 200 in flight, so on the curve it crosses at ≈ 4.5k. 10k needs ≈ 175 ms at that rate, hence the stretch FAIL (182 ms on the curve, 202 ms in the perf run).</li>
     <li>For scale, 10k simultaneous presses is more than the population of a 20-floor office building (≈ 1,500–2,000 people).</li>
   </ol>
 
@@ -381,7 +384,7 @@ flowchart LR
   <div class="table-wrap"><table>
     <tr><th>Change</th><th>Effect (measured)</th></tr>
     <tr><td><strong>Per-stop projection</strong> (<code>StopProjection</code>): per-stop aggregates, ΔD by prefix matching, bitmask LOOK/FIFO, stop-to-stop travel</td><td>One cost decision: 22.5 → 2.1 µs (empty), 2,327 → 80 µs (backlog 400), flat at 88 µs for 1,600. Allocation 3.9 MB → 188 KB.</td></tr>
-    <tr><td><strong>Overload fallback</strong> to Nearest above 200 in flight</td><td>p99 at 1k: 309.7 → 50.6 ms. Normal traffic never gets near 200 in flight (peak 21), so bench quality is unchanged.</td></tr>
+    <tr><td><strong>Overload fallback</strong> to Nearest above 200 in flight</td><td>p99 at 1k (curve): 309.7 → 50.6 ms. Normal traffic never gets near 200 in flight (peak 21), so bench quality is unchanged.</td></tr>
     <tr><td><strong>Pending-assignment overlay</strong></td><td>3.6 → ≈ 1 proposal per request at 100 simultaneous; 0 stale rejections.</td></tr>
     <tr><td><strong>Overlay made O(n)</strong> (it was O(n²) during bursts)</td><td>Removed the super-linear tail at high load.</td></tr>
     <tr><td><strong>Single-writer actors on channels</strong></td><td>Elevators work in parallel; no lock contention.</td></tr>
